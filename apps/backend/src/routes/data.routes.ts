@@ -1,13 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { getAuthContext, requireAuth } from "../plugins/auth.js";
 
-const DEMO_ORG_SLUG = "cloudshield-demo-organization";
 const DEFAULT_LIMIT = 50;
 
 export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/v1/dashboard/summary", async () => {
-    const organization = await getDemoOrganization();
-    const organizationScope = scopeByOrganization(organization.id);
+  app.get("/api/v1/dashboard/summary", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    const organization = await getOrganization(auth.organizationId);
+    const organizationScope = scopeByOrganization(auth.organizationId);
 
     const [
       organizationCount,
@@ -19,7 +20,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       recommendationCount,
       latestScan
     ] = await Promise.all([
-      prisma.organization.count(),
+      prisma.organization.count({ where: { id: auth.organizationId } }),
       prisma.awsAccount.count({ where: organizationScope }),
       prisma.cloudResource.count({ where: organizationScope }),
       prisma.securityFinding.count({ where: organizationScope }),
@@ -61,10 +62,10 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/api/v1/inventory/resources", async () => {
-    const organization = await getDemoOrganization();
+  app.get("/api/v1/inventory/resources", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
     const resources = await prisma.cloudResource.findMany({
-      where: scopeByOrganization(organization.id),
+      where: scopeByOrganization(auth.organizationId),
       take: DEFAULT_LIMIT,
       orderBy: [{ resourceType: "asc" }, { name: "asc" }],
       include: {
@@ -91,10 +92,10 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/api/v1/findings/security", async () => {
-    const organization = await getDemoOrganization();
+  app.get("/api/v1/findings/security", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
     const findings = await prisma.securityFinding.findMany({
-      where: scopeByOrganization(organization.id),
+      where: scopeByOrganization(auth.organizationId),
       take: DEFAULT_LIMIT,
       orderBy: [{ severity: "asc" }, { createdAt: "desc" }],
       include: {
@@ -111,10 +112,10 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/api/v1/findings/cost", async () => {
-    const organization = await getDemoOrganization();
+  app.get("/api/v1/findings/cost", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
     const findings = await prisma.costFinding.findMany({
-      where: scopeByOrganization(organization.id),
+      where: scopeByOrganization(auth.organizationId),
       take: DEFAULT_LIMIT,
       orderBy: [{ createdAt: "desc" }],
       include: {
@@ -135,10 +136,10 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/api/v1/compliance/controls", async () => {
-    const organization = await getDemoOrganization();
+  app.get("/api/v1/compliance/controls", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
     const controls = await prisma.complianceControl.findMany({
-      where: scopeByOrganization(organization.id),
+      where: scopeByOrganization(auth.organizationId),
       take: DEFAULT_LIMIT,
       orderBy: [{ group: "asc" }, { controlId: "asc" }],
       include: {
@@ -153,10 +154,10 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/api/v1/recommendations", async () => {
-    const organization = await getDemoOrganization();
+  app.get("/api/v1/recommendations", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
     const recommendations = await prisma.recommendation.findMany({
-      where: scopeByOrganization(organization.id),
+      where: scopeByOrganization(auth.organizationId),
       take: DEFAULT_LIMIT,
       orderBy: [{ createdAt: "desc" }],
       include: {
@@ -173,15 +174,15 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
   });
 }
 
-async function getDemoOrganization() {
-  const organization = await prisma.organization.findUnique({
-    where: { slug: DEMO_ORG_SLUG }
+async function getOrganization(organizationId: string) {
+  const organization = await prisma.organization.findFirst({
+    where: {
+      id: organizationId
+    }
   });
 
   if (!organization) {
-    throw new Error(
-      "CloudShield sample demo data is not seeded. Run pnpm --filter @cloudshield/database seed."
-    );
+    throw new Error("Authenticated organization was not found.");
   }
 
   return organization;

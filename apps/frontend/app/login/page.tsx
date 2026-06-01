@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
+import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
@@ -11,33 +11,10 @@ export default function LoginPage() {
           </div>
           <div>
             <h1 className="text-xl font-semibold text-ink">CloudShield</h1>
-            <p className="text-sm text-slate-600">Foundation login shell</p>
+            <p className="text-sm text-slate-600">Local demo login</p>
           </div>
         </div>
-        <form className="mt-6 space-y-4">
-          <label className="block text-sm font-medium text-slate-700">
-            Email
-            <input
-              className="mt-2 h-11 w-full rounded-md border border-line px-3 outline-none focus:border-signal"
-              placeholder="security@example.com"
-              type="email"
-            />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Password
-            <input
-              className="mt-2 h-11 w-full rounded-md border border-line px-3 outline-none focus:border-signal"
-              placeholder="Foundation only"
-              type="password"
-            />
-          </label>
-          <Link
-            className="flex h-11 w-full items-center justify-center rounded-md bg-ink text-sm font-semibold text-white"
-            href="/dashboard"
-          >
-            Continue to console
-          </Link>
-        </form>
+        <LoginForm />
       </section>
     </main>
   );

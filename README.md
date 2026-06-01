@@ -84,6 +84,15 @@ $env:DATABASE_URL="postgresql://cloudshield:cloudshield_local_password@localhost
 pnpm --filter @cloudshield/database seed
 ```
 
+Local demo login:
+
+```text
+Email: demo@cloudshield.local
+Password: CloudShieldDemo123!
+```
+
+These credentials are for local sample/demo use only. The seeded user is scoped to `CloudShield Demo Organization`.
+
 Validate Docker backend health:
 
 ```powershell

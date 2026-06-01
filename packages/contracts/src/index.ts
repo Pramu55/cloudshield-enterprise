@@ -79,7 +79,8 @@ export type CloudScanJobType = z.infer<typeof CloudScanJobTypeSchema>;
 export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_ENTERPRISE_FOUNDATION_GREEN",
   "CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN",
-  "CLOUDSHIELD_LOCAL_RUNTIME_AND_DATABASE_GREEN"
+  "CLOUDSHIELD_LOCAL_RUNTIME_AND_DATABASE_GREEN",
+  "CLOUDSHIELD_AUTH_AND_TENANT_FOUNDATION_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -112,3 +113,44 @@ export const RecommendationSafetySchema = z.object({
   blockedReason: z.literal(REMEDIATION_BLOCKED_REASON)
 });
 export type RecommendationSafety = z.infer<typeof RecommendationSafetySchema>;
+
+export const LoginRequestSchema = z.object({
+  email: z.email(),
+  password: z.string().min(1)
+});
+export type LoginRequest = z.infer<typeof LoginRequestSchema>;
+
+export const AuthUserSchema = z.object({
+  id: z.string(),
+  email: z.email(),
+  name: z.string().nullable(),
+  role: z.string(),
+  organizationId: z.string()
+});
+export type AuthUser = z.infer<typeof AuthUserSchema>;
+
+export const TenantContextSchema = z.object({
+  organizationId: z.string(),
+  userId: z.string()
+});
+export type TenantContext = z.infer<typeof TenantContextSchema>;
+
+export const AuthOrganizationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string()
+});
+export type AuthOrganization = z.infer<typeof AuthOrganizationSchema>;
+
+export const LoginResponseSchema = z.object({
+  accessToken: z.string(),
+  user: AuthUserSchema,
+  organization: AuthOrganizationSchema
+});
+export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+
+export const CurrentUserResponseSchema = z.object({
+  user: AuthUserSchema,
+  organization: AuthOrganizationSchema
+});
+export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;

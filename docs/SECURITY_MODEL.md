@@ -44,3 +44,7 @@ Seeded recommendations in the local runtime milestone are sample demo data only.
 ## Tenant Isolation
 
 Tenant-owned records include `organizationId`. Services must scope tenant-owned queries by organization.
+
+Authenticated API routes must derive `organizationId` from the verified JWT user context. Tenant-owned records must not be queried by ID alone.
+
+The local demo login is sample/demo only and must not be treated as a production identity provider.

@@ -29,28 +29,37 @@
 - Frontend dashboard pages connected to the backend API
 - Verified local Docker runtime with Postgres and Redis
 
-## Milestone 3: Read-Only AWS Inventory
+## Milestone 3: CLOUDSHIELD_AUTH_AND_TENANT_FOUNDATION_GREEN
+
+- Local demo login with bcrypt password hashing
+- JWT access token foundation
+- Authenticated user and organization context
+- Protected tenant-scoped dashboard and governance API routes
+- Frontend login and logout flow
+- Documentation for tenant scoping rules
+
+## Milestone 4: Read-Only AWS Inventory
 
 - Read-only account validation
 - EC2, S3, IAM, Security Group, EBS, VPC, subnet inventory
 - Normalized resources and relationships
 - Scan run lifecycle
 
-## Milestone 4: Deterministic Rule Engines
+## Milestone 5: Deterministic Rule Engines
 
 - Security posture rules
 - Cost governance rules
 - CIS-inspired control mapping
 - SOC2-inspired evidence records
 
-## Milestone 5: Risk Workflow
+## Milestone 6: Risk Workflow
 
 - Ownership
 - SLA tracking
 - Risk acceptance with expiry and approver
 - Audit events
 
-## Milestone 6: Reports
+## Milestone 7: Reports
 
 - JSON exports
 - Executive summary

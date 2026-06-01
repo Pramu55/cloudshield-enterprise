@@ -12,6 +12,8 @@ import {
   ShieldAlert,
   Wrench
 } from "lucide-react";
+import { fetchCurrentUser } from "../../lib/api";
+import { LogoutButton } from "./logout-button";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: Gauge },
@@ -27,11 +29,13 @@ const navItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const currentUser = await fetchCurrentUser();
+
   return (
     <main className="min-h-screen bg-panel">
       <div className="grid min-h-screen lg:grid-cols-[264px_1fr]">
@@ -64,17 +68,48 @@ export default function DashboardLayout({
           <header className="flex h-16 items-center justify-between border-b border-line bg-white px-6">
             <div>
               <p className="text-sm font-semibold text-ink">
-                CLOUDSHIELD_ENTERPRISE_FOUNDATION_GREEN
+                CLOUDSHIELD_AUTH_AND_TENANT_FOUNDATION_GREEN
               </p>
               <p className="text-xs text-slate-500">
-                Read-only posture, evidence, and recommendations foundation
+                Read-only posture, evidence, recommendations, and tenant-scoped access
               </p>
             </div>
-            <div className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-signal">
-              AWS scanner not configured
+            <div className="flex items-center gap-3">
+              {currentUser && (
+                <div className="text-right">
+                  <p className="text-xs font-semibold text-ink">
+                    {currentUser.user.email}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {currentUser.organization.name}
+                  </p>
+                </div>
+              )}
+              <div className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-signal">
+                AWS scanner not configured
+              </div>
+              {currentUser && <LogoutButton />}
             </div>
           </header>
-          {children}
+          {currentUser ? (
+            children
+          ) : (
+            <div className="px-6 py-6">
+              <section className="rounded-md border border-line bg-white p-6">
+                <p className="text-sm font-semibold text-ink">Please log in</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  CloudShield dashboard data is scoped to an authenticated
+                  organization.
+                </p>
+                <Link
+                  className="mt-4 inline-flex h-10 items-center rounded-md bg-ink px-4 text-sm font-semibold text-white"
+                  href="/login"
+                >
+                  Open login
+                </Link>
+              </section>
+            </div>
+          )}
         </section>
       </div>
     </main>

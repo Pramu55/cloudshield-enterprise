@@ -22,6 +22,7 @@ CloudShield Enterprise is an advanced CSPM-style TypeScript monorepo for AWS sec
 - Docker Compose runs Postgres, Redis, backend, frontend, and worker locally.
 - Turborepo coordinates workspace build and typecheck tasks.
 - Prisma migrations create the local enterprise schema, and a seed script loads clearly labeled sample demo data for local verification.
+- Fastify auth routes issue local JWT access tokens. Protected API routes derive `organizationId` from the authenticated user context and scope tenant-owned reads by that organization.
 
 ## Data Boundary
 

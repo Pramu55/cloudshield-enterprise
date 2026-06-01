@@ -1,8 +1,11 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 const DEMO_ORG_SLUG = "cloudshield-demo-organization";
+const DEMO_EMAIL = "demo@cloudshield.local";
+const DEMO_PASSWORD = "CloudShieldDemo123!";
 const blockedReason = "Automatic remediation is disabled in CloudShield v1.";
 
 async function main() {
@@ -65,21 +68,25 @@ async function main() {
     })
   ]);
 
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+
   await prisma.user.upsert({
     where: {
       organizationId_email: {
         organizationId: organization.id,
-        email: "demo@cloudshield.local"
+        email: DEMO_EMAIL
       }
     },
     update: {
       name: "CloudShield Demo User",
-      role: "admin"
+      role: "admin",
+      passwordHash
     },
     create: {
       organizationId: organization.id,
-      email: "demo@cloudshield.local",
+      email: DEMO_EMAIL,
       name: "CloudShield Demo User",
+      passwordHash,
       role: "admin"
     }
   });

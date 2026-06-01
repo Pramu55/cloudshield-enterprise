@@ -37,6 +37,15 @@ pnpm --filter @cloudshield/database seed
 
 The seed data is explicitly labeled sample demo data. It is not real AWS data, and real AWS scanning is not enabled in this milestone.
 
+The seed also creates a local demo user:
+
+```text
+Email: demo@cloudshield.local
+Password: CloudShieldDemo123!
+```
+
+The password is stored as a bcrypt hash. These credentials are only for local sample/demo validation.
+
 ## Verification
 
 ```powershell
@@ -49,6 +58,8 @@ Invoke-WebRequest http://localhost:4100/api/v1/findings/cost
 Invoke-WebRequest http://localhost:4100/api/v1/compliance/controls
 Invoke-WebRequest http://localhost:4100/api/v1/recommendations
 ```
+
+Protected runtime endpoints require `Authorization: Bearer <accessToken>`.
 
 ## Safety
 
