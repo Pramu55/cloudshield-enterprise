@@ -26,6 +26,9 @@ importers:
       '@cloudshield/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cloudshield/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@cloudshield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
@@ -152,6 +155,9 @@ importers:
       prisma:
         specifier: ^6.19.3
         version: 6.19.3(typescript@5.9.3)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.4
       typescript:
         specifier: ^5.7.3
         version: 5.9.3

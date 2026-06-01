@@ -11,7 +11,8 @@ RUN pnpm --filter @cloudshield/contracts build \
   && pnpm --filter @cloudshield/utils build \
   && pnpm --filter @cloudshield/logger build \
   && pnpm --filter @cloudshield/config build \
-  && pnpm --filter @cloudshield/security build
+  && pnpm --filter @cloudshield/security build \
+  && pnpm --filter @cloudshield/database build
 
 EXPOSE 4000
 

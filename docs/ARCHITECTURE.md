@@ -21,6 +21,7 @@ CloudShield Enterprise is an advanced CSPM-style TypeScript monorepo for AWS sec
 - Redis backs BullMQ queues.
 - Docker Compose runs Postgres, Redis, backend, frontend, and worker locally.
 - Turborepo coordinates workspace build and typecheck tasks.
+- Prisma migrations create the local enterprise schema, and a seed script loads clearly labeled sample demo data for local verification.
 
 ## Data Boundary
 

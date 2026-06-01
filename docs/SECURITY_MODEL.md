@@ -39,6 +39,8 @@ blockedReason = "Automatic remediation is disabled in CloudShield v1."
 
 This keeps remediation advisory-only.
 
+Seeded recommendations in the local runtime milestone are sample demo data only. They can include manual steps, CLI suggestion strings, and Terraform snippet strings for review, but CloudShield does not execute them.
+
 ## Tenant Isolation
 
 Tenant-owned records include `organizationId`. Services must scope tenant-owned queries by organization.

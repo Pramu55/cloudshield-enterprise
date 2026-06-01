@@ -59,7 +59,8 @@ worker.on("failed", (job, error) => {
 logger.info(
   {
     queue: CLOUD_SCAN_QUEUE_NAME,
-    preparedJobTypes: CloudScanJobTypeSchema.options
+    preparedJobTypes: CloudScanJobTypeSchema.options,
+    awsScanning: "disabled until read-only connector milestone"
   },
-  "CloudShield worker started with read-only foundation handlers"
+  "cloud-scans queue ready; AWS scanning disabled until read-only connector milestone"
 );

@@ -70,10 +70,25 @@ Run the full local stack:
 docker compose up -d --build
 ```
 
+Apply database migrations:
+
+```powershell
+$env:DATABASE_URL="postgresql://cloudshield:cloudshield_local_password@localhost:55432/cloudshield"
+pnpm --filter @cloudshield/database prisma:deploy
+```
+
+Seed sample demo data:
+
+```powershell
+$env:DATABASE_URL="postgresql://cloudshield:cloudshield_local_password@localhost:55432/cloudshield"
+pnpm --filter @cloudshield/database seed
+```
+
 Validate Docker backend health:
 
 ```powershell
 Invoke-WebRequest http://localhost:4100/health
+Invoke-WebRequest http://localhost:4100/api/v1/dashboard/summary
 ```
 
 Docker publishes the frontend at `http://localhost:3100`, the backend at `http://localhost:4100`, Postgres at `localhost:55432`, and Redis at `localhost:6381`. Inside the Docker network, services still use their standard ports.

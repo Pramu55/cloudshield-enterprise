@@ -13,6 +13,7 @@
   "dependencies": {
     "@cloudshield/config": "workspace:*",
     "@cloudshield/contracts": "workspace:*",
+    "@cloudshield/database": "workspace:*",
     "@cloudshield/logger": "workspace:*",
     "@cloudshield/security": "workspace:*",
     "@cloudshield/utils": "workspace:*",

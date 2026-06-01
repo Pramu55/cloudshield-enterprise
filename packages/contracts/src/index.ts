@@ -78,7 +78,8 @@ export type CloudScanJobType = z.infer<typeof CloudScanJobTypeSchema>;
 
 export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_ENTERPRISE_FOUNDATION_GREEN",
-  "CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN"
+  "CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN",
+  "CLOUDSHIELD_LOCAL_RUNTIME_AND_DATABASE_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 

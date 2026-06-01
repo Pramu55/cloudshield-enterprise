@@ -3,6 +3,7 @@ import helmet from "@fastify/helmet";
 import Fastify from "fastify";
 import { registerEnvPlugin } from "./plugins/env.js";
 import { registerErrorPlugin } from "./plugins/errors.js";
+import { registerDataRoutes } from "./routes/data.routes.js";
 import { registerPlatformRoutes } from "./routes/platform.routes.js";
 
 export async function buildApp() {
@@ -18,6 +19,7 @@ export async function buildApp() {
   await registerEnvPlugin(app);
   registerErrorPlugin(app);
   await registerPlatformRoutes(app);
+  await registerDataRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send({

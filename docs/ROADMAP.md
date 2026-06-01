@@ -20,13 +20,14 @@
 - Add typed config and security policy packages.
 - Keep CloudShield read-only with no AWS scanner or mutation behavior.
 
-## Milestone 2: Demo Governance Data
+## Milestone 2: CLOUDSHIELD_LOCAL_RUNTIME_AND_DATABASE_GREEN
 
+- First Prisma migration for the enterprise schema
 - Clearly labeled sample demo data
-- Dashboard summaries
-- Inventory list views
-- Finding list views
-- Compliance evidence summaries
+- DB-backed dashboard summary endpoint
+- DB-backed inventory, findings, compliance, and recommendation endpoints
+- Frontend dashboard pages connected to the backend API
+- Verified local Docker runtime with Postgres and Redis
 
 ## Milestone 3: Read-Only AWS Inventory
 
