@@ -1,0 +1,23 @@
+{
+  "name": "@cloudshield/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cloudshield/logger": "workspace:*",
+    "@cloudshield/types": "workspace:*",
+    "@cloudshield/utils": "workspace:*",
+    "bullmq": "^5.34.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

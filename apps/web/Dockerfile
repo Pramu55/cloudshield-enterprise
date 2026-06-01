@@ -1,0 +1,14 @@
+FROM node:22-alpine
+
+WORKDIR /app
+
+COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/web ./apps/web
+
+RUN corepack enable && pnpm install --frozen-lockfile=false
+RUN pnpm --filter @cloudshield/types build
+
+EXPOSE 3000
+
+CMD ["pnpm", "--filter", "@cloudshield/web", "dev"]

@@ -1,0 +1,19 @@
+{
+  "name": "cloudshield-enterprise",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CloudShield Enterprise - AWS Security Posture, Cost Governance & Compliance Platform",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev:api": "pnpm --filter @cloudshield/api dev",
+    "dev:web": "pnpm --filter @cloudshield/web dev",
+    "dev:worker": "pnpm --filter @cloudshield/worker dev",
+    "prisma:generate": "pnpm --filter @cloudshield/database prisma:generate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,419 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Environment {
+  dev
+  staging
+  prod
+  security
+  shared
+}
+
+enum AwsAccountStatus {
+  NOT_CONFIGURED
+  CONNECTED
+  AUTH_FAILED
+  PERMISSION_DENIED
+  PARTIAL_SCAN
+  RATE_LIMITED
+  FAILED
+}
+
+enum FindingSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum RiskStatus {
+  OPEN
+  ACKNOWLEDGED
+  ASSIGNED
+  REMEDIATION_PLANNED
+  ACCEPTED_RISK
+  FALSE_POSITIVE
+  RESOLVED
+  ARCHIVED
+}
+
+enum ComplianceStatus {
+  PASS
+  FAIL
+  WARNING
+}
+
+enum ScanRunStatus {
+  STARTED
+  COMPLETED
+  NOT_CONFIGURED
+  AUTH_FAILED
+  PERMISSION_DENIED
+  PARTIAL_SCAN
+  RATE_LIMITED
+  FAILED
+}
+
+enum ReportExportStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  name           String?
+  role           String       @default("member")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users              User[]
+  teams              Team[]
+  awsAccounts        AwsAccount[]
+  cloudResources     CloudResource[]
+  relationships      ResourceRelationship[]
+  securityFindings   SecurityFinding[]
+  costFindings       CostFinding[]
+  complianceControls ComplianceControl[]
+  complianceEvidence ComplianceEvidence[]
+  recommendations    Recommendation[]
+  riskAcceptances    RiskAcceptance[]
+  scanRuns           ScanRun[]
+  auditEvents        AuditEvent[]
+  reportExports      ReportExport[]
+}
+
+model Team {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  email          String?
+  businessUnit   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  awsAccounts      AwsAccount[]
+  cloudResources   CloudResource[]
+  securityFindings SecurityFinding[]
+  costFindings     CostFinding[]
+  controls         ComplianceControl[]
+  acceptances      RiskAcceptance[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model AwsAccount {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  accountId      String
+  environment    Environment
+  ownerTeamId    String?
+  ownerTeam      Team?            @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
+  status         AwsAccountStatus @default(NOT_CONFIGURED)
+  regions        String[]
+  lastScanAt     DateTime?
+  securityScore  Int?
+  costScore      Int?
+  complianceScore Int?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  resources        CloudResource[]
+  securityFindings SecurityFinding[]
+  costFindings     CostFinding[]
+  scanRuns         ScanRun[]
+
+  @@unique([organizationId, accountId])
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model CloudResource {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccountId   String
+  awsAccount     AwsAccount   @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+  provider       String       @default("aws")
+  resourceType   String
+  resourceId     String
+  arn            String?
+  name           String?
+  region         String?
+  status         String?
+  environment    Environment?
+  ownerTeamId    String?
+  ownerTeam      Team?        @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
+  tags           Json         @default("{}")
+  metadata       Json         @default("{}")
+  riskCount      Int          @default(0)
+  costSignal     String?
+  lastSeenAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  sourceRelationships ResourceRelationship[] @relation("RelationshipSource")
+  targetRelationships ResourceRelationship[] @relation("RelationshipTarget")
+  securityFindings    SecurityFinding[]
+  costFindings        CostFinding[]
+  complianceEvidence  ComplianceEvidence[]
+
+  @@unique([organizationId, awsAccountId, resourceType, resourceId])
+  @@index([organizationId])
+  @@index([organizationId, resourceType])
+  @@index([organizationId, awsAccountId])
+}
+
+model ResourceRelationship {
+  id               String        @id @default(cuid())
+  organizationId   String
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sourceResourceId String
+  sourceResource   CloudResource @relation("RelationshipSource", fields: [sourceResourceId], references: [id], onDelete: Cascade)
+  targetResourceId String
+  targetResource   CloudResource @relation("RelationshipTarget", fields: [targetResourceId], references: [id], onDelete: Cascade)
+  relationshipType String
+  evidence         Json          @default("{}")
+  createdAt        DateTime      @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, sourceResourceId])
+  @@index([organizationId, targetResourceId])
+}
+
+model SecurityFinding {
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccountId    String
+  awsAccount      AwsAccount      @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+  resourceId      String?
+  resource        CloudResource?  @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  ruleId          String
+  title           String
+  description     String
+  severity        FindingSeverity
+  status          RiskStatus      @default(OPEN)
+  evidence        Json            @default("{}")
+  businessImpact  String?
+  recommendation  String?
+  complianceRefs  Json            @default("[]")
+  ownerTeamId     String?
+  ownerTeam       Team?           @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
+  dueAt           DateTime?
+  firstSeenAt     DateTime        @default(now())
+  lastSeenAt      DateTime        @default(now())
+  resolvedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  recommendations Recommendation[]
+  riskAcceptances RiskAcceptance[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, severity])
+}
+
+model CostFinding {
+  id                    String          @id @default(cuid())
+  organizationId        String
+  organization          Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccountId          String
+  awsAccount            AwsAccount      @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+  resourceId            String?
+  resource              CloudResource?  @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  ruleId                String
+  title                 String
+  description           String
+  severity              FindingSeverity
+  estimatedMonthlyWaste Decimal         @default(0)
+  estimatedAnnualWaste  Decimal         @default(0)
+  currency              String          @default("USD")
+  confidence            String
+  evidence              Json            @default("{}")
+  recommendation        String?
+  status                RiskStatus      @default(OPEN)
+  ownerTeamId           String?
+  ownerTeam             Team?           @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  recommendations Recommendation[]
+  riskAcceptances RiskAcceptance[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, severity])
+}
+
+model ComplianceControl {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  controlId      String
+  group          String
+  title          String
+  description    String
+  status         ComplianceStatus @default(WARNING)
+  evidenceCount  Int              @default(0)
+  failedResources Int             @default(0)
+  lastScanAt     DateTime?
+  ownerTeamId    String?
+  ownerTeam      Team?            @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  evidence ComplianceEvidence[]
+
+  @@unique([organizationId, controlId])
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model ComplianceEvidence {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  controlId      String
+  control        ComplianceControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  resourceId     String?
+  resource       CloudResource?    @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  status         ComplianceStatus
+  evidence       Json              @default("{}")
+  evidenceType   String
+  source         String            @default("internal cloud governance evidence")
+  collectedAt    DateTime          @default(now())
+  createdAt      DateTime          @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, controlId])
+}
+
+model Recommendation {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  securityFindingId String?
+  securityFinding   SecurityFinding? @relation(fields: [securityFindingId], references: [id], onDelete: Cascade)
+  costFindingId     String?
+  costFinding       CostFinding?     @relation(fields: [costFindingId], references: [id], onDelete: Cascade)
+  provider          String           @default("aws")
+  actionType        String
+  title             String
+  description       String
+  riskReduction     String?
+  terraformSnippet  String?
+  cliSuggestion     String?
+  manualSteps       Json             @default("[]")
+  blastRadius       String?
+  rollbackNote      String?
+  canExecute        Boolean          @default(false)
+  blockedReason     String           @default("Automatic remediation is disabled in CloudShield v1.")
+  createdAt         DateTime         @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, securityFindingId])
+  @@index([organizationId, costFindingId])
+}
+
+model RiskAcceptance {
+  id                String           @id @default(cuid())
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  securityFindingId String?
+  securityFinding   SecurityFinding? @relation(fields: [securityFindingId], references: [id], onDelete: Cascade)
+  costFindingId     String?
+  costFinding       CostFinding?     @relation(fields: [costFindingId], references: [id], onDelete: Cascade)
+  businessJustification String
+  approver          String
+  owner             String
+  ownerTeamId       String?
+  ownerTeam         Team?            @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
+  evidence          Json             @default("{}")
+  expiresAt         DateTime
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, expiresAt])
+}
+
+model ScanRun {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccountId   String?
+  awsAccount     AwsAccount?   @relation(fields: [awsAccountId], references: [id], onDelete: SetNull)
+  jobType        String
+  status         ScanRunStatus @default(STARTED)
+  phase          String?
+  startedAt      DateTime      @default(now())
+  completedAt    DateTime?
+  errorCode      String?
+  errorMessage   String?
+  metadata       Json          @default("{}")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model AuditEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorUserId    String?
+  action         String
+  targetType     String
+  targetId       String?
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, targetType, targetId])
+}
+
+model ReportExport {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reportType     String
+  status         ReportExportStatus @default(QUEUED)
+  format         String             @default("json")
+  filters        Json               @default("{}")
+  exportUrl      String?
+  requestedBy    String?
+  createdAt      DateTime           @default(now())
+  completedAt    DateTime?
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
