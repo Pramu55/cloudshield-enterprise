@@ -12,10 +12,27 @@ export function registerErrorPlugin(app: FastifyInstance): void {
     }
 
     app.log.error(error);
+    console.error(error);
+
+    if (hasStatusCode(error)) {
+      reply.status(error.statusCode).send({
+        error: "request_error",
+        message: error.message
+      });
+      return;
+    }
 
     reply.status(500).send({
       error: "internal_server_error",
       message: "Unexpected backend error"
     });
   });
+}
+
+function hasStatusCode(error: unknown): error is Error & { statusCode: number } {
+  return (
+    error instanceof Error &&
+    "statusCode" in error &&
+    typeof error.statusCode === "number"
+  );
 }

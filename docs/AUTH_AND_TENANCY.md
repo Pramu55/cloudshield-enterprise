@@ -39,6 +39,15 @@ These routes require `Authorization: Bearer <token>`:
 - `GET /api/v1/findings/cost`
 - `GET /api/v1/compliance/controls`
 - `GET /api/v1/recommendations`
+- `GET /api/v1/aws/accounts`
+- `POST /api/v1/aws/accounts`
+- `GET /api/v1/aws/accounts/:accountId`
+- `PATCH /api/v1/aws/accounts/:accountId`
+- `PATCH /api/v1/aws/accounts/:accountId/archive`
+- `POST /api/v1/aws/accounts/:accountId/validate`
+- `GET /api/v1/aws/setup-guide`
+
+AWS account registry routes use `request.auth.organizationId` for every tenant-owned query. They do not query account records by id alone.
 
 ## Safety Boundary
 

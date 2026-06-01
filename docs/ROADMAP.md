@@ -38,6 +38,15 @@
 - Frontend login and logout flow
 - Documentation for tenant scoping rules
 
+## Milestone 3.5: CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN
+
+- Authenticated AWS account registry metadata routes
+- Organization-scoped account create, read, update, validate placeholder, and safe archive
+- Zod contracts for account DTOs and setup guide responses
+- Dashboard account registry page with sample/demo account data
+- Setup guide for future read-only IAM role assumption
+- No AWS credentials, AWS API calls, scanner, mutation, remediation, or Terraform apply
+
 ## Milestone 4: Read-Only AWS Inventory
 
 - Read-only account validation

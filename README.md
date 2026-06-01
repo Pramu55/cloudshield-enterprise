@@ -6,7 +6,7 @@ Portfolio title: **CloudShield Enterprise - AWS Security Posture, Cost Governanc
 
 ## Current Milestone
 
-This repository currently implements `CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN` on top of the original foundation milestone.
+This repository currently implements `CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN` on top of the auth and tenant foundation.
 
 Included:
 
@@ -17,12 +17,15 @@ Included:
 - BullMQ worker foundation
 - Prisma schema for enterprise governance models
 - PostgreSQL and Redis Docker Compose runtime
+- Authenticated AWS account registry metadata API
+- Dashboard account registry UI for create, edit, validation placeholder, and safe archive
 - Safety-first documentation
 
 Not included in this milestone:
 
 - AWS credentials
 - AWS scanner
+- AWS API account validation
 - AWS mutation
 - Automatic remediation
 - Terraform apply
@@ -31,6 +34,8 @@ Not included in this milestone:
 ## Safety Boundary
 
 CloudShield v1 is read-only. It may store inventory, evidence, findings, risk ownership, and recommendations, but it must not mutate IAM, S3, EC2, Security Groups, VPCs, AWS policies, or any other cloud resource.
+
+The AWS account registry stores metadata only: account name, AWS account ID, environment, owner team, regions, notes, and planned read-only connection placeholders. It does not store AWS access keys, secret keys, session tokens, or execute AWS API calls.
 
 Compliance language is limited to:
 
@@ -98,6 +103,18 @@ Validate Docker backend health:
 ```powershell
 Invoke-WebRequest http://localhost:4100/health
 Invoke-WebRequest http://localhost:4100/api/v1/dashboard/summary
+```
+
+AWS account registry endpoints require a bearer token:
+
+```text
+GET /api/v1/aws/accounts
+POST /api/v1/aws/accounts
+GET /api/v1/aws/accounts/:accountId
+PATCH /api/v1/aws/accounts/:accountId
+PATCH /api/v1/aws/accounts/:accountId/archive
+POST /api/v1/aws/accounts/:accountId/validate
+GET /api/v1/aws/setup-guide
 ```
 
 Docker publishes the frontend at `http://localhost:3100`, the backend at `http://localhost:4100`, Postgres at `localhost:55432`, and Redis at `localhost:6381`. Inside the Docker network, services still use their standard ports.

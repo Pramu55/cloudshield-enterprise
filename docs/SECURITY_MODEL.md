@@ -48,3 +48,26 @@ Tenant-owned records include `organizationId`. Services must scope tenant-owned 
 Authenticated API routes must derive `organizationId` from the verified JWT user context. Tenant-owned records must not be queried by ID alone.
 
 The local demo login is sample/demo only and must not be treated as a production identity provider.
+
+## AWS Account Registry Safety
+
+The account registry milestone stores metadata only. It may store:
+
+- AWS account ID
+- Account display name
+- Environment
+- Owner team reference
+- Region list
+- Notes
+- Future role ARN and external ID placeholders
+
+It must not store AWS access keys, secret access keys, session tokens, or other long-lived AWS credentials.
+
+Registry validation is intentionally not implemented yet. The validation endpoint returns:
+
+```text
+VALIDATION_NOT_IMPLEMENTED
+Real AWS read-only validation will be added in the AWS read-only connector milestone. No AWS API calls were executed.
+```
+
+Safe archive sets an account registry record to disabled and records `archivedAt`. It does not delete AWS resources or mutate cloud state.

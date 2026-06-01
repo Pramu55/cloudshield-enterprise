@@ -23,11 +23,28 @@ CloudShield Enterprise is an advanced CSPM-style TypeScript monorepo for AWS sec
 - Turborepo coordinates workspace build and typecheck tasks.
 - Prisma migrations create the local enterprise schema, and a seed script loads clearly labeled sample demo data for local verification.
 - Fastify auth routes issue local JWT access tokens. Protected API routes derive `organizationId` from the authenticated user context and scope tenant-owned reads by that organization.
+- AWS account registry routes are authenticated metadata routes only. They manage account name, AWS account ID, environment, owner team, regions, notes, connection status placeholders, and safe archive state without executing AWS API calls.
 
 ## Data Boundary
 
 Tenant-owned models include `organizationId`. API and service patterns must scope access by organization instead of querying tenant-owned records by ID alone.
 
+The AWS account registry follows this rule for every route, including `:accountId` lookups. The backend queries account records with `organizationId` from `request.auth.organizationId` and either the internal record id or AWS account ID.
+
 ## Read-Only Cloud Boundary
 
 CloudShield v1 does not execute remediations. Recommendations may include manual steps, AWS CLI suggestions, or Terraform snippets for human review, but execution remains blocked.
+
+## AWS Account Registry
+
+The registry is the first step toward a read-only CSPM-style connection model. In this milestone it stores organization-scoped account metadata only.
+
+Current behavior:
+
+- No AWS credentials are stored.
+- No long-lived access keys are accepted.
+- No AWS SDK validation or scanning is executed.
+- Validation actions return `VALIDATION_NOT_IMPLEMENTED`.
+- Archive is a soft archive through `archivedAt` and `DISABLED` connection status.
+
+Future connector work should use IAM role assumption with an external ID and read-only permissions.

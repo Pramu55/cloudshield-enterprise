@@ -3,6 +3,7 @@ import helmet from "@fastify/helmet";
 import Fastify from "fastify";
 import { registerEnvPlugin } from "./plugins/env.js";
 import { registerErrorPlugin } from "./plugins/errors.js";
+import { registerAwsAccountRoutes } from "./routes/aws-account.routes.js";
 import { registerDataRoutes } from "./routes/data.routes.js";
 import { registerAuthRoutes } from "./routes/auth.routes.js";
 import { registerPlatformRoutes } from "./routes/platform.routes.js";
@@ -21,6 +22,7 @@ export async function buildApp() {
   registerErrorPlugin(app);
   await registerPlatformRoutes(app);
   await registerAuthRoutes(app);
+  await registerAwsAccountRoutes(app);
   await registerDataRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => {

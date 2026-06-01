@@ -102,7 +102,12 @@ async function main() {
       update: {
         name: "Production Sample Account",
         status: "CONNECTED",
-        ownerTeamId: platformTeam.id
+        connectionStatus: "CONNECTED_DEMO_ONLY",
+        ownerTeamId: platformTeam.id,
+        description: "Sample demo registry metadata only. Real AWS scanning is not enabled yet.",
+        roleArnPlaceholder: "arn:aws:iam::111111111111:role/CloudShieldReadOnlyRoleSample",
+        externalIdPlaceholder: "sample-external-id-placeholder",
+        archivedAt: null
       },
       create: {
         organizationId: organization.id,
@@ -111,11 +116,15 @@ async function main() {
         environment: "prod",
         ownerTeamId: platformTeam.id,
         status: "CONNECTED",
+        connectionStatus: "CONNECTED_DEMO_ONLY",
         regions: ["us-east-1", "us-west-2"],
         lastScanAt: new Date(),
         securityScore: 72,
         costScore: 81,
-        complianceScore: 68
+        complianceScore: 68,
+        description: "Sample demo registry metadata only. Real AWS scanning is not enabled yet.",
+        roleArnPlaceholder: "arn:aws:iam::111111111111:role/CloudShieldReadOnlyRoleSample",
+        externalIdPlaceholder: "sample-external-id-placeholder"
       }
     }),
     prisma.awsAccount.upsert({
@@ -128,7 +137,12 @@ async function main() {
       update: {
         name: "Development Sample Account",
         status: "CONNECTED",
-        ownerTeamId: platformTeam.id
+        connectionStatus: "CONNECTED_DEMO_ONLY",
+        ownerTeamId: platformTeam.id,
+        description: "Sample demo registry metadata only. Real AWS scanning is not enabled yet.",
+        roleArnPlaceholder: "arn:aws:iam::222222222222:role/CloudShieldReadOnlyRoleSample",
+        externalIdPlaceholder: "sample-external-id-placeholder",
+        archivedAt: null
       },
       create: {
         organizationId: organization.id,
@@ -137,11 +151,15 @@ async function main() {
         environment: "dev",
         ownerTeamId: platformTeam.id,
         status: "CONNECTED",
+        connectionStatus: "CONNECTED_DEMO_ONLY",
         regions: ["us-east-1"],
         lastScanAt: new Date(),
         securityScore: 84,
         costScore: 76,
-        complianceScore: 74
+        complianceScore: 74,
+        description: "Sample demo registry metadata only. Real AWS scanning is not enabled yet.",
+        roleArnPlaceholder: "arn:aws:iam::222222222222:role/CloudShieldReadOnlyRoleSample",
+        externalIdPlaceholder: "sample-external-id-placeholder"
       }
     })
   ]);

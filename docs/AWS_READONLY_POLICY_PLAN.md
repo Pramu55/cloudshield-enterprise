@@ -1,8 +1,12 @@
 # AWS Read-Only Policy Plan
 
-This foundation milestone does not add AWS credentials or an AWS scanner.
+This foundation and account registry work does not add AWS credentials or an AWS scanner.
+
+The AWS account registry stores metadata only. It is intended to prepare organization-scoped account ownership and connection planning before any read-only connector exists.
 
 Future AWS access should use least-privilege, read-only permissions only. The policy plan should support metadata collection for inventory, posture, and evidence generation without resource mutation.
+
+The planned connection model is IAM role assumption with an external ID. CloudShield should not store long-lived AWS access keys, secret access keys, or session tokens.
 
 ## Future Read-Only Areas
 
@@ -20,6 +24,8 @@ Future AWS access should use least-privilege, read-only permissions only. The po
 ## Explicit Non-Goals
 
 - No write actions.
+- No long-lived AWS access keys.
+- No AWS API validation in the registry milestone.
 - No IAM policy changes.
 - No S3 policy changes.
 - No EC2, VPC, or security group changes.

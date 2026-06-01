@@ -13,9 +13,20 @@ export const EnvironmentSchema = z.enum([
   "staging",
   "prod",
   "security",
-  "shared"
+  "shared",
+  "sandbox"
 ]);
 export type Environment = z.infer<typeof EnvironmentSchema>;
+
+export const AwsAccountEnvironmentSchema = z.enum([
+  "DEVELOPMENT",
+  "STAGING",
+  "PRODUCTION",
+  "SECURITY",
+  "SHARED",
+  "SANDBOX"
+]);
+export type AwsAccountEnvironment = z.infer<typeof AwsAccountEnvironmentSchema>;
 
 export const AwsAccountStatusSchema = z.enum([
   "NOT_CONFIGURED",
@@ -27,6 +38,17 @@ export const AwsAccountStatusSchema = z.enum([
   "FAILED"
 ]);
 export type AwsAccountStatus = z.infer<typeof AwsAccountStatusSchema>;
+
+export const AwsConnectionStatusSchema = z.enum([
+  "NOT_CONFIGURED",
+  "READY_FOR_VALIDATION",
+  "VALIDATION_NOT_IMPLEMENTED",
+  "CONNECTED_DEMO_ONLY",
+  "AUTH_FAILED",
+  "PERMISSION_DENIED",
+  "DISABLED"
+]);
+export type AwsConnectionStatus = z.infer<typeof AwsConnectionStatusSchema>;
 
 export const FindingSeveritySchema = z.enum([
   "CRITICAL",
@@ -80,7 +102,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_ENTERPRISE_FOUNDATION_GREEN",
   "CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN",
   "CLOUDSHIELD_LOCAL_RUNTIME_AND_DATABASE_GREEN",
-  "CLOUDSHIELD_AUTH_AND_TENANT_FOUNDATION_GREEN"
+  "CLOUDSHIELD_AUTH_AND_TENANT_FOUNDATION_GREEN",
+  "CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -154,3 +177,122 @@ export const CurrentUserResponseSchema = z.object({
   organization: AuthOrganizationSchema
 });
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
+
+const AwsAccountIdSchema = z
+  .string()
+  .regex(/^\d{12}$/, "AWS account ID must be exactly 12 digits.");
+
+const AwsRegionsSchema = z
+  .array(z.string().trim().min(2).max(32))
+  .min(1)
+  .max(30);
+
+function doesNotContainCredentialLikeValue(value: string | null | undefined) {
+  if (!value) {
+    return true;
+  }
+
+  return !/(aws_secret_access_key|secret_access_key|session_token|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16})/i.test(
+    value
+  );
+}
+
+export const AwsAccountDtoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  accountId: AwsAccountIdSchema,
+  environment: AwsAccountEnvironmentSchema,
+  ownerTeamId: z.string().nullable(),
+  ownerTeamName: z.string().nullable(),
+  regions: z.array(z.string()),
+  status: AwsAccountStatusSchema,
+  connectionStatus: AwsConnectionStatusSchema,
+  lastScanAt: z.string().nullable(),
+  securityScore: z.number().int().nullable(),
+  costScore: z.number().int().nullable(),
+  complianceScore: z.number().int().nullable(),
+  description: z.string().nullable(),
+  roleArnPlaceholder: z.string().nullable(),
+  externalIdPlaceholder: z.string().nullable(),
+  setupInstructionsViewedAt: z.string().nullable(),
+  archivedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  sampleData: z.boolean()
+});
+export type AwsAccountDto = z.infer<typeof AwsAccountDtoSchema>;
+
+const AwsAccountWriteBaseSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  accountId: AwsAccountIdSchema,
+  environment: AwsAccountEnvironmentSchema,
+  ownerTeamId: z.string().trim().min(1).nullable().optional(),
+  regions: AwsRegionsSchema.default(["us-east-1"]),
+  description: z.string().trim().max(1000).nullable().optional(),
+  roleArnPlaceholder: z.string().trim().max(300).nullable().optional(),
+  externalIdPlaceholder: z.string().trim().max(200).nullable().optional()
+});
+
+export const CreateAwsAccountRequestSchema = AwsAccountWriteBaseSchema
+  .refine(
+    (value) =>
+      doesNotContainCredentialLikeValue(value.description) &&
+      doesNotContainCredentialLikeValue(value.roleArnPlaceholder) &&
+      doesNotContainCredentialLikeValue(value.externalIdPlaceholder),
+    "Do not store AWS access keys, secret keys, or session tokens in CloudShield."
+  );
+export type CreateAwsAccountRequest = z.infer<
+  typeof CreateAwsAccountRequestSchema
+>;
+
+export const UpdateAwsAccountRequestSchema = AwsAccountWriteBaseSchema.partial()
+  .extend({
+    connectionStatus: AwsConnectionStatusSchema.optional()
+  })
+  .refine(
+    (value) =>
+      doesNotContainCredentialLikeValue(value.description) &&
+      doesNotContainCredentialLikeValue(value.roleArnPlaceholder) &&
+      doesNotContainCredentialLikeValue(value.externalIdPlaceholder),
+    "Do not store AWS access keys, secret keys, or session tokens in CloudShield."
+  )
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one account field is required."
+  });
+export type UpdateAwsAccountRequest = z.infer<
+  typeof UpdateAwsAccountRequestSchema
+>;
+
+export const AwsAccountListResponseSchema = z.object({
+  sampleData: z.boolean(),
+  sampleDataLabel: z.string(),
+  items: z.array(AwsAccountDtoSchema)
+});
+export type AwsAccountListResponse = z.infer<
+  typeof AwsAccountListResponseSchema
+>;
+
+export const AwsAccountMutationResponseSchema = z.object({
+  item: AwsAccountDtoSchema,
+  message: z.string()
+});
+export type AwsAccountMutationResponse = z.infer<
+  typeof AwsAccountMutationResponseSchema
+>;
+
+export const AwsSetupGuideResponseSchema = z.object({
+  title: z.string(),
+  safetyMode: z.literal("read_only_planned"),
+  message: z.string(),
+  plannedConnectionModel: z.array(z.string()),
+  currentLimitations: z.array(z.string()),
+  validation: z.object({
+    code: z.literal("VALIDATION_NOT_IMPLEMENTED"),
+    message: z.literal(
+      "Real AWS read-only validation will be added in the AWS read-only connector milestone. No AWS API calls were executed."
+    )
+  })
+});
+export type AwsSetupGuideResponse = z.infer<
+  typeof AwsSetupGuideResponseSchema
+>;
