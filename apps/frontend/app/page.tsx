@@ -7,7 +7,7 @@ import {
   Network,
   ShieldCheck
 } from "lucide-react";
-import { PLATFORM_TITLE } from "@cloudshield/types";
+import { PLATFORM_TITLE } from "@cloudshield/contracts";
 
 const signals = [
   { label: "Cloud accounts", value: "Multi-account ready" },

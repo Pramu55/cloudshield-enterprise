@@ -76,10 +76,16 @@ export const CloudScanJobTypeSchema = z.enum([
 ]);
 export type CloudScanJobType = z.infer<typeof CloudScanJobTypeSchema>;
 
+export const MilestoneSchema = z.enum([
+  "CLOUDSHIELD_ENTERPRISE_FOUNDATION_GREEN",
+  "CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN"
+]);
+export type Milestone = z.infer<typeof MilestoneSchema>;
+
 export const PlatformStatusSchema = z.object({
   name: z.literal(PLATFORM_NAME),
   title: z.literal(PLATFORM_TITLE),
-  milestone: z.literal("CLOUDSHIELD_ENTERPRISE_FOUNDATION_GREEN"),
+  milestone: MilestoneSchema,
   apiVersion: z.literal("v1"),
   remediationExecution: z.literal("disabled"),
   awsScanner: z.literal("not_configured"),

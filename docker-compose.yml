@@ -25,10 +25,10 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
+  backend:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: apps/backend/Dockerfile
     environment:
       NODE_ENV: development
       PORT: 4000
@@ -48,17 +48,17 @@ services:
       timeout: 5s
       retries: 10
 
-  web:
+  frontend:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: apps/frontend/Dockerfile
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_BASE_URL: http://localhost:4100
     ports:
       - "3100:3000"
     depends_on:
-      api:
+      backend:
         condition: service_healthy
 
   worker:

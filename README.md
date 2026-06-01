@@ -4,15 +4,16 @@ CloudShield Enterprise is a multi-account AWS governance platform that scans clo
 
 Portfolio title: **CloudShield Enterprise - AWS Security Posture, Cost Governance & Compliance Platform**.
 
-## Foundation Milestone
+## Current Milestone
 
-This repository currently implements `CLOUDSHIELD_ENTERPRISE_FOUNDATION_GREEN`.
+This repository currently implements `CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN` on top of the original foundation milestone.
 
 Included:
 
 - pnpm TypeScript monorepo
-- Next.js web shell
-- Express API foundation
+- Turborepo task orchestration
+- Next.js App Router frontend shell
+- Fastify 5 backend foundation
 - BullMQ worker foundation
 - Prisma schema for enterprise governance models
 - PostgreSQL and Redis Docker Compose runtime
@@ -45,16 +46,16 @@ Install dependencies:
 pnpm install
 ```
 
-Run the API:
+Run the backend:
 
 ```powershell
-pnpm --filter @cloudshield/api dev
+pnpm --filter @cloudshield/backend dev
 ```
 
-Run the web app:
+Run the frontend:
 
 ```powershell
-pnpm --filter @cloudshield/web dev
+pnpm --filter @cloudshield/frontend dev
 ```
 
 Run the worker:
@@ -69,23 +70,26 @@ Run the full local stack:
 docker compose up -d --build
 ```
 
-Validate Docker API health:
+Validate Docker backend health:
 
 ```powershell
 Invoke-WebRequest http://localhost:4100/health
 ```
 
-Docker publishes the web app at `http://localhost:3100`, the API at `http://localhost:4100`, Postgres at `localhost:55432`, and Redis at `localhost:6381`. Inside the Docker network, services still use their standard ports.
+Docker publishes the frontend at `http://localhost:3100`, the backend at `http://localhost:4100`, Postgres at `localhost:55432`, and Redis at `localhost:6381`. Inside the Docker network, services still use their standard ports.
 
 ## Workspace
 
 ```text
-apps/web
-apps/api
+apps/frontend
+apps/backend
 apps/worker
-packages/types
+packages/contracts
 packages/database
+packages/config
 packages/utils
 packages/logger
+packages/security
 docs
+infrastructure
 ```

@@ -1,22 +1,26 @@
 # Architecture
 
-CloudShield Enterprise is a production-style TypeScript monorepo for AWS security posture, cost governance, compliance evidence, cloud inventory, and risk workflow.
+CloudShield Enterprise is an advanced CSPM-style TypeScript monorepo for AWS security posture, cost governance, compliance evidence, cloud inventory, and risk workflow.
 
 ## System Components
 
-- `apps/web`: Next.js governance console.
-- `apps/api`: Express REST API with `/api/v1` as the versioned base route.
+- `apps/frontend`: Next.js App Router governance console.
+- `apps/backend`: Fastify 5 REST API with `/api/v1` as the versioned base route.
 - `apps/worker`: BullMQ worker for scan, evidence, scoring, and export jobs.
-- `packages/types`: shared enums, DTOs, and Zod schemas.
+- `packages/contracts`: shared enums, DTOs, and Zod 4 schemas.
 - `packages/database`: Prisma schema and database client foundation.
+- `packages/config`: typed runtime configuration.
 - `packages/utils`: shared runtime helpers.
 - `packages/logger`: structured logger.
+- `packages/security`: read-only safety and recommendation execution policy helpers.
+- `infrastructure/*`: local runtime notes for Docker, database, and Redis.
 
 ## Runtime
 
 - PostgreSQL stores tenant-owned governance data.
 - Redis backs BullMQ queues.
-- Docker Compose runs Postgres, Redis, API, web, and worker locally.
+- Docker Compose runs Postgres, Redis, backend, frontend, and worker locally.
+- Turborepo coordinates workspace build and typecheck tasks.
 
 ## Data Boundary
 

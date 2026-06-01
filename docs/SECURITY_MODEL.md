@@ -2,6 +2,8 @@
 
 CloudShield Enterprise v1 is a read-only governance platform.
 
+The upgraded architecture uses a Fastify 5 backend, Zod 4 contracts, a Next.js frontend, Prisma, PostgreSQL, Redis, and BullMQ. These changes do not expand CloudShield beyond read-only governance behavior.
+
 ## Allowed
 
 - Read AWS resource metadata in future scanner milestones.

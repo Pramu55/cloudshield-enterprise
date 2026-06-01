@@ -4,11 +4,11 @@ WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages ./packages
-COPY apps/web ./apps/web
+COPY apps/frontend ./apps/frontend
 
 RUN corepack enable && pnpm install --frozen-lockfile=false
-RUN pnpm --filter @cloudshield/types build
+RUN pnpm --filter @cloudshield/contracts build
 
 EXPOSE 3000
 
-CMD ["pnpm", "--filter", "@cloudshield/web", "dev"]
+CMD ["pnpm", "--filter", "@cloudshield/frontend", "dev"]

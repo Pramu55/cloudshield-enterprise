@@ -4,7 +4,7 @@ import {
   CLOUD_SCAN_QUEUE_NAME,
   CloudScanJobTypeSchema,
   type CloudScanJobType
-} from "@cloudshield/types";
+} from "@cloudshield/contracts";
 import { optionalEnv } from "@cloudshield/utils";
 
 const logger = createLogger("cloudshield-worker");

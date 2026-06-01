@@ -10,6 +10,16 @@
 - Health and platform status endpoints
 - Safety and architecture docs
 
+## Milestone 1.5: CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN
+
+- Rename apps to `frontend`, `backend`, and `worker`.
+- Rename shared contracts package to `@cloudshield/contracts`.
+- Replace Express with Fastify 5.
+- Move shared validation to Zod 4 contracts.
+- Add Turborepo task orchestration.
+- Add typed config and security policy packages.
+- Keep CloudShield read-only with no AWS scanner or mutation behavior.
+
 ## Milestone 2: Demo Governance Data
 
 - Clearly labeled sample demo data

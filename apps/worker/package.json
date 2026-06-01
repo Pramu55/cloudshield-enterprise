@@ -11,8 +11,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@cloudshield/config": "workspace:*",
+    "@cloudshield/contracts": "workspace:*",
     "@cloudshield/logger": "workspace:*",
-    "@cloudshield/types": "workspace:*",
     "@cloudshield/utils": "workspace:*",
     "bullmq": "^5.34.2"
   },
