@@ -52,3 +52,5 @@ Real AWS read-only validation will be added in the AWS read-only connector miles
 ## Future Direction
 
 The read-only connector milestone should use IAM role assumption with an external ID and least-privilege read-only permissions. CloudShield should not store long-lived AWS access keys.
+
+The connector plan milestone adds a separate `validate-readonly-connection` action. By default it is disabled and makes no AWS API calls. If explicitly enabled, it may call only STS `GetCallerIdentity`; it still does not scan inventory or mutate AWS resources.

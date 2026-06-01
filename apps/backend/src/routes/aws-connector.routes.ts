@@ -1,0 +1,106 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import {
+  ValidateReadonlyConnectionResponseSchema,
+  type AwsReadonlyValidationStatus
+} from "@cloudshield/contracts";
+import { prisma } from "@cloudshield/database";
+import { getAwsConnectorConfig } from "../modules/aws-connector/aws-connector.config.js";
+import { AwsConnectorService } from "../modules/aws-connector/aws-connector.service.js";
+import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import {
+  findAccountForOrganization,
+  toAwsAccountDto
+} from "./aws-account.routes.js";
+
+export async function registerAwsConnectorRoutes(
+  app: FastifyInstance
+): Promise<void> {
+  app.get(
+    "/api/v1/aws/connector/status",
+    { preHandler: requireAuth },
+    async (request) => {
+      getAuthContext(request);
+      return getConnectorService(app).getStatus();
+    }
+  );
+
+  app.post(
+    "/api/v1/aws/accounts/:accountId/validate-readonly-connection",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      const accountId = accountParamsSchema.parse(request.params).accountId;
+      const account = await findAccountForOrganization(
+        auth.organizationId,
+        accountId
+      );
+
+      if (!account) {
+        reply.status(404).send({
+          error: "aws_account_not_found",
+          message: "AWS account registry record was not found for this organization."
+        });
+        return;
+      }
+
+      const result = await getConnectorService(app).validateReadonlyConnection();
+      const updatedAccount = await prisma.awsAccount.update({
+        where: {
+          id: account.id
+        },
+        data: {
+          connectionStatus: mapValidationStatusToConnectionStatus(result.status)
+        },
+        include: {
+          ownerTeam: {
+            select: {
+              name: true
+            }
+          }
+        }
+      });
+
+      return ValidateReadonlyConnectionResponseSchema.parse({
+        account: toAwsAccountDto(updatedAccount),
+        connector: result.connector,
+        status: result.status,
+        awsApiCallExecuted: result.awsApiCallExecuted,
+        callerIdentity: result.callerIdentity,
+        message: result.message
+      });
+    }
+  );
+}
+
+const accountParamsSchema = z.object({
+  accountId: z.string().min(1).max(64)
+});
+
+function getConnectorService(app: FastifyInstance) {
+  return new AwsConnectorService(getAwsConnectorConfig(app.config));
+}
+
+function mapValidationStatusToConnectionStatus(
+  status: AwsReadonlyValidationStatus
+) {
+  switch (status) {
+    case "DISABLED":
+      return "DISABLED";
+    case "NOT_CONFIGURED":
+      return "NOT_CONFIGURED";
+    case "READY_FOR_VALIDATION":
+      return "READY_FOR_VALIDATION";
+    case "VALIDATION_SUCCEEDED":
+      return "VALIDATION_SUCCEEDED";
+    case "AUTH_FAILED":
+      return "AUTH_FAILED";
+    case "PERMISSION_DENIED":
+      return "PERMISSION_DENIED";
+    case "VALIDATION_NOT_IMPLEMENTED":
+      return "VALIDATION_NOT_IMPLEMENTED";
+    case "VALIDATION_FAILED":
+    default:
+      return "VALIDATION_FAILED";
+  }
+}

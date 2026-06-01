@@ -8,6 +8,24 @@ Future AWS access should use least-privilege, read-only permissions only. The po
 
 The planned connection model is IAM role assumption with an external ID. CloudShield should not store long-lived AWS access keys, secret access keys, or session tokens.
 
+## Current Connector Milestone
+
+`CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN` adds only connector readiness and STS identity validation planning.
+
+Default behavior:
+
+- `AWS_CONNECTOR_MODE=disabled`
+- No AWS API calls are executed.
+- No credentials are required.
+
+Explicit validation behavior:
+
+- `AWS_CONNECTOR_MODE=readonly-validation`
+- `AWS_ROLE_ARN` and `AWS_EXTERNAL_ID` placeholders must be configured.
+- The only allowed AWS SDK call is STS `GetCallerIdentity`.
+- No inventory APIs are called.
+- No AWS mutation APIs are called.
+
 ## Future Read-Only Areas
 
 - STS caller identity
@@ -25,7 +43,7 @@ The planned connection model is IAM role assumption with an external ID. CloudSh
 
 - No write actions.
 - No long-lived AWS access keys.
-- No AWS API validation in the registry milestone.
+- No AWS inventory scanning in the connector plan milestone.
 - No IAM policy changes.
 - No S3 policy changes.
 - No EC2, VPC, or security group changes.

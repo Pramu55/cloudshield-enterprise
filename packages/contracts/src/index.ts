@@ -43,12 +43,34 @@ export const AwsConnectionStatusSchema = z.enum([
   "NOT_CONFIGURED",
   "READY_FOR_VALIDATION",
   "VALIDATION_NOT_IMPLEMENTED",
+  "VALIDATION_SUCCEEDED",
+  "VALIDATION_FAILED",
   "CONNECTED_DEMO_ONLY",
   "AUTH_FAILED",
   "PERMISSION_DENIED",
   "DISABLED"
 ]);
 export type AwsConnectionStatus = z.infer<typeof AwsConnectionStatusSchema>;
+
+export const AwsConnectorModeSchema = z.enum([
+  "disabled",
+  "readonly-validation"
+]);
+export type AwsConnectorMode = z.infer<typeof AwsConnectorModeSchema>;
+
+export const AwsReadonlyValidationStatusSchema = z.enum([
+  "DISABLED",
+  "NOT_CONFIGURED",
+  "READY_FOR_VALIDATION",
+  "VALIDATION_SUCCEEDED",
+  "VALIDATION_FAILED",
+  "VALIDATION_NOT_IMPLEMENTED",
+  "AUTH_FAILED",
+  "PERMISSION_DENIED"
+]);
+export type AwsReadonlyValidationStatus = z.infer<
+  typeof AwsReadonlyValidationStatusSchema
+>;
 
 export const FindingSeveritySchema = z.enum([
   "CRITICAL",
@@ -103,7 +125,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_TECH_STACK_AND_STRUCTURE_UPGRADE_GREEN",
   "CLOUDSHIELD_LOCAL_RUNTIME_AND_DATABASE_GREEN",
   "CLOUDSHIELD_AUTH_AND_TENANT_FOUNDATION_GREEN",
-  "CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN"
+  "CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN",
+  "CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -295,4 +318,39 @@ export const AwsSetupGuideResponseSchema = z.object({
 });
 export type AwsSetupGuideResponse = z.infer<
   typeof AwsSetupGuideResponseSchema
+>;
+
+export const AwsConnectorStatusResponseSchema = z.object({
+  mode: AwsConnectorModeSchema,
+  status: AwsReadonlyValidationStatusSchema,
+  enabled: z.boolean(),
+  configured: z.boolean(),
+  region: z.string(),
+  roleArnConfigured: z.boolean(),
+  externalIdConfigured: z.boolean(),
+  allowedAwsCall: z.literal("sts:GetCallerIdentity").or(z.literal("none")),
+  inventoryScan: z.literal("not_enabled"),
+  mutationAccess: z.literal("not_enabled"),
+  message: z.string()
+});
+export type AwsConnectorStatusResponse = z.infer<
+  typeof AwsConnectorStatusResponseSchema
+>;
+
+export const ValidateReadonlyConnectionResponseSchema = z.object({
+  account: AwsAccountDtoSchema,
+  connector: AwsConnectorStatusResponseSchema,
+  status: AwsReadonlyValidationStatusSchema,
+  awsApiCallExecuted: z.boolean(),
+  callerIdentity: z
+    .object({
+      account: z.string().nullable(),
+      arn: z.string().nullable(),
+      userId: z.string().nullable()
+    })
+    .nullable(),
+  message: z.string()
+});
+export type ValidateReadonlyConnectionResponse = z.infer<
+  typeof ValidateReadonlyConnectionResponseSchema
 >;

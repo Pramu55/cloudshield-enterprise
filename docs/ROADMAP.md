@@ -47,6 +47,17 @@
 - Setup guide for future read-only IAM role assumption
 - No AWS credentials, AWS API calls, scanner, mutation, remediation, or Terraform apply
 
+## Milestone 3.6: CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN
+
+- Safe AWS connector environment configuration
+- Backend read-only connector module
+- AWS SDK v3 STS dependency for explicit identity validation only
+- Authenticated connector status endpoint
+- Authenticated account read-only validation endpoint
+- Frontend connector readiness display on the accounts page
+- Documentation for IAM role assumption, external ID, and no long-lived access keys
+- No AWS inventory scanning, mutation, remediation, or Terraform apply
+
 ## Milestone 4: Read-Only AWS Inventory
 
 - Read-only account validation

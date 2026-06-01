@@ -6,7 +6,7 @@ Portfolio title: **CloudShield Enterprise - AWS Security Posture, Cost Governanc
 
 ## Current Milestone
 
-This repository currently implements `CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN` on top of the auth and tenant foundation.
+This repository currently implements `CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN` on top of the AWS account registry foundation.
 
 Included:
 
@@ -19,6 +19,7 @@ Included:
 - PostgreSQL and Redis Docker Compose runtime
 - Authenticated AWS account registry metadata API
 - Dashboard account registry UI for create, edit, validation placeholder, and safe archive
+- Read-only AWS connector status and STS validation skeleton
 - Safety-first documentation
 
 Not included in this milestone:
@@ -26,6 +27,7 @@ Not included in this milestone:
 - AWS credentials
 - AWS scanner
 - AWS API account validation
+- AWS inventory scanning
 - AWS mutation
 - Automatic remediation
 - Terraform apply
@@ -35,7 +37,9 @@ Not included in this milestone:
 
 CloudShield v1 is read-only. It may store inventory, evidence, findings, risk ownership, and recommendations, but it must not mutate IAM, S3, EC2, Security Groups, VPCs, AWS policies, or any other cloud resource.
 
-The AWS account registry stores metadata only: account name, AWS account ID, environment, owner team, regions, notes, and planned read-only connection placeholders. It does not store AWS access keys, secret keys, session tokens, or execute AWS API calls.
+The AWS account registry stores metadata only: account name, AWS account ID, environment, owner team, regions, notes, and planned read-only connection placeholders. It does not store AWS access keys, secret keys, or session tokens.
+
+The read-only connector defaults to `AWS_CONNECTOR_MODE=disabled`. When explicitly set to `readonly-validation` and configured, the connector skeleton may call only STS `GetCallerIdentity`. It does not scan inventory or mutate AWS.
 
 Compliance language is limited to:
 
@@ -114,6 +118,8 @@ GET /api/v1/aws/accounts/:accountId
 PATCH /api/v1/aws/accounts/:accountId
 PATCH /api/v1/aws/accounts/:accountId/archive
 POST /api/v1/aws/accounts/:accountId/validate
+POST /api/v1/aws/accounts/:accountId/validate-readonly-connection
+GET /api/v1/aws/connector/status
 GET /api/v1/aws/setup-guide
 ```
 

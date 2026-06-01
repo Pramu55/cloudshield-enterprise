@@ -5,15 +5,18 @@ import type {
   AwsAccountDto,
   AwsAccountEnvironment,
   AwsAccountMutationResponse,
+  AwsConnectorStatusResponse,
   AwsConnectionStatus,
   AwsSetupGuideResponse,
-  CreateAwsAccountRequest
+  CreateAwsAccountRequest,
+  ValidateReadonlyConnectionResponse
 } from "@cloudshield/contracts";
 import { Archive, CheckCircle2, Pencil, Plus, ShieldCheck } from "lucide-react";
 
 type Props = {
   initialAccounts: AwsAccountDto[];
   setupGuide: AwsSetupGuideResponse;
+  connectorStatus: AwsConnectorStatusResponse;
 };
 
 type FormState = {
@@ -51,6 +54,8 @@ const ConnectionLabels: Record<AwsConnectionStatus, string> = {
   NOT_CONFIGURED: "Not configured",
   READY_FOR_VALIDATION: "Ready for validation",
   VALIDATION_NOT_IMPLEMENTED: "Validation not implemented",
+  VALIDATION_SUCCEEDED: "Validation succeeded",
+  VALIDATION_FAILED: "Validation failed",
   CONNECTED_DEMO_ONLY: "Connected demo only",
   AUTH_FAILED: "Auth failed",
   PERMISSION_DENIED: "Permission denied",
@@ -59,9 +64,11 @@ const ConnectionLabels: Record<AwsConnectionStatus, string> = {
 
 export function AccountRegistryClient({
   initialAccounts,
-  setupGuide
+  setupGuide,
+  connectorStatus
 }: Props) {
   const [accounts, setAccounts] = useState(initialAccounts);
+  const [connector, setConnector] = useState(connectorStatus);
   const [form, setForm] = useState<FormState>(EmptyForm);
   const [message, setMessage] = useState(
     "AWS account registry only - real AWS scanning is not enabled yet."
@@ -129,6 +136,27 @@ export function AccountRegistryClient({
     }
   }
 
+  async function validateReadonlyConnection(account: AwsAccountDto) {
+    if (connector.status === "DISABLED" || connector.status === "NOT_CONFIGURED") {
+      setMessage(connector.message);
+      return;
+    }
+
+    setMessage("Running STS identity validation only. No inventory scan will run.");
+
+    try {
+      const result = await apiRequest<ValidateReadonlyConnectionResponse>(
+        `/api/v1/aws/accounts/${account.id}/validate-readonly-connection`,
+        { method: "POST" }
+      );
+      setConnector(result.connector);
+      setAccounts((current) => upsertAccount(current, result.account));
+      setMessage(result.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to validate read-only connection.");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded-md border border-warning/50 bg-white p-4">
@@ -136,6 +164,22 @@ export function AccountRegistryClient({
           AWS account registry only - real AWS scanning is not enabled yet.
         </p>
         <p className="mt-1 text-sm leading-6 text-slate-600">{message}</p>
+      </section>
+
+      <section className="rounded-md border border-line bg-white p-5">
+        <div className="grid gap-4 md:grid-cols-4">
+          <StatusTile label="Connector mode" value={connector.mode} />
+          <StatusTile label="Read-only validation" value={connector.status} />
+          <StatusTile label="Inventory scan" value="No inventory scan yet" />
+          <StatusTile
+            label="AWS credentials"
+            value="No AWS credentials are stored in CloudShield"
+          />
+        </div>
+        <p className="mt-4 text-sm leading-6 text-slate-600">
+          Only STS identity validation is planned or enabled. No inventory scan
+          runs in this milestone, and no AWS resources are changed.
+        </p>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -211,6 +255,19 @@ export function AccountRegistryClient({
                           onClick={() => validateAccount(account)}
                         >
                           <CheckCircle2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={
+                            connector.enabled
+                              ? "Validate read-only STS connection"
+                              : connector.message
+                          }
+                          type="button"
+                          disabled={!connector.enabled || !connector.configured}
+                          onClick={() => validateReadonlyConnection(account)}
+                        >
+                          <ShieldCheck className="h-4 w-4" />
                         </button>
                         <button
                           className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50"
@@ -342,6 +399,15 @@ function Field({
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
+  );
+}
+
+function StatusTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-ink">{value}</p>
+    </div>
   );
 }
 

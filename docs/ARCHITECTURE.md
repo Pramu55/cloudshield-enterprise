@@ -24,6 +24,7 @@ CloudShield Enterprise is an advanced CSPM-style TypeScript monorepo for AWS sec
 - Prisma migrations create the local enterprise schema, and a seed script loads clearly labeled sample demo data for local verification.
 - Fastify auth routes issue local JWT access tokens. Protected API routes derive `organizationId` from the authenticated user context and scope tenant-owned reads by that organization.
 - AWS account registry routes are authenticated metadata routes only. They manage account name, AWS account ID, environment, owner team, regions, notes, connection status placeholders, and safe archive state without executing AWS API calls.
+- AWS connector routes expose safe readiness and read-only validation status. The default connector mode is disabled; the only enabled AWS SDK action in this milestone is STS `GetCallerIdentity`.
 
 ## Data Boundary
 
@@ -48,3 +49,15 @@ Current behavior:
 - Archive is a soft archive through `archivedAt` and `DISABLED` connection status.
 
 Future connector work should use IAM role assumption with an external ID and read-only permissions.
+
+## Read-Only Connector Plan
+
+The backend module at `apps/backend/src/modules/aws-connector` contains the connector configuration, types, errors, and service skeleton. It is designed for readiness checks and STS identity validation only.
+
+Connector constraints:
+
+- Default mode is `disabled`.
+- `readonly-validation` mode requires configured role ARN and external ID placeholders.
+- No EC2, S3, IAM, Security Group, VPC, CloudTrail, KMS, billing, or inventory APIs are called.
+- No AWS mutation APIs are called.
+- No secrets are returned to clients.

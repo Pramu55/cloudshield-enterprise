@@ -71,3 +71,15 @@ Real AWS read-only validation will be added in the AWS read-only connector miles
 ```
 
 Safe archive sets an account registry record to disabled and records `archivedAt`. It does not delete AWS resources or mutate cloud state.
+
+## Read-Only AWS Connector Safety
+
+The connector defaults to disabled:
+
+```text
+AWS_CONNECTOR_MODE=disabled
+```
+
+When explicitly changed to `readonly-validation`, the connector may perform only STS `GetCallerIdentity` for identity validation. This milestone does not scan AWS inventory and does not call EC2, S3, IAM inventory, Security Group, VPC, CloudTrail, KMS, or billing APIs.
+
+CloudShield must not store AWS secret access keys, session tokens, or long-lived access keys. IAM role assumption with an external ID is the preferred future connection model.

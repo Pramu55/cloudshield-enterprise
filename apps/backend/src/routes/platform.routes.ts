@@ -33,7 +33,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,
-      milestone: "CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN",
+      milestone: "CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN",
       apiVersion: "v1",
       remediationExecution: "disabled",
       awsScanner: "not_configured",

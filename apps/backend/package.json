@@ -17,6 +17,7 @@
     "@cloudshield/logger": "workspace:*",
     "@cloudshield/security": "workspace:*",
     "@cloudshield/utils": "workspace:*",
+    "@aws-sdk/client-sts": "^3.940.0",
     "@fastify/cors": "^10.0.2",
     "@fastify/helmet": "^13.0.1",
     "bcryptjs": "^3.0.2",

@@ -55,7 +55,7 @@ export async function registerAwsAccountRoutes(
       sampleData: true,
       sampleDataLabel:
         "Sample demo data - real AWS scanning is not enabled yet.",
-      items: accounts.map(toDto)
+      items: accounts.map(toAwsAccountDto)
     };
   });
 
@@ -118,7 +118,7 @@ export async function registerAwsAccountRoutes(
     });
 
     reply.status(201).send({
-      item: toDto(account),
+      item: toAwsAccountDto(account),
       message: "AWS account registry metadata was created. No AWS API calls were executed."
     });
   });
@@ -143,7 +143,7 @@ export async function registerAwsAccountRoutes(
       }
 
       return {
-        item: toDto(account)
+        item: toAwsAccountDto(account)
       };
     }
   );
@@ -214,7 +214,7 @@ export async function registerAwsAccountRoutes(
       });
 
       return {
-        item: toDto(account),
+        item: toAwsAccountDto(account),
         message: "AWS account registry metadata was updated. No AWS API calls were executed."
       };
     }
@@ -257,7 +257,7 @@ export async function registerAwsAccountRoutes(
       });
 
       return {
-        item: toDto(account),
+        item: toAwsAccountDto(account),
         message: "AWS account registry record was archived. No AWS resources were changed."
       };
     }
@@ -299,7 +299,7 @@ export async function registerAwsAccountRoutes(
       });
 
       return {
-        item: toDto(account),
+        item: toAwsAccountDto(account),
         code: "VALIDATION_NOT_IMPLEMENTED",
         message: VALIDATION_NOT_IMPLEMENTED_MESSAGE
       };
@@ -334,7 +334,7 @@ const accountParamsSchema = z.object({
   accountId: z.string().min(1).max(64)
 });
 
-async function findAccountForOrganization(
+export async function findAccountForOrganization(
   organizationId: string,
   accountIdOrRecordId: string
 ) {
@@ -374,7 +374,7 @@ async function ownerTeamBelongsToOrganization(
   return Boolean(ownerTeam);
 }
 
-function toDto(account: NonNullable<AccountWithOwnerTeam>) {
+export function toAwsAccountDto(account: NonNullable<AccountWithOwnerTeam>) {
   return {
     id: account.id,
     name: account.name,
