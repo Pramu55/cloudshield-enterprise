@@ -165,9 +165,7 @@ export default function ScansPage() {
                     {operation.resourceType.replaceAll("_", " ")}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {operation.enabledInCurrentMilestone
-                      ? "STS identity validation only"
-                      : "Planned, not executed"}
+                    {operation.notes}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {String(operation.mutationAllowed)}

@@ -144,6 +144,7 @@ export type AwsInventoryStartBlockedResponse = z.infer<
   typeof AwsInventoryStartBlockedResponseSchema
 >;
 
+
 export const AwsReadonlyValidationStatusSchema = z.enum([
   "DISABLED",
   "NOT_CONFIGURED",
@@ -183,8 +184,11 @@ export const ComplianceStatusSchema = z.enum(["PASS", "FAIL", "WARNING"]);
 export type ComplianceStatus = z.infer<typeof ComplianceStatusSchema>;
 
 export const ScanRunStatusSchema = z.enum([
+  "QUEUED",
   "STARTED",
+  "SUCCEEDED",
   "COMPLETED",
+  "BLOCKED_DISABLED",
   "NOT_CONFIGURED",
   "AUTH_FAILED",
   "PERMISSION_DENIED",
@@ -472,4 +476,40 @@ export const ValidateReadonlyConnectionResponseSchema = z.object({
 });
 export type ValidateReadonlyConnectionResponse = z.infer<
   typeof ValidateReadonlyConnectionResponseSchema
+>;
+
+export const AwsInventoryStartResponseSchema = z.object({
+  status: ScanRunStatusSchema,
+  scannerMode: AwsInventoryScannerModeSchema,
+  awsApiCallExecuted: z.boolean(),
+  scanRunId: z.string().optional(),
+  message: z.string(),
+  allowedApis: z.array(z.string()).optional(),
+  blockedMutationPatterns: z.array(z.string()).optional()
+});
+export type AwsInventoryStartResponse = z.infer<
+  typeof AwsInventoryStartResponseSchema
+>;
+
+export const AwsInventoryScanRunDtoSchema = z.object({
+  id: z.string(),
+  jobType: z.string(),
+  status: ScanRunStatusSchema,
+  phase: z.string().nullable(),
+  startedAt: z.string(),
+  completedAt: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  metadata: z.record(z.string(), z.any()).optional()
+});
+export type AwsInventoryScanRunDto = z.infer<
+  typeof AwsInventoryScanRunDtoSchema
+>;
+
+export const AwsInventoryScanStatusResponseSchema = z.object({
+  runs: z.array(AwsInventoryScanRunDtoSchema),
+  message: z.string()
+});
+export type AwsInventoryScanStatusResponse = z.infer<
+  typeof AwsInventoryScanStatusResponseSchema
 >;

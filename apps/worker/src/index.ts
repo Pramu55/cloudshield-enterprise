@@ -1,5 +1,6 @@
 import { Queue, Worker as BullWorker } from "bullmq";
 import { createLogger } from "@cloudshield/logger";
+import { executeEc2Scan } from "./aws-ec2-scanner.js";
 import {
   CLOUD_SCAN_QUEUE_NAME,
   CloudScanJobTypeSchema,
@@ -23,6 +24,7 @@ type CloudScanJob = {
   type: CloudScanJobType;
   organizationId?: string;
   awsAccountId?: string;
+  scanRunId?: string;
 };
 
 const worker = new BullWorker<CloudScanJob>(
@@ -39,6 +41,13 @@ const worker = new BullWorker<CloudScanJob>(
       },
       "Received CloudShield foundation job"
     );
+
+    if (jobType === "AWS_EC2_INVENTORY_SCAN") {
+      if (job.data.organizationId && job.data.awsAccountId && job.data.scanRunId) {
+        return await executeEc2Scan(job.data.organizationId, job.data.awsAccountId, job.data.scanRunId);
+      }
+      return { status: "FAILED", awsApiCallExecuted: false, reason: "Missing job data for EC2 scan." };
+    }
 
     if (isAwsInventoryJob(jobType)) {
       return {
@@ -72,9 +81,9 @@ logger.info(
   {
     queue: CLOUD_SCAN_QUEUE_NAME,
     preparedJobTypes: CloudScanJobTypeSchema.options,
-    awsScanning: "inventory plan only; scanner execution disabled"
+    awsScanning: "EC2 read-only slice available (disabled by default)"
   },
-  "cloud-scans queue ready; AWS inventory scanning disabled"
+  "cloud-scans queue ready; EC2 read-only scanner slice is available"
 );
 
 function isAwsInventoryJob(jobType: CloudScanJobType) {

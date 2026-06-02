@@ -11,16 +11,18 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-ec2": "^3.1058.0",
+    "@aws-sdk/client-sts": "^3.940.0",
     "@cloudshield/config": "workspace:*",
     "@cloudshield/contracts": "workspace:*",
     "@cloudshield/database": "workspace:*",
     "@cloudshield/logger": "workspace:*",
     "@cloudshield/security": "workspace:*",
     "@cloudshield/utils": "workspace:*",
-    "@aws-sdk/client-sts": "^3.940.0",
     "@fastify/cors": "^10.0.2",
     "@fastify/helmet": "^13.0.1",
     "bcryptjs": "^3.0.2",
+    "bullmq": "^5.34.2",
     "fastify": "^5.2.1",
     "zod": "^4.1.0"
   },

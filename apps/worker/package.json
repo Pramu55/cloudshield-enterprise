@@ -11,8 +11,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-ec2": "^3.1058.0",
+    "@aws-sdk/client-sts": "^3.940.0",
     "@cloudshield/config": "workspace:*",
     "@cloudshield/contracts": "workspace:*",
+    "@cloudshield/database": "workspace:^",
     "@cloudshield/logger": "workspace:*",
     "@cloudshield/utils": "workspace:*",
     "bullmq": "^5.34.2"

@@ -15,7 +15,19 @@ import {
 export class AwsInventoryPlanService {
   constructor(private readonly scannerMode: AwsInventoryScannerMode) {}
 
+  private getAllowedApis() {
+    const isScannerEnabled = this.scannerMode === "readonly-scan";
+    return PlannedAwsReadonlyApiOperations.map(op => ({
+      ...op,
+      enabledInCurrentMilestone: op.enabledInCurrentMilestone || (isScannerEnabled && op.service === "ec2"),
+      notes: (isScannerEnabled && op.service === "ec2") 
+        ? "EC2 read-only scanner slice is implemented (but disabled by default)."
+        : op.notes
+    }));
+  }
+
   getPlan() {
+
     return AwsInventoryPlanResponseSchema.parse({
       scannerMode: this.scannerMode,
       inventoryScanningEnabled: false,
@@ -24,7 +36,7 @@ export class AwsInventoryPlanService {
       terraformApplyEnabled: false,
       awsApiCallExecuted: false,
       supportedResourceTypes: PlannedAwsInventoryResourceTypes,
-      allowedReadOnlyApis: PlannedAwsReadonlyApiOperations,
+      allowedReadOnlyApis: this.getAllowedApis(),
       blockedMutationPatterns: BlockedAwsMutationPatterns,
       scanPhases: PlannedAwsInventoryScanPhases,
       sampleDataLabel:
@@ -43,7 +55,7 @@ export class AwsInventoryPlanService {
       awsApiCallExecuted: false,
       regions: account.regions,
       plannedResourceTypes: PlannedAwsInventoryResourceTypes,
-      plannedReadOnlyApis: PlannedAwsReadonlyApiOperations.filter(
+      plannedReadOnlyApis: this.getAllowedApis().filter(
         (operation) => operation.operation !== "GetCallerIdentity"
       ),
       message:

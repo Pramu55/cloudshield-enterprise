@@ -168,6 +168,24 @@ export function AccountRegistryClient({
     }
   }
 
+  async function startScan(account: AwsAccountDto) {
+    if (inventoryPlan.scannerMode === "disabled" || inventoryPlan.scannerMode === "readonly-plan") {
+      setMessage("EC2 read-only scanner is implemented but disabled by default. Scanner execution is blocked.");
+    } else {
+      setMessage("Starting EC2 read-only inventory scan...");
+    }
+
+    try {
+      const result = await apiRequest<any>(
+        `/api/v1/aws/accounts/${account.id}/inventory/start`,
+        { method: "POST" }
+      );
+      setMessage(result.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to start scan.");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded-md border border-warning/50 bg-white p-4">
@@ -223,11 +241,7 @@ export function AccountRegistryClient({
               .slice(0, 6)
               .map(
                 (operation) =>
-                  `${operation.service}:${operation.operation} - ${
-                    operation.enabledInCurrentMilestone
-                      ? "identity validation only"
-                      : "future scanner phase"
-                  }`
+                  `${operation.service}:${operation.operation} - ${operation.notes}`
               )}
           />
           <GuideList
@@ -326,6 +340,19 @@ export function AccountRegistryClient({
                           onClick={() => validateReadonlyConnection(account)}
                         >
                           <ShieldCheck className="h-4 w-4" />
+                        </button>
+                        <button
+                          className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={
+                            inventoryPlan.scannerMode === "disabled"
+                              ? "EC2 read-only scanner is implemented but disabled by default."
+                              : "Start EC2 inventory scan"
+                          }
+                          type="button"
+                          disabled={inventoryPlan.scannerMode === "disabled" || inventoryPlan.scannerMode === "readonly-plan"}
+                          onClick={() => startScan(account)}
+                        >
+                          Start Scan
                         </button>
                         <button
                           className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50"
