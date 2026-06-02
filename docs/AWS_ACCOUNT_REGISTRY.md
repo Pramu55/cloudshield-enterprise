@@ -38,6 +38,9 @@ PATCH /api/v1/aws/accounts/:accountId
 PATCH /api/v1/aws/accounts/:accountId/archive
 POST /api/v1/aws/accounts/:accountId/validate
 GET /api/v1/aws/setup-guide
+GET /api/v1/aws/inventory/plan
+POST /api/v1/aws/accounts/:accountId/inventory/plan
+POST /api/v1/aws/accounts/:accountId/inventory/start
 ```
 
 The `:accountId` parameter may be the internal registry id or AWS account ID, but the backend always combines it with the authenticated organization scope.
@@ -56,3 +59,5 @@ Real AWS read-only validation will be added in the AWS read-only connector miles
 The read-only connector milestone should use IAM role assumption with an external ID and least-privilege read-only permissions. CloudShield should not store long-lived AWS access keys.
 
 The connector plan milestone adds a separate `validate-readonly-connection` action. By default it is disabled and makes no AWS API calls. If explicitly enabled, it may call only STS `GetCallerIdentity`; it still does not scan inventory or mutate AWS resources.
+
+The inventory scanner plan milestone adds organization-scoped scanner planning routes. These routes return future read-only scanner phases and allowlisted API metadata only. Scanner start is blocked, `awsApiCallExecuted=false`, and no AWS inventory APIs are called.

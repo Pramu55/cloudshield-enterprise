@@ -36,6 +36,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       AWS_CONNECTOR_MODE: disabled
+      AWS_INVENTORY_SCANNER_MODE: disabled
       AWS_REGION_DEFAULT: us-east-1
       AWS_ROLE_ARN: ""
       AWS_EXTERNAL_ID: ""
@@ -76,6 +77,7 @@ services:
       REDIS_PORT: 6379
       DATABASE_URL: postgresql://cloudshield:cloudshield_local_password@postgres:5432/cloudshield
       AWS_CONNECTOR_MODE: disabled
+      AWS_INVENTORY_SCANNER_MODE: disabled
     depends_on:
       postgres:
         condition: service_healthy

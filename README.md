@@ -38,6 +38,7 @@ CloudShield provides the foundation for that operating model without automatic r
 - AWS account governance registry
 - Read-only AWS connector status
 - Disabled-by-default STS identity validation path
+- AWS inventory scanner read-only plan with execution blocked
 - Sample/demo inventory, findings, compliance evidence, and recommendations
 - Review-only recommendation model with execution blocked
 
@@ -61,9 +62,12 @@ The read-only connector defaults to:
 
 ```text
 AWS_CONNECTOR_MODE=disabled
+AWS_INVENTORY_SCANNER_MODE=disabled
 ```
 
 When explicitly set to `readonly-validation` and configured, the only supported AWS API path is STS `GetCallerIdentity`. Real inventory scanning remains planned for a later milestone.
+
+The inventory scanner plan endpoint documents future read-only APIs but does not execute EC2, S3, IAM, Security Group, EBS, VPC, RDS, Lambda, CloudTrail, KMS, or billing listing calls.
 
 ## Enterprise Deployment Direction
 
@@ -155,6 +159,9 @@ GET /api/v1/auth/me
 GET /api/v1/dashboard/summary
 GET /api/v1/aws/accounts
 GET /api/v1/aws/connector/status
+GET /api/v1/aws/inventory/plan
+POST /api/v1/aws/accounts/:accountId/inventory/plan
+POST /api/v1/aws/accounts/:accountId/inventory/start
 POST /api/v1/aws/accounts/:accountId/validate-readonly-connection
 ```
 
@@ -171,6 +178,7 @@ Implemented foundation:
 - Read-only AWS connector plan
 - AWS read-only identity validation foundation
 - Enterprise client platform blueprint
+- AWS inventory read-only scanner plan with disabled execution gate
 
 ## Future Roadmap
 

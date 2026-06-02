@@ -49,6 +49,7 @@ Future work must not silently expand CloudShield beyond read-only governance.
 - Do not store AWS secret keys.
 - Do not add long-lived AWS access keys.
 - Do not run AWS inventory scanning until an approved scanner milestone exists.
+- Keep `AWS_INVENTORY_SCANNER_MODE=disabled` until a future approved read-only scanner rollout.
 - Do not call AWS mutation APIs.
 - Do not add automatic remediation.
 - Do not run Terraform apply.
@@ -58,7 +59,7 @@ Future work must not silently expand CloudShield beyond read-only governance.
 
 ## Future Milestone Ideas
 
-- Read-only AWS inventory scanner plan with explicit API allowlist
+- Read-only AWS inventory scanner plan with explicit API allowlist and blocked execution gate
 - Read-only account identity validation hardening
 - Asset inventory model expansion
 - Cloud relationship graph

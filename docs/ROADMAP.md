@@ -14,6 +14,7 @@ Implemented or in foundation:
 - AWS account registry metadata workflow
 - Read-only AWS connector status
 - Disabled-by-default STS identity validation path
+- Read-only AWS inventory scanner plan with execution disabled
 - Sample/demo governance data
 
 Safety boundary:
@@ -35,6 +36,8 @@ Planned:
 - Scan run lifecycle and worker jobs
 
 This phase must remain read-only and must not include mutation APIs.
+
+The current scanner-plan milestone documents these APIs and exposes plan endpoints only. It does not call the planned inventory APIs and does not claim real AWS inventory data.
 
 ## Phase 3: Security Posture Rules
 

@@ -89,3 +89,15 @@ When explicitly changed to `readonly-validation`, the connector may perform only
 Disabled mode must return `DISABLED` and `awsApiCallExecuted=false`. Optional real STS validation should only run when `AWS_CONNECTOR_MODE=readonly-validation` and the required role/external ID environment values are configured.
 
 CloudShield must not store AWS secret access keys, session tokens, or long-lived access keys. IAM role assumption with an external ID is the preferred future connection model.
+
+## AWS Inventory Scanner Plan Safety
+
+The inventory scanner plan milestone keeps scanner execution disabled:
+
+```text
+AWS_INVENTORY_SCANNER_MODE=disabled
+```
+
+The plan may describe future read-only AWS APIs, but CloudShield must not execute EC2, S3, IAM, Security Group, EBS, VPC, subnet, RDS, Lambda, CloudTrail, KMS, or billing inventory calls in this milestone.
+
+Scanner start attempts return a blocked response with `awsApiCallExecuted=false`. Worker inventory job types are also blocked. This preserves the read-only planning boundary while preparing a future company IT-level cloud governance platform.

@@ -54,6 +54,7 @@ This checklist describes what CloudShield should satisfy before production deplo
 ## AWS Least Privilege
 
 - Keep connector disabled by default.
+- Keep inventory scanner mode disabled until an approved read-only scanner rollout.
 - Use read-only IAM policies for future inventory.
 - Keep STS identity validation as the only current AWS API path.
 - Explicitly block AWS mutation APIs and Terraform apply.
@@ -98,6 +99,7 @@ This checklist describes what CloudShield should satisfy before production deplo
 - Do not store AWS secret access keys or session tokens.
 - Validate external ID and role assumption readiness before any future read-only connector use.
 - Keep inventory scanning disabled until an approved scanner milestone exists.
+- Review the inventory scanner allowlist plan before enabling any inventory API call.
 
 ## IAM Role And External ID Validation
 

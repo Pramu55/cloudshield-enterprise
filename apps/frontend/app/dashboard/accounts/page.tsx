@@ -4,6 +4,7 @@ import type {
   AwsAccountDto,
   AwsAccountListResponse,
   AwsConnectorStatusResponse,
+  AwsInventoryPlanResponse,
   AwsSetupGuideResponse
 } from "@cloudshield/contracts";
 import { useEffect, useState } from "react";
@@ -98,10 +99,83 @@ const InstantConnectorStatus: AwsConnectorStatusResponse = {
   message: "AWS connector mode is disabled. No AWS API calls were executed."
 };
 
+const InstantInventoryPlan: AwsInventoryPlanResponse = {
+  scannerMode: "disabled",
+  inventoryScanningEnabled: false,
+  mutationEnabled: false,
+  automaticRemediationEnabled: false,
+  terraformApplyEnabled: false,
+  awsApiCallExecuted: false,
+  supportedResourceTypes: [
+    "EC2_INSTANCE",
+    "S3_BUCKET",
+    "IAM_USER",
+    "IAM_ROLE",
+    "IAM_ACCESS_KEY",
+    "SECURITY_GROUP",
+    "EBS_VOLUME",
+    "VPC",
+    "SUBNET"
+  ],
+  allowedReadOnlyApis: [
+    {
+      service: "sts",
+      operation: "GetCallerIdentity",
+      resourceType: "AWS_ACCOUNT",
+      category: "identity",
+      riskLevel: "low",
+      mutationAllowed: false,
+      enabledInCurrentMilestone: true,
+      notes: "Identity validation only when explicitly configured."
+    },
+    {
+      service: "ec2",
+      operation: "DescribeInstances",
+      resourceType: "EC2_INSTANCE",
+      category: "compute",
+      riskLevel: "low",
+      mutationAllowed: false,
+      enabledInCurrentMilestone: false,
+      notes: "Planned future read-only inventory API. Not executed yet."
+    },
+    {
+      service: "s3",
+      operation: "ListBuckets",
+      resourceType: "S3_BUCKET",
+      category: "storage",
+      riskLevel: "low",
+      mutationAllowed: false,
+      enabledInCurrentMilestone: false,
+      notes: "Planned future read-only inventory API. Not executed yet."
+    },
+    {
+      service: "iam",
+      operation: "ListRoles",
+      resourceType: "IAM_ROLE",
+      category: "iam",
+      riskLevel: "medium",
+      mutationAllowed: false,
+      enabledInCurrentMilestone: false,
+      notes: "Planned future read-only inventory API. Not executed yet."
+    }
+  ],
+  blockedMutationPatterns: ["Create*", "Update*", "Delete*", "Put*", "Terraform apply"],
+  scanPhases: [
+    "Tenant-scoped account selection",
+    "STS identity validation gate",
+    "Disabled execution gate for this milestone"
+  ],
+  sampleDataLabel:
+    "Sample/demo planning data - real AWS inventory scanning is disabled.",
+  message:
+    "AWS inventory scanner architecture is planned, but scanner execution is disabled in this milestone."
+};
+
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState(InstantAccounts);
   const [setupGuide, setSetupGuide] = useState(InstantSetupGuide);
   const [connectorStatus, setConnectorStatus] = useState(InstantConnectorStatus);
+  const [inventoryPlan, setInventoryPlan] = useState(InstantInventoryPlan);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,9 +185,10 @@ export default function AccountsPage() {
     Promise.all([
       fetchCloudShieldClient<AwsAccountListResponse>("/api/v1/aws/accounts"),
       fetchCloudShieldClient<AwsSetupGuideResponse>("/api/v1/aws/setup-guide"),
-      fetchCloudShieldClient<AwsConnectorStatusResponse>("/api/v1/aws/connector/status")
+      fetchCloudShieldClient<AwsConnectorStatusResponse>("/api/v1/aws/connector/status"),
+      fetchCloudShieldClient<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan")
     ])
-      .then(([accountResponse, guideResponse, connectorResponse]) => {
+      .then(([accountResponse, guideResponse, connectorResponse, inventoryResponse]) => {
         if (!isActive) {
           return;
         }
@@ -121,6 +196,7 @@ export default function AccountsPage() {
         setAccounts(accountResponse.items);
         setSetupGuide(guideResponse);
         setConnectorStatus(connectorResponse);
+        setInventoryPlan(inventoryResponse);
         setError(null);
       })
       .catch(() => {
@@ -149,6 +225,7 @@ export default function AccountsPage() {
         initialAccounts={accounts}
         setupGuide={setupGuide}
         connectorStatus={connectorStatus}
+        inventoryPlan={inventoryPlan}
       />
     </DashboardPage>
   );

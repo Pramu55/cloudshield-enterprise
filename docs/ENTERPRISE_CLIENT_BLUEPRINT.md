@@ -40,6 +40,7 @@ CloudShield must not be described as deployed to Accenture, must not claim Accen
 - Risk acceptance and ownership workflow
 - Report/export foundation
 - Read-only AWS connector status
+- Read-only AWS inventory scanner plan with execution blocked
 
 ## Data Flow
 
@@ -49,6 +50,7 @@ CloudShield must not be described as deployed to Accenture, must not claim Accen
 4. Seeded sample/demo data is shown as local evaluator data.
 5. Recommendations remain non-executable.
 6. AWS connector defaults to disabled and performs no inventory scan.
+7. AWS inventory scanner plan routes describe future read-only collection but do not call inventory APIs.
 
 ## Security Boundaries
 
@@ -109,6 +111,7 @@ This path is a production deployment roadmap, not a claim that the current repos
 - Demo authentication and organization context
 - AWS account registry metadata
 - Read-only connector status and STS identity validation path
+- Read-only inventory scanner allowlist plan and blocked start gate
 - Sample/demo inventory, findings, evidence, and recommendations
 
 ## Intentionally Disabled

@@ -17,6 +17,14 @@ AWS_EXTERNAL_ID=
 
 Default mode is disabled and executes no AWS API calls.
 
+The separate inventory scanner mode also defaults to disabled:
+
+```text
+AWS_INVENTORY_SCANNER_MODE=disabled
+```
+
+The scanner plan endpoint describes future read-only inventory APIs but does not execute them.
+
 ## Validation Scope
 
 When explicitly configured with:
@@ -44,6 +52,7 @@ This milestone does not commit secrets, does not require AWS credentials by defa
 ## Safety Boundary
 
 - No AWS inventory scanner.
+- No EC2, S3, IAM, Security Group, EBS, VPC, RDS, Lambda, CloudTrail, KMS, or billing inventory API execution.
 - No AWS mutation.
 - No IAM, S3, EC2, Security Group, VPC, CloudTrail, KMS, or billing changes.
 - No automatic remediation.

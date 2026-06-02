@@ -40,9 +40,21 @@ const worker = new BullWorker<CloudScanJob>(
       "Received CloudShield foundation job"
     );
 
+    if (isAwsInventoryJob(jobType)) {
+      return {
+        status: "blocked",
+        code: "AWS_INVENTORY_SCANNER_DISABLED",
+        awsApiCallExecuted: false,
+        reason:
+          "AWS inventory scanning is disabled in this milestone. No inventory APIs were called."
+      };
+    }
+
     return {
       status: "skipped",
-      reason: "AWS scanner is not implemented in the foundation milestone."
+      awsApiCallExecuted: false,
+      reason:
+        "CloudShield worker foundation received the job but did not execute AWS API calls."
     };
   },
   { connection }
@@ -60,7 +72,21 @@ logger.info(
   {
     queue: CLOUD_SCAN_QUEUE_NAME,
     preparedJobTypes: CloudScanJobTypeSchema.options,
-    awsScanning: "disabled until read-only connector milestone"
+    awsScanning: "inventory plan only; scanner execution disabled"
   },
-  "cloud-scans queue ready; AWS scanning disabled until read-only connector milestone"
+  "cloud-scans queue ready; AWS inventory scanning disabled"
 );
+
+function isAwsInventoryJob(jobType: CloudScanJobType) {
+  return [
+    "AWS_INVENTORY_PLAN",
+    "AWS_INVENTORY_SCAN_DISABLED",
+    "AWS_EC2_INVENTORY_SCAN",
+    "AWS_S3_INVENTORY_SCAN",
+    "AWS_IAM_INVENTORY_SCAN",
+    "AWS_NETWORK_INVENTORY_SCAN",
+    "AWS_STORAGE_INVENTORY_SCAN",
+    "AWS_FULL_SCAN",
+    "AWS_INVENTORY_SCAN"
+  ].includes(jobType);
+}

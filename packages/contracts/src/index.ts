@@ -58,6 +58,92 @@ export const AwsConnectorModeSchema = z.enum([
 ]);
 export type AwsConnectorMode = z.infer<typeof AwsConnectorModeSchema>;
 
+export const AwsInventoryScannerModeSchema = z.enum([
+  "disabled",
+  "readonly-plan",
+  "readonly-scan"
+]);
+export type AwsInventoryScannerMode = z.infer<
+  typeof AwsInventoryScannerModeSchema
+>;
+
+export const AwsInventoryResourceTypeSchema = z.enum([
+  "EC2_INSTANCE",
+  "S3_BUCKET",
+  "IAM_USER",
+  "IAM_ROLE",
+  "IAM_ACCESS_KEY",
+  "SECURITY_GROUP",
+  "EBS_VOLUME",
+  "VPC",
+  "SUBNET"
+]);
+export type AwsInventoryResourceType = z.infer<
+  typeof AwsInventoryResourceTypeSchema
+>;
+
+export const AwsReadonlyApiOperationSchema = z.object({
+  service: z.string(),
+  operation: z.string(),
+  resourceType: AwsInventoryResourceTypeSchema.or(z.literal("AWS_ACCOUNT")),
+  category: z.enum(["identity", "compute", "storage", "network", "iam"]),
+  riskLevel: z.enum(["low", "medium"]),
+  mutationAllowed: z.literal(false),
+  enabledInCurrentMilestone: z.boolean(),
+  notes: z.string()
+});
+export type AwsReadonlyApiOperation = z.infer<
+  typeof AwsReadonlyApiOperationSchema
+>;
+
+export const AwsInventoryPlanResponseSchema = z.object({
+  scannerMode: AwsInventoryScannerModeSchema,
+  inventoryScanningEnabled: z.literal(false),
+  mutationEnabled: z.literal(false),
+  automaticRemediationEnabled: z.literal(false),
+  terraformApplyEnabled: z.literal(false),
+  awsApiCallExecuted: z.literal(false),
+  supportedResourceTypes: z.array(AwsInventoryResourceTypeSchema),
+  allowedReadOnlyApis: z.array(AwsReadonlyApiOperationSchema),
+  blockedMutationPatterns: z.array(z.string()),
+  scanPhases: z.array(z.string()),
+  sampleDataLabel: z.string(),
+  message: z.string()
+});
+export type AwsInventoryPlanResponse = z.infer<
+  typeof AwsInventoryPlanResponseSchema
+>;
+
+export const AwsAccountInventoryPlanResponseSchema = z.object({
+  account: z.lazy(() => AwsAccountDtoSchema),
+  scannerMode: AwsInventoryScannerModeSchema,
+  inventoryScanningEnabled: z.literal(false),
+  mutationEnabled: z.literal(false),
+  awsApiCallExecuted: z.literal(false),
+  regions: z.array(z.string()),
+  plannedResourceTypes: z.array(AwsInventoryResourceTypeSchema),
+  plannedReadOnlyApis: z.array(AwsReadonlyApiOperationSchema),
+  message: z.string()
+});
+export type AwsAccountInventoryPlanResponse = z.infer<
+  typeof AwsAccountInventoryPlanResponseSchema
+>;
+
+export const AwsInventoryStartBlockedResponseSchema = z.object({
+  status: z.literal("BLOCKED_DISABLED"),
+  scannerMode: AwsInventoryScannerModeSchema,
+  inventoryScanningEnabled: z.literal(false),
+  mutationEnabled: z.literal(false),
+  awsApiCallExecuted: z.literal(false),
+  blockedReason: z.literal(
+    "AWS inventory scanning is disabled in this CloudShield milestone."
+  ),
+  message: z.string()
+});
+export type AwsInventoryStartBlockedResponse = z.infer<
+  typeof AwsInventoryStartBlockedResponseSchema
+>;
+
 export const AwsReadonlyValidationStatusSchema = z.enum([
   "DISABLED",
   "NOT_CONFIGURED",
@@ -110,6 +196,13 @@ export type ScanRunStatus = z.infer<typeof ScanRunStatusSchema>;
 
 export const CloudScanJobTypeSchema = z.enum([
   "AWS_ACCOUNT_VALIDATE",
+  "AWS_INVENTORY_PLAN",
+  "AWS_INVENTORY_SCAN_DISABLED",
+  "AWS_EC2_INVENTORY_SCAN",
+  "AWS_S3_INVENTORY_SCAN",
+  "AWS_IAM_INVENTORY_SCAN",
+  "AWS_NETWORK_INVENTORY_SCAN",
+  "AWS_STORAGE_INVENTORY_SCAN",
   "AWS_FULL_SCAN",
   "AWS_INVENTORY_SCAN",
   "SECURITY_RULE_EVALUATION",
@@ -128,7 +221,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN",
   "CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN",
   "CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN",
-  "CLOUDSHIELD_ENTERPRISE_CLIENT_PLATFORM_BLUEPRINT_GREEN"
+  "CLOUDSHIELD_ENTERPRISE_CLIENT_PLATFORM_BLUEPRINT_GREEN",
+  "CLOUDSHIELD_AWS_INVENTORY_READONLY_SCANNER_PLAN_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 

@@ -29,6 +29,7 @@ This plan describes a real-world deployment architecture for a company IT-level 
 - Use organization-scoped authorization middleware for every tenant-owned data path.
 - Add request correlation IDs, structured logs, rate limits, and API timeouts.
 - Keep `AWS_CONNECTOR_MODE=disabled` as the default unless a controlled read-only validation rollout is approved.
+- Keep `AWS_INVENTORY_SCANNER_MODE=disabled` until a future approved read-only inventory rollout is approved.
 
 ## Database Deployment Model
 
@@ -67,6 +68,7 @@ This plan describes a real-world deployment architecture for a company IT-level 
 - Use customer-owned IAM roles with an external ID.
 - Start with STS `GetCallerIdentity` validation only.
 - Add inventory APIs only in a future approved read-only scanner milestone.
+- Use `docs/AWS_INVENTORY_SCANNER_PLAN.md` as the allowlist planning reference.
 - Keep every AWS permission allowlisted and read-only.
 - Do not grant mutation permissions.
 - Do not use Terraform apply from CloudShield.
@@ -158,10 +160,11 @@ This plan describes a real-world deployment architecture for a company IT-level 
 2. Log in with demo credentials.
 3. Show enterprise cloud posture overview.
 4. Show AWS account governance and disabled read-only connector posture.
-5. Show sample/demo inventory, security, cost, compliance, and recommendations.
-6. Explain that real AWS inventory scanning is disabled by default.
-7. Explain the production deployment roadmap and safety boundaries.
-8. Avoid any claim that CloudShield is deployed to Accenture or any real customer.
+5. Show the read-only scanner plan and blocked scanner start posture.
+6. Show sample/demo inventory, security, cost, compliance, and recommendations.
+7. Explain that real AWS inventory scanning is disabled by default.
+8. Explain the production deployment roadmap and safety boundaries.
+9. Avoid any claim that CloudShield is deployed to Accenture or any real customer.
 
 ## Future Enterprise Phases
 

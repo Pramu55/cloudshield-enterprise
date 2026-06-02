@@ -27,6 +27,7 @@ The current product direction is an enterprise-client-ready AWS governance contr
 - Fastify auth routes issue local JWT access tokens. Protected API routes derive `organizationId` from the authenticated user context and scope tenant-owned reads by that organization.
 - AWS account registry routes are authenticated metadata routes only. They manage account name, AWS account ID, environment, owner team, regions, notes, connection status placeholders, and safe archive state without executing AWS API calls.
 - AWS connector routes expose safe readiness and read-only validation status. The default connector mode is disabled; the only enabled AWS SDK action in this milestone is STS `GetCallerIdentity`.
+- AWS inventory routes expose the future scanner plan only. They do not enqueue scanner jobs or execute EC2, S3, IAM, Security Group, EBS, VPC, subnet, RDS, Lambda, CloudTrail, KMS, or billing inventory APIs.
 
 ## Data Boundary
 
@@ -65,6 +66,20 @@ Connector constraints:
 - No AWS mutation APIs are called.
 - No secrets are returned to clients.
 
+## AWS Inventory Scanner Plan
+
+The backend module at `apps/backend/src/modules/aws-inventory` defines the read-only scanner allowlist plan, blocked mutation patterns, and scanner phase model.
+
+Current scanner behavior:
+
+- `AWS_INVENTORY_SCANNER_MODE=disabled` by default.
+- `GET /api/v1/aws/inventory/plan` returns plan metadata and `awsApiCallExecuted=false`.
+- Account-specific scanner planning uses the authenticated `organizationId` plus the account identifier.
+- Scanner start is blocked with `BLOCKED_DISABLED`.
+- Worker inventory job types return a blocked response and do not call AWS.
+
+This is a real-world deployment architecture plan for future inventory collection, not a claim that CloudShield has executed real AWS inventory scanning.
+
 ## Enterprise Blueprint References
 
 - `docs/ENTERPRISE_CLIENT_BLUEPRINT.md`
@@ -73,3 +88,4 @@ Connector constraints:
 - `docs/SECURITY_AND_TENANT_ISOLATION.md`
 - `docs/RISK_WORKFLOW_MODEL.md`
 - `docs/COMPLIANCE_EVIDENCE_MODEL.md`
+- `docs/AWS_INVENTORY_SCANNER_PLAN.md`

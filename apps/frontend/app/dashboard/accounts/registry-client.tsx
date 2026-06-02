@@ -7,6 +7,7 @@ import type {
   AwsAccountMutationResponse,
   AwsConnectorStatusResponse,
   AwsConnectionStatus,
+  AwsInventoryPlanResponse,
   AwsSetupGuideResponse,
   CreateAwsAccountRequest,
   ValidateReadonlyConnectionResponse
@@ -17,6 +18,7 @@ type Props = {
   initialAccounts: AwsAccountDto[];
   setupGuide: AwsSetupGuideResponse;
   connectorStatus: AwsConnectorStatusResponse;
+  inventoryPlan: AwsInventoryPlanResponse;
 };
 
 type FormState = {
@@ -65,7 +67,8 @@ const ConnectionLabels: Record<AwsConnectionStatus, string> = {
 export function AccountRegistryClient({
   initialAccounts,
   setupGuide,
-  connectorStatus
+  connectorStatus,
+  inventoryPlan
 }: Props) {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [connector, setConnector] = useState(connectorStatus);
@@ -178,7 +181,7 @@ export function AccountRegistryClient({
         <div className="grid gap-4 md:grid-cols-4">
           <StatusTile label="Connector mode" value={connector.mode} />
           <StatusTile label="Read-only validation" value={connector.status} />
-          <StatusTile label="Inventory scan" value="No inventory scan yet" />
+          <StatusTile label="Inventory scan" value="Disabled plan only" />
           <StatusTile
             label="AWS credentials"
             value="No AWS credentials are stored in CloudShield"
@@ -190,6 +193,50 @@ export function AccountRegistryClient({
         </p>
         <p className="mt-2 text-sm font-medium text-slate-700">
           {connector.message}
+        </p>
+      </section>
+
+      <section className="rounded-md border border-line bg-white p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">
+              AWS read-only inventory scanner plan
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {inventoryPlan.message} {inventoryPlan.sampleDataLabel}
+            </p>
+          </div>
+          <span className="rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-xs font-semibold text-slate-700">
+            awsApiCallExecuted=false
+          </span>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <GuideList
+            title="Planned resource types"
+            items={inventoryPlan.supportedResourceTypes.map((item) =>
+              item.replaceAll("_", " ")
+            )}
+          />
+          <GuideList
+            title="Read-only API plan"
+            items={inventoryPlan.allowedReadOnlyApis
+              .slice(0, 6)
+              .map(
+                (operation) =>
+                  `${operation.service}:${operation.operation} - ${
+                    operation.enabledInCurrentMilestone
+                      ? "identity validation only"
+                      : "future scanner phase"
+                  }`
+              )}
+          />
+          <GuideList
+            title="Blocked mutation patterns"
+            items={inventoryPlan.blockedMutationPatterns}
+          />
+        </div>
+        <p className="mt-4 text-sm font-medium text-slate-700">
+          Inventory scanning, automatic remediation, AWS mutation, and Terraform apply remain disabled.
         </p>
       </section>
 
