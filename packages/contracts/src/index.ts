@@ -127,7 +127,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_AUTH_AND_TENANT_FOUNDATION_GREEN",
   "CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN",
   "CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN",
-  "CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN"
+  "CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN",
+  "CLOUDSHIELD_ENTERPRISE_CLIENT_PLATFORM_BLUEPRINT_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -336,6 +337,29 @@ export const AwsConnectorStatusResponseSchema = z.object({
 });
 export type AwsConnectorStatusResponse = z.infer<
   typeof AwsConnectorStatusResponseSchema
+>;
+
+export const EnterprisePlatformStatusSchema = PlatformStatusSchema.extend({
+  platformName: z.literal(PLATFORM_NAME),
+  platformCategory: z.literal(
+    "Enterprise AWS Security Posture, Cost Governance & Compliance Evidence Platform"
+  ),
+  currentMilestone: MilestoneSchema,
+  awsConnectorMode: AwsConnectorModeSchema,
+  inventoryScanningEnabled: z.literal(false),
+  mutationEnabled: z.literal(false),
+  remediationExecutionEnabled: z.literal(false),
+  sampleDataMode: z.literal(true),
+  implementedCapabilities: z.array(z.string()),
+  disabledCapabilities: z.array(z.string()),
+  enterpriseReadinessNotes: z.array(z.string()),
+  backend: z.string(),
+  contracts: z.string(),
+  complianceLanguage: z.array(z.string()),
+  recommendationSafety: RecommendationSafetySchema
+});
+export type EnterprisePlatformStatus = z.infer<
+  typeof EnterprisePlatformStatusSchema
 >;
 
 export const ValidateReadonlyConnectionResponseSchema = z.object({

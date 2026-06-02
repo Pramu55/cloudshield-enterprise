@@ -21,8 +21,8 @@ export default async function CostPage() {
 
   return (
     <DashboardPage
-      title="Cost Governance"
-      description="FinOps shell for waste signals, missing cost allocation tags, idle resources, ownership, and estimated monthly waste."
+      title="Cost Governance Signals"
+      description="FinOps workspace for sample waste indicators, missing allocation tags, ownership gaps, idle-resource review, and estimated monthly waste."
     >
       <SampleDataNotice />
       {!data?.items.length ? (

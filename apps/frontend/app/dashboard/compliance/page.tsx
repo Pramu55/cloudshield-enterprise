@@ -21,8 +21,8 @@ export default async function CompliancePage() {
 
   return (
     <DashboardPage
-      title="Compliance Evidence"
-      description="Evidence center for CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence."
+      title="Compliance Evidence Center"
+      description="Evidence workspace for CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence. No official certification is claimed."
     >
       <SampleDataNotice />
       {!data?.items.length ? (

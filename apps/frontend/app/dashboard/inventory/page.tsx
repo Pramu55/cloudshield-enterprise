@@ -21,8 +21,8 @@ export default async function InventoryPage() {
 
   return (
     <DashboardPage
-      title="Cloud Asset Inventory"
-      description="CMDB foundation for EC2, S3, IAM, security groups, EBS, VPCs, RDS, Lambda, CloudTrail, KMS, and load balancers."
+      title="Cloud Asset Inventory Foundation"
+      description="Enterprise CMDB foundation for future read-only AWS asset inventory. Current records are sample/demo data and real AWS inventory scanning is not enabled yet."
     >
       <SampleDataNotice />
       {!data?.items.length ? (

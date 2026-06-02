@@ -4,6 +4,8 @@ This foundation and account registry work does not add AWS credentials or an AWS
 
 The AWS account registry stores metadata only. It is intended to prepare organization-scoped account ownership and connection planning before any read-only connector exists.
 
+The enterprise platform blueprint keeps this policy plan as the boundary for future scanner design: future inventory must use allowlisted read-only APIs only and must not include mutation or Terraform apply.
+
 Future AWS access should use least-privilege, read-only permissions only. The policy plan should support metadata collection for inventory, posture, and evidence generation without resource mutation.
 
 The planned connection model is IAM role assumption with an external ID. CloudShield should not store long-lived AWS access keys, secret access keys, or session tokens.

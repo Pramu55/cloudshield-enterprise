@@ -2,6 +2,8 @@
 
 `CLOUDSHIELD_AWS_ACCOUNT_REGISTRY_GREEN` adds an authenticated, organization-scoped registry for AWS account metadata.
 
+In the enterprise client blueprint, this registry is the account governance foundation for ownership, environment classification, planned read-only validation, and risk workflow context.
+
 ## What It Stores
 
 - Account name

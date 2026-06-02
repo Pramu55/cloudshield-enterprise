@@ -45,7 +45,7 @@ async function getAccessToken(): Promise<string | undefined> {
 export function SampleDataNotice() {
   return (
     <div className="mb-5 rounded-md border border-warning/40 bg-white px-4 py-3 text-sm font-medium text-ink">
-      Sample demo data - real AWS scanning is not enabled yet.
+      Sample demo data - real AWS inventory scanning is not enabled yet.
     </div>
   );
 }

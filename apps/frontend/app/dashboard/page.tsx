@@ -35,7 +35,7 @@ export default async function DashboardHome() {
   return (
     <DashboardPage
       title="Executive Cloud Posture"
-      description="Database-backed sample summary for account coverage, risk trends, evidence readiness, and cost governance."
+      description="Enterprise governance overview for account coverage, cloud risk, cost governance signals, compliance evidence readiness, and review-only recommendations."
     >
       <SampleDataNotice />
       {!summary && <EmptyState label="Backend sample summary is not available yet." />}
@@ -53,7 +53,7 @@ export default async function DashboardHome() {
       </div>
       {summary?.latestScanStatus && (
         <div className="mt-4 rounded-md border border-line bg-white p-5">
-          <p className="text-sm text-slate-500">Latest sample scan status</p>
+          <p className="text-sm text-slate-500">Latest sample/demo workflow status</p>
           <p className="mt-1 text-lg font-semibold text-ink">
             {summary.latestScanStatus.status} - {summary.latestScanStatus.jobType}
           </p>

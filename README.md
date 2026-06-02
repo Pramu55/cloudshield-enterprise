@@ -1,54 +1,91 @@
 # CloudShield Enterprise
 
-CloudShield Enterprise is a multi-account AWS governance platform that scans cloud resources, detects security and cost risks, maps findings to compliance-style controls, tracks ownership and risk acceptance, and generates safe remediation recommendations without automatic cloud mutation.
+**CloudShield Enterprise - AWS Security Posture, Cost Governance & Compliance Evidence Platform**
 
-Portfolio title: **CloudShield Enterprise - AWS Security Posture, Cost Governance & Compliance Platform**.
+CloudShield Enterprise is a production-style, enterprise-client-ready AWS governance control plane for company IT, cloud security, platform engineering, SRE, FinOps, and compliance teams. It is designed to help teams understand cloud ownership, risk posture, cost governance signals, compliance evidence readiness, and review-only remediation recommendations across AWS accounts.
 
-## Current Milestone
+This repository is a consulting-demo ready platform foundation. It does not claim deployment to any real customer, does not claim official CIS or SOC2 certification, and does not claim real AWS inventory data while scanning remains disabled.
 
-This repository currently implements `CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN` on top of the read-only AWS connector plan.
+## Problem It Solves
 
-Included:
+Enterprise cloud teams often need one place to answer:
 
-- pnpm TypeScript monorepo
-- Turborepo task orchestration
-- Next.js App Router frontend shell
-- Fastify 5 backend foundation
-- BullMQ worker foundation
-- Prisma schema for enterprise governance models
-- PostgreSQL and Redis Docker Compose runtime
-- Authenticated AWS account registry metadata API
-- Dashboard account registry UI for create, edit, validation placeholder, and safe archive
-- Read-only AWS connector status and STS validation skeleton
-- Disabled-by-default account read-only validation endpoint
-- Safety-first documentation
+- Which AWS accounts exist, who owns them, and what environments do they represent?
+- Which resources and findings need security or cost governance review?
+- Which CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence are ready for audit conversations?
+- Which risks have owners, status, business impact, and acceptance context?
+- Which recommendations are safe to review without triggering cloud mutation?
 
-Not included in this milestone:
+CloudShield provides the foundation for that operating model without automatic remediation or broad AWS scanning in the current milestone.
 
-- AWS credentials
-- AWS scanner
-- AWS API account validation
-- AWS inventory scanning
-- AWS mutation
-- Automatic remediation
-- Terraform apply
-- Official compliance certification claims
+## Users
 
-## Safety Boundary
+- Cloud security teams reviewing posture and exposure signals
+- DevOps and platform teams tracking account ownership and cloud governance work
+- SRE teams reviewing operational risk and service ownership
+- FinOps teams reviewing waste signals and allocation hygiene
+- Compliance teams collecting internal governance evidence
+- Consulting/demo evaluators reviewing enterprise cloud governance workflows
 
-CloudShield v1 is read-only. It may store inventory, evidence, findings, risk ownership, and recommendations, but it must not mutate IAM, S3, EC2, Security Groups, VPCs, AWS policies, or any other cloud resource.
+## Current Capabilities
 
-The AWS account registry stores metadata only: account name, AWS account ID, environment, owner team, regions, notes, and planned read-only connection placeholders. It does not store AWS access keys, secret keys, or session tokens.
+- pnpm TypeScript monorepo with Turborepo
+- Next.js App Router frontend
+- Fastify 5 backend with Zod contracts
+- Prisma and PostgreSQL enterprise governance schema
+- Redis and BullMQ worker foundation
+- Authenticated demo user and organization-scoped tenant context
+- AWS account governance registry
+- Read-only AWS connector status
+- Disabled-by-default STS identity validation path
+- Sample/demo inventory, findings, compliance evidence, and recommendations
+- Review-only recommendation model with execution blocked
 
-The read-only connector defaults to `AWS_CONNECTOR_MODE=disabled`. When explicitly set to `readonly-validation` and configured, the connector skeleton may call only STS `GetCallerIdentity`. It does not scan inventory or mutate AWS.
+## Safety Model
 
-Compliance language is limited to:
+CloudShield v1 is read-only and advisory.
 
-- CIS-inspired controls
-- SOC2-inspired evidence
-- internal cloud governance evidence
+Not included:
 
-## Local Development
+- No AWS credentials committed
+- No long-lived AWS access keys stored
+- No AWS inventory scanner execution
+- No EC2, S3, IAM, Security Group, EBS, VPC, RDS, Lambda, CloudTrail, KMS, or billing listing calls in default mode
+- No AWS mutation
+- No automatic remediation
+- No Terraform apply
+- No official CIS/SOC2 certification claims
+- No fake real AWS data or customer deployment claims
+
+The read-only connector defaults to:
+
+```text
+AWS_CONNECTOR_MODE=disabled
+```
+
+When explicitly set to `readonly-validation` and configured, the only supported AWS API path is STS `GetCallerIdentity`. Real inventory scanning remains planned for a later milestone.
+
+## Architecture Overview
+
+```text
+apps/frontend      Next.js enterprise governance console
+apps/backend       Fastify REST API with /api/v1 routes
+apps/worker        BullMQ worker foundation for future jobs
+packages/contracts Shared Zod schemas and DTOs
+packages/database  Prisma schema, migrations, seed data
+packages/config    Runtime configuration parsing
+packages/security  Read-only safety and recommendation policy helpers
+packages/logger    Structured logging helper
+packages/utils     Shared runtime utilities
+```
+
+Runtime services:
+
+- PostgreSQL stores organization-scoped governance records
+- Redis supports future queue workflows
+- Docker Compose runs frontend, backend, worker, Postgres, and Redis locally
+
+## Local Setup
 
 Install dependencies:
 
@@ -56,88 +93,87 @@ Install dependencies:
 pnpm install
 ```
 
-Run the backend:
-
-```powershell
-pnpm --filter @cloudshield/backend dev
-```
-
-Run the frontend:
-
-```powershell
-pnpm --filter @cloudshield/frontend dev
-```
-
-Run the worker:
-
-```powershell
-pnpm --filter @cloudshield/worker dev
-```
-
-Run the full local stack:
+Start the full local stack:
 
 ```powershell
 docker compose up -d --build
 ```
 
-Apply database migrations:
+Apply migrations:
 
 ```powershell
 $env:DATABASE_URL="postgresql://cloudshield:cloudshield_local_password@localhost:55432/cloudshield"
 pnpm --filter @cloudshield/database prisma:deploy
 ```
 
-Seed sample demo data:
+Seed sample/demo data:
 
 ```powershell
 $env:DATABASE_URL="postgresql://cloudshield:cloudshield_local_password@localhost:55432/cloudshield"
 pnpm --filter @cloudshield/database seed
 ```
 
-Local demo login:
+Demo login:
 
 ```text
 Email: demo@cloudshield.local
 Password: CloudShieldDemo123!
 ```
 
-These credentials are for local sample/demo use only. The seeded user is scoped to `CloudShield Demo Organization`.
+The demo login and seeded records are local sample/demo data only.
 
-Validate Docker backend health:
+Service URLs:
 
-```powershell
-Invoke-WebRequest http://localhost:4100/health
-Invoke-WebRequest http://localhost:4100/api/v1/dashboard/summary
-```
+- Frontend: `http://localhost:3100`
+- Backend: `http://localhost:4100`
+- PostgreSQL: `localhost:55432`
+- Redis: `localhost:6381`
 
-AWS account registry endpoints require a bearer token:
+## Key API Routes
 
 ```text
+GET /health
+GET /ready
+GET /api/v1/platform/status
+POST /api/v1/auth/login
+GET /api/v1/auth/me
+GET /api/v1/dashboard/summary
 GET /api/v1/aws/accounts
-POST /api/v1/aws/accounts
-GET /api/v1/aws/accounts/:accountId
-PATCH /api/v1/aws/accounts/:accountId
-PATCH /api/v1/aws/accounts/:accountId/archive
-POST /api/v1/aws/accounts/:accountId/validate
-POST /api/v1/aws/accounts/:accountId/validate-readonly-connection
 GET /api/v1/aws/connector/status
-GET /api/v1/aws/setup-guide
+POST /api/v1/aws/accounts/:accountId/validate-readonly-connection
 ```
 
-Docker publishes the frontend at `http://localhost:3100`, the backend at `http://localhost:4100`, Postgres at `localhost:55432`, and Redis at `localhost:6381`. Inside the Docker network, services still use their standard ports.
+Protected routes require `Authorization: Bearer <token>` and must derive tenant scope from the authenticated organization context.
 
-## Workspace
+## Current Milestones
 
-```text
-apps/frontend
-apps/backend
-apps/worker
-packages/contracts
-packages/database
-packages/config
-packages/utils
-packages/logger
-packages/security
-docs
-infrastructure
-```
+Implemented foundation:
+
+- Enterprise monorepo and upgraded Fastify/Next.js architecture
+- Local runtime, database migrations, and sample/demo governance data
+- Auth and tenant foundation
+- AWS account registry foundation
+- Read-only AWS connector plan
+- AWS read-only identity validation foundation
+- Enterprise client platform blueprint
+
+## Future Roadmap
+
+- Phase 1: Foundation, auth, database, AWS account registry, read-only validation
+- Phase 2: Read-only inventory scanner with allowlisted APIs
+- Phase 3: Security posture rules
+- Phase 4: Cost governance and FinOps signals
+- Phase 5: Compliance evidence center
+- Phase 6: Risk workflow and ownership
+- Phase 7: Reports and exports
+- Phase 8: Production deployment hardening
+- Phase 9: Enterprise RBAC, audit log, observability
+- Phase 10: Client-ready demo/release
+
+## Portfolio / Interview Explanation
+
+CloudShield demonstrates how to design an enterprise AWS governance product with tenant isolation, read-only cloud safety, typed contracts, database-backed workflows, sample/demo evidence, and production-style architecture. It is intentionally built as a control-plane foundation before enabling real AWS inventory scanning.
+
+The safest summary:
+
+> CloudShield is an enterprise-client-ready AWS governance platform foundation for security posture, cost governance, compliance evidence, and cloud risk workflow. It currently uses sample/demo data and a disabled-by-default read-only connector. It does not mutate AWS or claim official compliance certification.

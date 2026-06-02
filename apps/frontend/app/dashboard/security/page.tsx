@@ -20,8 +20,8 @@ export default async function SecurityPage() {
 
   return (
     <DashboardPage
-      title="Security Findings"
-      description="Posture engine shell for network exposure, IAM risk, storage exposure, encryption gaps, logging gaps, and public access."
+      title="Cloud Risk Register"
+      description="Security posture workspace for exposure, IAM risk, storage posture, encryption gaps, logging signals, ownership, and review workflow."
     >
       <SampleDataNotice />
       {!data?.items.length ? (

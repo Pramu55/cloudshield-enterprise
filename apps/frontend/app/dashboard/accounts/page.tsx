@@ -16,8 +16,8 @@ export default async function AccountsPage() {
 
   return (
     <DashboardPage
-      title="AWS Accounts"
-      description="Organization-scoped registry for AWS account metadata, ownership, planned read-only connection state, and governance context."
+      title="AWS Account Governance"
+      description="Organization-scoped AWS account control plane for ownership, environment context, read-only validation posture, and governance metadata."
     >
       {!accounts || !setupGuide || !connectorStatus ? (
         <EmptyState label="Log in to manage AWS account registry metadata." />

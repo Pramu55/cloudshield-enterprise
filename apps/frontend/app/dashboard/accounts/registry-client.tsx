@@ -71,7 +71,7 @@ export function AccountRegistryClient({
   const [connector, setConnector] = useState(connectorStatus);
   const [form, setForm] = useState<FormState>(EmptyForm);
   const [message, setMessage] = useState(
-    "AWS account registry only - real AWS scanning is not enabled yet."
+    "AWS account registry only - real AWS inventory scanning is not enabled yet."
   );
   const [isSaving, setIsSaving] = useState(false);
 
@@ -161,7 +161,7 @@ export function AccountRegistryClient({
     <div className="space-y-6">
       <section className="rounded-md border border-warning/50 bg-white p-4">
         <p className="text-sm font-semibold text-ink">
-          AWS account registry only - real AWS scanning is not enabled yet.
+          AWS account registry only - real AWS inventory scanning is not enabled yet.
         </p>
         <p className="mt-1 text-sm leading-6 text-slate-600">{message}</p>
       </section>

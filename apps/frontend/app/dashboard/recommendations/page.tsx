@@ -19,8 +19,8 @@ export default async function RecommendationsPage() {
 
   return (
     <DashboardPage
-      title="Remediation Recommendations"
-      description="Advisory-only remediation planning for manual steps, CLI suggestions, Terraform snippets, risk reduction, blast radius, and rollback notes."
+      title="Review-Only Remediation Recommendations"
+      description="Advisory remediation planning for manual review. Recommendations are non-executable; CloudShield does not run automatic fixes or Terraform apply."
     >
       <SampleDataNotice />
       {!data?.items.length ? (

@@ -4,6 +4,8 @@ CloudShield Enterprise v1 is a read-only governance platform.
 
 The upgraded architecture uses a Fastify 5 backend, Zod 4 contracts, a Next.js frontend, Prisma, PostgreSQL, Redis, and BullMQ. These changes do not expand CloudShield beyond read-only governance behavior.
 
+CloudShield is enterprise-client-ready for consulting demos, but it must not be described as deployed to a real customer or as an official compliance certification product.
+
 ## Allowed
 
 - Read AWS resource metadata in future scanner milestones.
@@ -48,6 +50,8 @@ Tenant-owned records include `organizationId`. Services must scope tenant-owned 
 Authenticated API routes must derive `organizationId` from the verified JWT user context. Tenant-owned records must not be queried by ID alone.
 
 The local demo login is sample/demo only and must not be treated as a production identity provider.
+
+For the expanded tenant model, see `docs/SECURITY_AND_TENANT_ISOLATION.md`.
 
 ## AWS Account Registry Safety
 

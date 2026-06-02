@@ -2,6 +2,8 @@
 
 CloudShield Enterprise is an advanced CSPM-style TypeScript monorepo for AWS security posture, cost governance, compliance evidence, cloud inventory, and risk workflow.
 
+The current product direction is an enterprise-client-ready AWS governance control plane for consulting demos and portfolio evaluation. It is not claimed as deployed to any real customer, and sample/demo records must not be described as real AWS inventory.
+
 ## System Components
 
 - `apps/frontend`: Next.js App Router governance console.
@@ -62,3 +64,12 @@ Connector constraints:
 - No EC2, S3, IAM, Security Group, VPC, CloudTrail, KMS, billing, or inventory APIs are called.
 - No AWS mutation APIs are called.
 - No secrets are returned to clients.
+
+## Enterprise Blueprint References
+
+- `docs/ENTERPRISE_CLIENT_BLUEPRINT.md`
+- `docs/PRODUCTION_READINESS_CHECKLIST.md`
+- `docs/CLIENT_DEMO_GUIDE.md`
+- `docs/SECURITY_AND_TENANT_ISOLATION.md`
+- `docs/RISK_WORKFLOW_MODEL.md`
+- `docs/COMPLIANCE_EVIDENCE_MODEL.md`

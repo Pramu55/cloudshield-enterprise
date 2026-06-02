@@ -2,6 +2,8 @@
 
 `CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN` keeps the connector disabled by default and validates the safe STS-only identity validation path without enabling AWS inventory scanning.
 
+In the enterprise blueprint milestone, this connector is positioned as one component of a larger AWS governance control plane. It remains disabled by default and must not be described as a full scanner.
+
 ## Configuration
 
 Use `.env.example` as the shape only. Do not commit real AWS values.
