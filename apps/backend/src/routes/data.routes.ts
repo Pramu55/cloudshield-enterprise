@@ -92,26 +92,6 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/api/v1/findings/security", { preHandler: requireAuth }, async (request) => {
-    const auth = getAuthContext(request);
-    const findings = await prisma.securityFinding.findMany({
-      where: scopeByOrganization(auth.organizationId),
-      take: DEFAULT_LIMIT,
-      orderBy: [{ severity: "asc" }, { createdAt: "desc" }],
-      include: {
-        awsAccount: { select: { name: true, accountId: true } },
-        resource: { select: { resourceType: true, resourceId: true, name: true, region: true } },
-        ownerTeam: { select: { name: true } }
-      }
-    });
-
-    return {
-      sampleData: true,
-      sampleDataLabel: "Sample demo data - real AWS scanning is not enabled yet.",
-      items: findings
-    };
-  });
-
   app.get("/api/v1/findings/cost", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
     const findings = await prisma.costFinding.findMany({

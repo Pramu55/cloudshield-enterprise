@@ -15,6 +15,8 @@ Implemented or in foundation:
 - Read-only AWS connector status
 - Disabled-by-default STS identity validation path
 - Read-only AWS inventory scanner plan with execution disabled
+- Security posture rules foundation
+- Risk workflow and ownership foundation
 - Sample/demo governance data
 
 Safety boundary:
@@ -73,13 +75,20 @@ Planned:
 
 ## Phase 6: Risk Workflow And Ownership
 
-Planned:
+Implemented foundation:
 
 - Risk lifecycle
 - Owner assignment
 - SLA and due dates
 - Risk acceptance with approver and expiration
 - Audit events for workflow changes
+
+Future expansion:
+
+- RBAC permission checks for workflow actions
+- Risk acceptance approval queues
+- SLA breach notifications
+- Report exports for workflow evidence
 
 ## Phase 7: Reports And Exports
 

@@ -40,6 +40,7 @@ CloudShield provides the foundation for that operating model without automatic r
 - Disabled-by-default STS identity validation path
 - AWS inventory scanner read-only plan with execution blocked
 - Sample/demo inventory, findings, compliance evidence, and recommendations
+- Security finding risk workflow with ownership, priority, acceptance, and audit events
 - Review-only recommendation model with execution blocked
 
 ## Safety Model
@@ -163,6 +164,12 @@ GET /api/v1/aws/inventory/plan
 POST /api/v1/aws/accounts/:accountId/inventory/plan
 POST /api/v1/aws/accounts/:accountId/inventory/start
 POST /api/v1/aws/accounts/:accountId/validate-readonly-connection
+GET /api/v1/risk/findings
+GET /api/v1/risk/findings/:findingId
+POST /api/v1/risk/findings/:findingId/acknowledge
+POST /api/v1/risk/findings/:findingId/assign
+POST /api/v1/risk/findings/:findingId/plan-remediation
+POST /api/v1/risk/findings/:findingId/accept-risk
 ```
 
 Protected routes require `Authorization: Bearer <token>` and must derive tenant scope from the authenticated organization context.
@@ -179,6 +186,8 @@ Implemented foundation:
 - AWS read-only identity validation foundation
 - Enterprise client platform blueprint
 - AWS inventory read-only scanner plan with disabled execution gate
+- Security posture rules foundation
+- Risk workflow and ownership foundation
 
 ## Future Roadmap
 

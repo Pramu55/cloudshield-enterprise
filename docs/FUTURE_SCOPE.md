@@ -65,6 +65,7 @@ Future work must not silently expand CloudShield beyond read-only governance.
 - Cloud relationship graph
 - Finding rule engine for CIS-inspired controls
 - Cost governance signal enrichment
+- Risk workflow and ownership expansion
 - Risk acceptance approval workflow
 - Evidence export packages
 - RBAC and audit log hardening

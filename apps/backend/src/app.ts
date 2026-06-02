@@ -7,6 +7,7 @@ import { registerAwsAccountRoutes } from "./routes/aws-account.routes.js";
 import { registerAwsConnectorRoutes } from "./routes/aws-connector.routes.js";
 import { registerAwsInventoryRoutes } from "./routes/aws-inventory.routes.js";
 import { registerSecurityPostureRoutes } from "./routes/security-posture.routes.js";
+import { registerRiskWorkflowRoutes } from "./routes/risk-workflow.routes.js";
 import { registerDataRoutes } from "./routes/data.routes.js";
 import { registerAuthRoutes } from "./routes/auth.routes.js";
 import { registerPlatformRoutes } from "./routes/platform.routes.js";
@@ -29,6 +30,7 @@ export async function buildApp() {
   await registerAwsConnectorRoutes(app);
   await registerAwsInventoryRoutes(app);
   await registerSecurityPostureRoutes(app);
+  await registerRiskWorkflowRoutes(app);
   await registerDataRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => {

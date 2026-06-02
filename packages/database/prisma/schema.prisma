@@ -52,9 +52,19 @@ enum RiskStatus {
   ASSIGNED
   REMEDIATION_PLANNED
   ACCEPTED_RISK
+  RISK_ACCEPTED
   FALSE_POSITIVE
   RESOLVED
   ARCHIVED
+  REOPENED
+}
+
+enum RiskPriority {
+  P0
+  P1
+  P2
+  P3
+  P4
 }
 
 enum ComplianceStatus {
@@ -94,6 +104,9 @@ model User {
   role           String       @default("member")
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  assignedSecurityFindings     SecurityFinding[] @relation("SecurityFindingAssignee")
+  riskAcceptedSecurityFindings SecurityFinding[] @relation("SecurityFindingRiskAccepter")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -245,12 +258,25 @@ model SecurityFinding {
   description     String
   severity        FindingSeverity
   status          RiskStatus      @default(OPEN)
+  workflowStatus  RiskStatus      @default(OPEN)
   evidence        Json            @default("{}")
   businessImpact  String?
   recommendation  String?
   complianceRefs  Json            @default("[]")
   ownerTeamId     String?
   ownerTeam       Team?           @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
+  assignedToUserId String?
+  assignedToUser   User?          @relation("SecurityFindingAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  riskAcceptedUntil DateTime?
+  riskAcceptanceReason String?
+  riskAcceptedByUserId String?
+  riskAcceptedByUser User?        @relation("SecurityFindingRiskAccepter", fields: [riskAcceptedByUserId], references: [id], onDelete: SetNull)
+  riskAcceptedAt DateTime?
+  remediationPlan String?
+  targetResolutionDate DateTime?
+  priority        RiskPriority    @default(P2)
+  lastWorkflowActionAt DateTime?
+  archivedAt      DateTime?
   dueAt           DateTime?
   firstSeenAt     DateTime        @default(now())
   lastSeenAt      DateTime        @default(now())
@@ -263,6 +289,10 @@ model SecurityFinding {
 
   @@index([organizationId])
   @@index([organizationId, status])
+  @@index([organizationId, workflowStatus])
+  @@index([organizationId, priority])
+  @@index([organizationId, assignedToUserId])
+  @@index([organizationId, archivedAt])
   @@index([organizationId, severity])
 }
 

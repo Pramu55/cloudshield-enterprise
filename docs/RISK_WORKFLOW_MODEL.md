@@ -12,6 +12,7 @@ CloudShield models cloud governance risk as an ownership and evidence workflow.
 - `FALSE_POSITIVE`: reviewed and marked not applicable.
 - `RESOLVED`: risk is closed after evidence review.
 - `ARCHIVED`: historical record retained for audit context.
+- `REOPENED`: risk is returned to active review.
 
 ## Risk Fields
 
@@ -53,3 +54,9 @@ Expired acceptances should return to review.
 ## Audit Trail
 
 Track status changes, owner changes, acceptance decisions, recommendation reviews, and report exports with actor, timestamp, target id, and safe metadata.
+
+## API Foundation
+
+`CLOUDSHIELD_RISK_WORKFLOW_AND_OWNERSHIP_GREEN` adds authenticated routes under `/api/v1/risk/findings`. Write actions update CloudShield records only, create `AuditEvent` records, and return `awsApiCallExecuted=false`, `mutationExecuted=false`, and `remediationExecuted=false`.
+
+No AWS API calls, AWS mutation, automatic remediation, or Terraform apply are part of this workflow.

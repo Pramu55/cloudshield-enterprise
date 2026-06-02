@@ -70,7 +70,7 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
 
-  await prisma.user.upsert({
+  const demoUser = await prisma.user.upsert({
     where: {
       organizationId_email: {
         organizationId: organization.id,
@@ -378,6 +378,46 @@ async function main() {
         recommendation: "Review attached policies and move toward least privilege.",
         complianceRefs: ["SOC2-inspired access governance evidence"],
         ownerTeamId: securityTeam.id
+      }
+    })
+  ]);
+
+  await Promise.all([
+    prisma.securityFinding.update({
+      where: { id: "sample-security-open-ssh" },
+      data: {
+        workflowStatus: "ASSIGNED",
+        status: "ASSIGNED",
+        priority: "P1",
+        assignedToUserId: demoUser.id,
+        ownerTeamId: securityTeam.id,
+        targetResolutionDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        lastWorkflowActionAt: new Date()
+      }
+    }),
+    prisma.securityFinding.update({
+      where: { id: "sample-security-s3-encryption" },
+      data: {
+        workflowStatus: "REMEDIATION_PLANNED",
+        status: "REMEDIATION_PLANNED",
+        priority: "P2",
+        assignedToUserId: demoUser.id,
+        ownerTeamId: securityTeam.id,
+        remediationPlan:
+          "Sample/demo review-only plan: confirm bucket owner, prepare encryption change outside CloudShield, and capture evidence after manual approval.",
+        targetResolutionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        lastWorkflowActionAt: new Date()
+      }
+    }),
+    prisma.securityFinding.update({
+      where: { id: "sample-security-iam-high-privilege" },
+      data: {
+        workflowStatus: "ACKNOWLEDGED",
+        status: "ACKNOWLEDGED",
+        priority: "P1",
+        assignedToUserId: demoUser.id,
+        ownerTeamId: securityTeam.id,
+        lastWorkflowActionAt: new Date()
       }
     })
   ]);

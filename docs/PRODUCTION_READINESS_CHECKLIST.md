@@ -20,6 +20,7 @@ This checklist describes what CloudShield should satisfy before production deplo
 ## Audit Logging
 
 - Record login, account registry changes, risk status changes, report exports, and connector validation attempts.
+- Record finding acknowledgement, assignment, remediation planning, risk acceptance, false positive, resolution, archive, and reopen workflow actions.
 - Include actor, organization, target type, target id, timestamp, and safe metadata.
 - Avoid secrets and credential material in audit metadata.
 
@@ -147,3 +148,11 @@ This checklist describes what CloudShield should satisfy before production deplo
 - Audit privileged actions.
 - Require periodic access review sign-off.
 - Add evidence of access review to internal governance records.
+
+## Risk Workflow Readiness
+
+- Confirm workflow actions are organization-scoped.
+- Confirm risk acceptance requires business justification and expiration.
+- Confirm remediation plans are review-only.
+- Confirm workflow action metadata contains no secrets.
+- Confirm workflow exports use internal cloud governance evidence language only.

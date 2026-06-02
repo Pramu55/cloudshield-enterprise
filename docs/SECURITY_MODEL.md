@@ -102,6 +102,20 @@ The plan may describe future read-only AWS APIs, but CloudShield must not execut
 
 Scanner start attempts return a blocked response with `awsApiCallExecuted=false`. Worker inventory job types are also blocked. This preserves the read-only planning boundary while preparing a future company IT-level cloud governance platform.
 
+## Risk Workflow Safety
+
+Risk workflow actions update CloudShield records only. They do not call AWS, do not mutate cloud resources, do not execute remediation, and do not run Terraform apply.
+
+Every workflow route requires authentication and scopes finding lookup by `organizationId`. Each write action creates an `AuditEvent` with sanitized metadata and returns:
+
+```text
+awsApiCallExecuted=false
+mutationExecuted=false
+remediationExecuted=false
+```
+
+Risk acceptance requires business justification and an expiration date. Remediation plans are review-only records for human approval outside CloudShield.
+
 
 ---
 ### Security Posture Rules Foundation Note

@@ -11,3 +11,9 @@ This document outlines the security posture rules implementation for CloudShield
 * **Rich Findings:** Findings contain detailed evidence, business impact, and remediation recommendations.
 * **Compliance Mapping:** Compliance mapping is strictly CIS-inspired, SOC2-inspired, and for internal governance only. There is no official certification claim.
 * **Sample Data:** All sample and demo data remains clearly labeled.
+
+## Risk Workflow Handoff
+
+Security findings now feed the enterprise risk workflow foundation. Reviewers can acknowledge, assign, plan review-only remediation, accept risk with business justification, mark false positive, resolve, archive, or reopen findings.
+
+These workflow actions update CloudShield database records and audit events only. They do not call AWS, mutate cloud resources, execute automatic remediation, or run Terraform apply.

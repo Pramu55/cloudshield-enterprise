@@ -28,6 +28,7 @@ The current product direction is an enterprise-client-ready AWS governance contr
 - AWS account registry routes are authenticated metadata routes only. They manage account name, AWS account ID, environment, owner team, regions, notes, connection status placeholders, and safe archive state without executing AWS API calls.
 - AWS connector routes expose safe readiness and read-only validation status. The default connector mode is disabled; the only enabled AWS SDK action in this milestone is STS `GetCallerIdentity`.
 - AWS inventory routes expose the future scanner plan only. They do not enqueue scanner jobs or execute EC2, S3, IAM, Security Group, EBS, VPC, subnet, RDS, Lambda, CloudTrail, KMS, or billing inventory APIs.
+- Risk workflow routes turn security findings into organization-scoped ownership, SLA, risk acceptance, and audit records. They update CloudShield database records only.
 
 ## Data Boundary
 
@@ -80,6 +81,12 @@ Current scanner behavior:
 
 This is a real-world deployment architecture plan for future inventory collection, not a claim that CloudShield has executed real AWS inventory scanning.
 
+## Risk Workflow And Ownership
+
+The backend module at `apps/backend/src/modules/risk-workflow` provides tenant-scoped security finding workflow actions. Every lookup uses `organizationId` plus the finding id. Write actions create `AuditEvent` records, update `lastWorkflowActionAt`, and return `awsApiCallExecuted=false`, `mutationExecuted=false`, and `remediationExecuted=false`.
+
+Supported lifecycle states are `OPEN`, `ACKNOWLEDGED`, `ASSIGNED`, `REMEDIATION_PLANNED`, `RISK_ACCEPTED`, `FALSE_POSITIVE`, `RESOLVED`, `ARCHIVED`, and `REOPENED`.
+
 ## Enterprise Blueprint References
 
 - `docs/ENTERPRISE_CLIENT_BLUEPRINT.md`
@@ -89,6 +96,7 @@ This is a real-world deployment architecture plan for future inventory collectio
 - `docs/RISK_WORKFLOW_MODEL.md`
 - `docs/COMPLIANCE_EVIDENCE_MODEL.md`
 - `docs/AWS_INVENTORY_SCANNER_PLAN.md`
+- `docs/RISK_WORKFLOW_AND_OWNERSHIP.md`
 
 
 ---

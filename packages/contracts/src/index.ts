@@ -174,11 +174,29 @@ export const RiskStatusSchema = z.enum([
   "ASSIGNED",
   "REMEDIATION_PLANNED",
   "ACCEPTED_RISK",
+  "RISK_ACCEPTED",
   "FALSE_POSITIVE",
   "RESOLVED",
-  "ARCHIVED"
+  "ARCHIVED",
+  "REOPENED"
 ]);
 export type RiskStatus = z.infer<typeof RiskStatusSchema>;
+
+export const RiskWorkflowStatusSchema = z.enum([
+  "OPEN",
+  "ACKNOWLEDGED",
+  "ASSIGNED",
+  "REMEDIATION_PLANNED",
+  "RISK_ACCEPTED",
+  "FALSE_POSITIVE",
+  "RESOLVED",
+  "ARCHIVED",
+  "REOPENED"
+]);
+export type RiskWorkflowStatus = z.infer<typeof RiskWorkflowStatusSchema>;
+
+export const RiskPrioritySchema = z.enum(["P0", "P1", "P2", "P3", "P4"]);
+export type RiskPriority = z.infer<typeof RiskPrioritySchema>;
 
 export const ComplianceStatusSchema = z.enum(["PASS", "FAIL", "WARNING"]);
 export type ComplianceStatus = z.infer<typeof ComplianceStatusSchema>;
@@ -227,7 +245,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN",
   "CLOUDSHIELD_ENTERPRISE_CLIENT_PLATFORM_BLUEPRINT_GREEN",
   "CLOUDSHIELD_AWS_INVENTORY_READONLY_SCANNER_PLAN_GREEN",
-  "CLOUDSHIELD_SECURITY_POSTURE_RULES_FOUNDATION_GREEN"
+  "CLOUDSHIELD_SECURITY_POSTURE_RULES_FOUNDATION_GREEN",
+  "CLOUDSHIELD_RISK_WORKFLOW_AND_OWNERSHIP_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -590,3 +609,151 @@ export const SecurityFindingsResponseSchema = z.object({
   mutationExecuted: z.literal(false)
 });
 export type SecurityFindingsResponse = z.infer<typeof SecurityFindingsResponseSchema>;
+
+const IsoDateStringSchema = z.string().datetime();
+const OptionalFutureDateSchema = z.string().datetime();
+
+export const RiskAuditEventDtoSchema = z.object({
+  id: z.string(),
+  action: z.string(),
+  targetType: z.literal("security_finding"),
+  targetId: z.string().nullable(),
+  actorUserId: z.string().nullable(),
+  metadata: z.record(z.string(), z.any()),
+  createdAt: z.string()
+});
+export type RiskAuditEventDto = z.infer<typeof RiskAuditEventDtoSchema>;
+
+export const RiskFindingDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  awsAccountId: z.string(),
+  awsAccountName: z.string().nullable(),
+  resourceId: z.string().nullable(),
+  resourceName: z.string().nullable(),
+  resourceType: z.string().nullable(),
+  ruleId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  severity: FindingSeveritySchema,
+  status: RiskStatusSchema,
+  workflowStatus: RiskWorkflowStatusSchema,
+  priority: RiskPrioritySchema,
+  ownerTeamId: z.string().nullable(),
+  ownerTeamName: z.string().nullable(),
+  assignedToUserId: z.string().nullable(),
+  assignedToUserEmail: z.string().nullable(),
+  assignedToUserName: z.string().nullable(),
+  businessImpact: z.string().nullable(),
+  remediationPlan: z.string().nullable(),
+  targetResolutionDate: z.string().nullable(),
+  riskAcceptedUntil: z.string().nullable(),
+  riskAcceptanceReason: z.string().nullable(),
+  riskAcceptedByUserId: z.string().nullable(),
+  riskAcceptedByUserEmail: z.string().nullable(),
+  riskAcceptedAt: z.string().nullable(),
+  recommendation: z.string().nullable(),
+  evidenceSummary: z.string(),
+  evidence: z.record(z.string(), z.any()),
+  complianceRefs: z.array(z.string()),
+  firstSeenAt: z.string(),
+  lastSeenAt: z.string(),
+  lastWorkflowActionAt: z.string().nullable(),
+  archivedAt: z.string().nullable(),
+  sampleData: z.boolean()
+});
+export type RiskFindingDto = z.infer<typeof RiskFindingDtoSchema>;
+
+export const RiskFindingDetailDtoSchema = RiskFindingDtoSchema.extend({
+  auditEvents: z.array(RiskAuditEventDtoSchema)
+});
+export type RiskFindingDetailDto = z.infer<typeof RiskFindingDetailDtoSchema>;
+
+export const RiskFindingsResponseSchema = z.object({
+  sampleData: z.boolean(),
+  sampleDataLabel: z.string(),
+  items: z.array(RiskFindingDtoSchema),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false)
+});
+export type RiskFindingsResponse = z.infer<typeof RiskFindingsResponseSchema>;
+
+export const RiskWorkflowHistoryResponseSchema = z.object({
+  findingId: z.string(),
+  auditEvents: z.array(RiskAuditEventDtoSchema),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false)
+});
+export type RiskWorkflowHistoryResponse = z.infer<
+  typeof RiskWorkflowHistoryResponseSchema
+>;
+
+export const AcknowledgeFindingRequestSchema = z.object({
+  note: z.string().trim().max(1000).optional()
+});
+export type AcknowledgeFindingRequest = z.infer<
+  typeof AcknowledgeFindingRequestSchema
+>;
+
+export const AssignFindingRequestSchema = z.object({
+  ownerTeamId: z.string().trim().min(1).optional(),
+  assignedToUserId: z.string().trim().min(1).optional(),
+  priority: RiskPrioritySchema.optional(),
+  targetResolutionDate: OptionalFutureDateSchema.optional(),
+  businessImpact: z.string().trim().min(1).max(2000).optional()
+});
+export type AssignFindingRequest = z.infer<typeof AssignFindingRequestSchema>;
+
+export const PlanRemediationRequestSchema = z.object({
+  remediationPlan: z.string().trim().min(1).max(4000),
+  targetResolutionDate: OptionalFutureDateSchema.optional(),
+  businessImpact: z.string().trim().min(1).max(2000).optional()
+});
+export type PlanRemediationRequest = z.infer<
+  typeof PlanRemediationRequestSchema
+>;
+
+export const AcceptRiskRequestSchema = z.object({
+  riskAcceptanceReason: z.string().trim().min(10).max(4000),
+  riskAcceptedUntil: OptionalFutureDateSchema,
+  businessImpact: z.string().trim().min(1).max(2000).optional()
+});
+export type AcceptRiskRequest = z.infer<typeof AcceptRiskRequestSchema>;
+
+export const FalsePositiveRequestSchema = z.object({
+  reason: z.string().trim().min(5).max(2000)
+});
+export type FalsePositiveRequest = z.infer<typeof FalsePositiveRequestSchema>;
+
+export const ResolveFindingRequestSchema = z.object({
+  resolutionNote: z.string().trim().min(1).max(2000).optional()
+});
+export type ResolveFindingRequest = z.infer<
+  typeof ResolveFindingRequestSchema
+>;
+
+export const ArchiveFindingRequestSchema = z.object({
+  archiveReason: z.string().trim().min(1).max(2000).optional()
+});
+export type ArchiveFindingRequest = z.infer<
+  typeof ArchiveFindingRequestSchema
+>;
+
+export const ReopenFindingRequestSchema = z.object({
+  reason: z.string().trim().min(1).max(2000).optional()
+});
+export type ReopenFindingRequest = z.infer<typeof ReopenFindingRequestSchema>;
+
+export const RiskWorkflowActionDtoSchema = z.object({
+  finding: RiskFindingDtoSchema,
+  auditEvent: RiskAuditEventDtoSchema,
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false),
+  message: z.string()
+});
+export type RiskWorkflowActionDto = z.infer<
+  typeof RiskWorkflowActionDtoSchema
+>;
