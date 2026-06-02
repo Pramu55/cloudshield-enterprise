@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { BarChart3, CheckCircle2, FileJson, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { DashboardPage } from "../shared";
+import Link from "next/link";
 import { EmptyState, SampleDataNotice } from "../../../lib/ui";
 import {
   RefreshBadge,
@@ -183,6 +184,7 @@ export default function CompliancePage() {
   );
   const [evaluation, setEvaluation] = useState<EvaluationResponse | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("CIS-inspired controls");
 
   async function evaluateEvidence() {
     setIsEvaluating(true);
@@ -249,54 +251,64 @@ export default function CompliancePage() {
       {!data.controls.length ? (
         <EmptyState label="No compliance controls are available yet." />
       ) : (
-        <div className="grid gap-5">
-          {Object.entries(controlsByFramework).map(([framework, controls]) => (
-            <section className="rounded-md border border-line bg-white" key={framework}>
-              <div className="border-b border-line px-4 py-3">
-                <p className="text-sm font-semibold text-ink">{framework}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Consulting/client demo ready evidence view. Sample data remains labeled.
-                </p>
-              </div>
-              <div className="divide-y divide-line">
-                {controls.map((control) => (
-                  <article className="grid gap-3 p-4 lg:grid-cols-[1.4fr_0.7fr_0.7fr_0.5fr]" key={control.id}>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold uppercase text-brand">{control.controlCode}</span>
-                        <StatusPill status={control.status} />
-                        <span className="rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-slate-500">
-                          {control.severity}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm font-semibold text-ink">{control.controlTitle}</p>
-                      <p className="mt-1 text-sm leading-6 text-slate-600">{control.controlObjective}</p>
+        <div className="rounded-md border border-line bg-white">
+          <div className="border-b border-line flex overflow-x-auto">
+            {Object.keys(controlsByFramework).map(framework => (
+              <button
+                key={framework}
+                className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+                  activeTab === framework 
+                    ? "border-signal text-signal" 
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+                onClick={() => setActiveTab(framework)}
+              >
+                {framework}
+              </button>
+            ))}
+          </div>
+          <div className="p-4">
+            <p className="mt-1 mb-4 text-xs text-slate-500">
+              Consulting/client demo ready evidence view. Sample data remains labeled.
+            </p>
+            <div className="divide-y divide-line border border-line rounded-md">
+              {controlsByFramework[activeTab as keyof typeof controlsByFramework]?.map((control) => (
+                <article className="grid gap-3 p-4 lg:grid-cols-[1.4fr_0.7fr_0.7fr_0.5fr]" key={control.id}>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase text-brand">{control.controlCode}</span>
+                      <StatusPill status={control.status} />
+                      <span className="rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                        {control.severity}
+                      </span>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-slate-500">Evidence</p>
-                      <p className="mt-1 text-sm font-semibold text-ink">
-                        {control.evidenceCount} records
-                      </p>
-                      <p className="text-xs text-slate-500">{control.findingCount} linked findings</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-slate-500">Owner</p>
-                      <p className="mt-1 text-sm font-semibold text-ink">
-                        {control.ownerTeamName || "Unassigned"}
-                      </p>
-                      <p className="text-xs text-slate-500">{control.category}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-slate-500">Failed</p>
-                      <p className="mt-1 text-sm font-semibold text-ink">
-                        {control.failedResources} resources
-                      </p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ))}
+                    <p className="mt-2 text-sm font-semibold text-ink">{control.controlTitle}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{control.controlObjective}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-500">Evidence</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">
+                      {control.evidenceCount} records
+                    </p>
+                    <p className="text-xs text-slate-500">{control.findingCount} linked findings</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-500">Owner</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">
+                      {control.ownerTeamName || "Unassigned"}
+                    </p>
+                    <p className="text-xs text-slate-500">{control.category}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-500">Failed</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">
+                      {control.failedResources} resources
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -322,6 +334,11 @@ export default function CompliancePage() {
               </p>
             </div>
           ))}
+        </div>
+        <div className="mt-4 pt-3 border-t border-line text-right">
+          <Link href="/dashboard/reports" className="text-sm font-semibold text-signal hover:underline">
+            View generated reports & export previews &rarr;
+          </Link>
         </div>
       </section>
     </DashboardPage>

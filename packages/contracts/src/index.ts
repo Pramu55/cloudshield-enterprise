@@ -264,7 +264,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_COMPLIANCE_EVIDENCE_CENTER_GREEN",
   "CLOUDSHIELD_REPORTS_AND_EXPORTS_FOUNDATION_GREEN",
   "CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN",
-  "CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN"
+  "CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN",
+  "CLOUDSHIELD_REAL_WORLD_DYNAMIC_PLATFORM_FOUNDATION_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -1047,3 +1048,80 @@ export const ReportSummaryResponseSchema = ReportSafetyFlagsSchema.extend({
 export type ReportSummaryResponse = z.infer<
   typeof ReportSummaryResponseSchema
 >;
+
+// ── Dynamic Platform Readiness & Activity ───────────────────────────────
+
+export const DashboardActivityDtoSchema = z.object({
+  id: z.string(),
+  type: z.enum(["scan", "finding", "report", "risk_acceptance"]),
+  title: z.string(),
+  description: z.string(),
+  timestamp: z.string(),
+  status: z.string().nullable().optional()
+});
+export type DashboardActivityDto = z.infer<typeof DashboardActivityDtoSchema>;
+
+export const DashboardActivityResponseSchema = z.object({
+  activities: z.array(DashboardActivityDtoSchema)
+});
+export type DashboardActivityResponse = z.infer<typeof DashboardActivityResponseSchema>;
+
+export const AwsReadinessDtoSchema = z.object({
+  accountId: z.string(),
+  name: z.string(),
+  environment: z.string(),
+  regionCoverage: z.array(z.string()),
+  connectorStatus: z.string(),
+  scannerStatus: z.string(),
+  onboardingComplete: z.boolean()
+});
+export type AwsReadinessDto = z.infer<typeof AwsReadinessDtoSchema>;
+
+export const PlatformReadinessDtoSchema = z.object({
+  awsAccounts: z.array(AwsReadinessDtoSchema),
+  overallReadiness: z.string()
+});
+export type PlatformReadinessDto = z.infer<typeof PlatformReadinessDtoSchema>;
+
+export const SafetyStatusDtoSchema = z.object({
+  mutationEnabled: z.boolean(),
+  remediationExecutionEnabled: z.boolean(),
+  awsScannerEnabled: z.boolean(),
+  terraformApplyEnabled: z.boolean(),
+  environmentMode: z.string(),
+  credentialReadiness: z.string()
+});
+export type SafetyStatusDto = z.infer<typeof SafetyStatusDtoSchema>;
+
+export const SafetyStatusResponseSchema = z.object({
+  status: SafetyStatusDtoSchema,
+  message: z.string()
+});
+export type SafetyStatusResponse = z.infer<typeof SafetyStatusResponseSchema>;
+
+export const ResourceDetailDtoSchema = z.object({
+  id: z.string(),
+  resourceId: z.string(),
+  resourceType: z.string(),
+  name: z.string().nullable(),
+  region: z.string().nullable(),
+  awsAccount: z.object({
+    id: z.string(),
+    name: z.string(),
+    accountId: z.string()
+  }),
+  tags: z.record(z.string(), z.any()),
+  metadata: z.record(z.string(), z.any()),
+  findingsCount: z.number(),
+  complianceControlsCount: z.number()
+});
+export type ResourceDetailDto = z.infer<typeof ResourceDetailDtoSchema>;
+
+export const ResourceDetailResponseSchema = z.object({
+  resource: ResourceDetailDtoSchema,
+  relationships: z.array(z.any()),
+  sampleData: z.boolean()
+});
+export type ResourceDetailResponse = z.infer<typeof ResourceDetailResponseSchema>;
+
+

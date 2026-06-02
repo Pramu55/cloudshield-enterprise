@@ -5,6 +5,15 @@ import { ShieldAlert } from "lucide-react";
 import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
 import { DashboardPage } from "../shared";
 
+type Activity = {
+  id: string;
+  type: "scan" | "finding" | "report" | "risk_acceptance";
+  title: string;
+  description: string;
+  timestamp: string;
+  status: string;
+};
+
 const InstantInventoryPlan: AwsInventoryPlanResponse = {
   scannerMode: "disabled",
   inventoryScanningEnabled: false,
@@ -86,6 +95,13 @@ export default function ScansPage() {
     InstantInventoryPlan
   );
 
+  const { data: activityData } = useCloudShieldData<{ activities: Activity[] }>(
+    "/api/v1/dashboard/activity",
+    { activities: [] }
+  );
+
+  const recentScans = activityData?.activities.filter(a => a.type === "scan") || [];
+
   return (
     <DashboardPage
       title="Read-Only Scanner Plan"
@@ -137,6 +153,27 @@ export default function ScansPage() {
           title="Blocked operations"
           items={data.blockedMutationPatterns}
         />
+      </section>
+
+      <section className="mt-6 rounded-md border border-line bg-white p-5">
+        <h3 className="text-sm font-semibold text-ink mb-4">Recent Scan Jobs</h3>
+        {recentScans.length > 0 ? (
+          <div className="space-y-3">
+            {recentScans.map(scan => (
+              <div key={scan.id} className="flex items-center justify-between p-3 border border-slate-100 rounded bg-slate-50">
+                <div>
+                  <div className="text-sm font-semibold text-ink">{scan.title}</div>
+                  <div className="text-xs text-slate-500">{new Date(scan.timestamp).toLocaleString()}</div>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold px-2 py-1 rounded bg-slate-200 text-slate-700">{scan.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">No recent scans found.</p>
+        )}
       </section>
 
       <section className="mt-6 rounded-md border border-line bg-white p-5">

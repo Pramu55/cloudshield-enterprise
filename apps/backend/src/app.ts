@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
-import Fastify from "fastify";
+import Fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import { registerEnvPlugin } from "./plugins/env.js";
 import { registerErrorPlugin } from "./plugins/errors.js";
 import { registerAwsAccountRoutes } from "./routes/aws-account.routes.js";
@@ -13,19 +13,22 @@ import { registerReportRoutes } from "./routes/report.routes.js";
 import { registerDataRoutes } from "./routes/data.routes.js";
 import { registerAuthRoutes } from "./routes/auth.routes.js";
 import { registerPlatformRoutes } from "./routes/platform.routes.js";
+import { registerPlatformDynamicRoutes } from "./routes/platform-dynamic.routes.js";
 
-export async function buildApp() {
-  const app = Fastify({
-    logger: false
-  });
+export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
+  const app = Fastify(opts);
 
   await app.register(helmet);
   await app.register(cors, {
-    origin: true
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
   });
 
   await registerEnvPlugin(app);
   registerErrorPlugin(app);
+
+
+
   await registerPlatformRoutes(app);
   await registerAuthRoutes(app);
   await registerAwsAccountRoutes(app);
@@ -36,6 +39,7 @@ export async function buildApp() {
   await registerComplianceEvidenceRoutes(app);
   await registerReportRoutes(app);
   await registerDataRoutes(app);
+  await registerPlatformDynamicRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send({

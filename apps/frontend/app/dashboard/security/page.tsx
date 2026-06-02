@@ -141,9 +141,20 @@ export default function SecurityPage() {
   const [evalResult, setEvalResult] =
     useState<SecurityEvaluationResponse | null>(null);
 
+  const [filterSeverity, setFilterSeverity] = useState<string>("ALL");
+  const [filterStatus, setFilterStatus] = useState<string>("ALL");
+
   useEffect(() => {
     setFindings(riskData.items);
   }, [riskData.items]);
+
+  const filteredFindings = useMemo(() => {
+    return findings.filter(f => {
+      if (filterSeverity !== "ALL" && f.severity !== filterSeverity) return false;
+      if (filterStatus !== "ALL" && f.workflowStatus !== filterStatus) return false;
+      return true;
+    });
+  }, [findings, filterSeverity, filterStatus]);
 
   const activeCounts = useMemo(() => {
     return findings.reduce(
@@ -246,22 +257,74 @@ export default function SecurityPage() {
         <h3 className="text-sm font-semibold text-ink">
           Rules Catalog ({rulesData.rules.length} rules)
         </h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <p className="mt-2 text-sm leading-6 text-slate-600 mb-4">
           {rulesData.message} Rule evaluation does not call AWS and does not
           execute remediation.
         </p>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Rule ID</th>
+                <th className="px-4 py-3">Severity</th>
+                <th className="px-4 py-3">Description</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {rulesData.rules.map(rule => (
+                <tr key={rule.ruleId}>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-700">{rule.ruleId}</td>
+                  <td className="px-4 py-3"><span className={`rounded border px-2 py-0.5 text-xs font-bold ${SEVERITY_COLORS[rule.severity] || ""}`}>{rule.severity}</span></td>
+                  <td className="px-4 py-3 text-slate-600">{rule.title}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="rounded-md border border-line bg-white p-5">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="h-5 w-5 text-alert" />
-          <h3 className="text-sm font-semibold text-ink">
-            Risk workflow queue ({findings.length})
-          </h3>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-alert" />
+            <h3 className="text-sm font-semibold text-ink">
+              Risk workflow queue ({filteredFindings.length})
+            </h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <select 
+              value={filterSeverity} 
+              onChange={e => setFilterSeverity(e.target.value)}
+              className="rounded border border-line px-3 py-1.5 text-sm text-slate-700"
+            >
+              <option value="ALL">All Severities</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+              <option value="INFO">Info</option>
+            </select>
+            <select 
+              value={filterStatus} 
+              onChange={e => setFilterStatus(e.target.value)}
+              className="rounded border border-line px-3 py-1.5 text-sm text-slate-700"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="OPEN">Open</option>
+              <option value="ACKNOWLEDGED">Acknowledged</option>
+              <option value="ASSIGNED">Assigned</option>
+              <option value="REMEDIATION_PLANNED">Remediation Planned</option>
+              <option value="RISK_ACCEPTED">Risk Accepted</option>
+              <option value="RESOLVED">Resolved</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+          </div>
         </div>
 
         <div className="mt-4 space-y-4">
-          {findings.map((finding) => (
+          {filteredFindings.length === 0 ? (
+            <p className="text-sm text-slate-500 py-4">No findings match the selected filters.</p>
+          ) : filteredFindings.map((finding) => (
             <div key={finding.id} className="rounded-md border border-line p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`rounded border px-2 py-0.5 text-xs font-bold ${SEVERITY_COLORS[finding.severity] || ""}`}>

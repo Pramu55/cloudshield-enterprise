@@ -305,17 +305,33 @@ export default function ReportsPage() {
           JSON preview records only. Binary PDF/CSV exports and signed evidence packs are future scope.
         </p>
         {data.recentReports.length ? (
-          <div className="mt-4 divide-y divide-line">
-            {data.recentReports.map((report) => (
-              <div className="grid gap-2 py-3 md:grid-cols-[1fr_160px_140px]" key={report.id}>
-                <div>
-                  <p className="text-sm font-semibold text-ink">{report.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">{report.reportType}</p>
-                </div>
-                <p className="text-sm text-slate-600">{report.status}</p>
-                <p className="text-sm text-slate-600">{report.format}</p>
-              </div>
-            ))}
+          <div className="mt-4 overflow-x-auto rounded border border-line">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Report Title</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Format</th>
+                  <th className="px-4 py-3">Safety Mode</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {data.recentReports.map((report) => (
+                  <tr key={report.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 font-semibold text-ink">{report.title}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500">{report.reportType}</td>
+                    <td className="px-4 py-3 text-slate-600">{report.status}</td>
+                    <td className="px-4 py-3 text-slate-600">{report.format}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded bg-sky-100 text-sky-800 px-2 py-1 text-xs font-semibold whitespace-nowrap">
+                        Internal Preview Only
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <EmptyState label="No report export records have been created yet." />

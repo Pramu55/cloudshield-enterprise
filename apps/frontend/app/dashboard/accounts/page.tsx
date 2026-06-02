@@ -11,6 +11,20 @@ import { useEffect, useState } from "react";
 import { RefreshBadge, fetchCloudShieldClient } from "../../../lib/client-api";
 import { DashboardPage } from "../shared";
 import { AccountRegistryClient } from "./registry-client";
+import { CheckCircle2, CircleDashed, ArrowRight } from "lucide-react";
+
+type ReadinessResponse = {
+  awsAccounts: Array<{
+    accountId: string;
+    name: string;
+    environment: string;
+    regionCoverage: string[];
+    connectorStatus: string;
+    scannerStatus: string;
+    onboardingComplete: boolean;
+  }>;
+  overallReadiness: string;
+};
 
 const now = new Date(0).toISOString();
 
@@ -176,6 +190,7 @@ export default function AccountsPage() {
   const [setupGuide, setSetupGuide] = useState(InstantSetupGuide);
   const [connectorStatus, setConnectorStatus] = useState(InstantConnectorStatus);
   const [inventoryPlan, setInventoryPlan] = useState(InstantInventoryPlan);
+  const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -186,9 +201,10 @@ export default function AccountsPage() {
       fetchCloudShieldClient<AwsAccountListResponse>("/api/v1/aws/accounts"),
       fetchCloudShieldClient<AwsSetupGuideResponse>("/api/v1/aws/setup-guide"),
       fetchCloudShieldClient<AwsConnectorStatusResponse>("/api/v1/aws/connector/status"),
-      fetchCloudShieldClient<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan")
+      fetchCloudShieldClient<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan"),
+      fetchCloudShieldClient<ReadinessResponse>("/api/v1/dashboard/readiness")
     ])
-      .then(([accountResponse, guideResponse, connectorResponse, inventoryResponse]) => {
+      .then(([accountResponse, guideResponse, connectorResponse, inventoryResponse, readinessResponse]) => {
         if (!isActive) {
           return;
         }
@@ -197,6 +213,7 @@ export default function AccountsPage() {
         setSetupGuide(guideResponse);
         setConnectorStatus(connectorResponse);
         setInventoryPlan(inventoryResponse);
+        setReadiness(readinessResponse);
         setError(null);
       })
       .catch(() => {
@@ -221,6 +238,65 @@ export default function AccountsPage() {
       description="Organization-scoped AWS account control plane for ownership, environment context, read-only validation posture, and governance metadata."
     >
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+      
+      {readiness && (
+        <div className="mb-8 space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-md border border-line bg-white p-5">
+              <h3 className="text-sm font-semibold text-ink mb-4">Onboarding Readiness</h3>
+              <div className="space-y-3">
+                {readiness.awsAccounts.map(acc => (
+                  <div key={acc.accountId} className="flex items-center justify-between p-3 border border-slate-100 rounded bg-slate-50">
+                    <div>
+                      <div className="text-sm font-semibold text-ink">{acc.name}</div>
+                      <div className="text-xs text-slate-500">
+                        {acc.environment} | Regions: {acc.regionCoverage.join(", ")}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {acc.onboardingComplete ? (
+                        <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
+                          <CheckCircle2 size={14} /> Ready
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                          <CircleDashed size={14} /> Incomplete
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-md border border-line bg-white p-5">
+              <h3 className="text-sm font-semibold text-ink mb-4">What to configure next</h3>
+              <ul className="space-y-4">
+                <li className="flex gap-3">
+                  <div className="mt-0.5"><CircleDashed size={18} className="text-amber-500" /></div>
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Configure AWS Connector</p>
+                    <p className="text-xs text-slate-600 mt-1">Enable read-only validation for your environments to begin scanning.</p>
+                  </div>
+                </li>
+                <li className="flex gap-3">
+                  <div className="mt-0.5"><CircleDashed size={18} className="text-amber-500" /></div>
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Enable Inventory Scanner</p>
+                    <p className="text-xs text-slate-600 mt-1">Turn on automated discovery for supported AWS resources.</p>
+                  </div>
+                </li>
+              </ul>
+              <div className="mt-5 pt-4 border-t border-line">
+                <button className="flex items-center gap-2 text-sm font-semibold text-signal hover:text-signal-dark transition-colors">
+                  View documentation <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <AccountRegistryClient
         initialAccounts={accounts}
         setupGuide={setupGuide}
