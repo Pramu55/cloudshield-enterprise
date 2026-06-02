@@ -84,22 +84,22 @@ export default function DashboardHome() {
         <div className="rounded-md border border-line bg-white p-5">
           <Server className="text-signal" size={22} />
           <p className="mt-4 text-sm text-slate-500 font-medium">AWS Account Governance</p>
-          <p className="mt-1 text-3xl font-semibold text-ink">{summary.counts.awsAccounts}</p>
+          <p className="mt-1 text-3xl font-semibold text-ink">{summary?.counts?.awsAccounts ?? 0}</p>
         </div>
         <div className="rounded-md border border-line bg-white p-5">
           <BarChart3 className="text-signal" size={22} />
           <p className="mt-4 text-sm text-slate-500 font-medium">Resource Inventory</p>
-          <p className="mt-1 text-3xl font-semibold text-ink">{summary.counts.resources}</p>
+          <p className="mt-1 text-3xl font-semibold text-ink">{summary?.counts?.resources ?? 0}</p>
         </div>
         <div className="rounded-md border border-red-200 bg-red-50 p-5">
           <ShieldAlert className="text-red-600" size={22} />
           <p className="mt-4 text-sm text-red-800 font-medium">Open / High Risk Findings</p>
-          <p className="mt-1 text-3xl font-bold text-red-900">{summary.counts.highRiskFindings} <span className="text-sm font-normal text-red-700">/ {summary.counts.securityFindings} total</span></p>
+          <p className="mt-1 text-3xl font-bold text-red-900">{summary?.counts?.highRiskFindings ?? 0} <span className="text-sm font-normal text-red-700">/ {summary?.counts?.securityFindings ?? 0} total</span></p>
         </div>
         <div className="rounded-md border border-amber-200 bg-amber-50 p-5">
           <AlertTriangle className="text-amber-600" size={22} />
           <p className="mt-4 text-sm text-amber-800 font-medium">Accepted Risks</p>
-          <p className="mt-1 text-3xl font-bold text-amber-900">{summary.counts.acceptedRisks}</p>
+          <p className="mt-1 text-3xl font-bold text-amber-900">{summary?.counts?.acceptedRisks ?? 0}</p>
         </div>
       </div>
 
@@ -108,21 +108,21 @@ export default function DashboardHome() {
         <div className="rounded-md border border-line bg-white p-4 flex items-center justify-between">
           <div>
             <p className="text-sm text-slate-500 font-medium">Compliance Evidence Readiness</p>
-            <p className="text-2xl font-semibold text-ink">{summary.counts.complianceControls} controls</p>
+            <p className="text-2xl font-semibold text-ink">{summary?.counts?.complianceControls ?? 0} controls</p>
           </div>
           <FileCheck2 className="text-slate-400" size={28} />
         </div>
         <div className="rounded-md border border-line bg-white p-4 flex items-center justify-between">
           <div>
             <p className="text-sm text-slate-500 font-medium">Reports & Exports Ready</p>
-            <p className="text-2xl font-semibold text-ink">{summary.counts.reportsReady} reports</p>
+            <p className="text-2xl font-semibold text-ink">{summary?.counts?.reportsReady ?? 0} reports</p>
           </div>
           <FileText className="text-slate-400" size={28} />
         </div>
         <div className="rounded-md border border-line bg-white p-4 flex items-center justify-between">
           <div>
             <p className="text-sm text-slate-500 font-medium">Review-Only Recommendations</p>
-            <p className="text-2xl font-semibold text-ink">{summary.counts.recommendations} actions</p>
+            <p className="text-2xl font-semibold text-ink">{summary?.counts?.recommendations ?? 0} actions</p>
           </div>
           <WalletCards className="text-slate-400" size={28} />
         </div>
@@ -138,7 +138,7 @@ export default function DashboardHome() {
           <div className="mt-3 space-y-2 text-sm text-slate-600">
             <div className="flex justify-between border-b pb-1">
               <span>Scanner Mode</span>
-              <span className="font-mono bg-slate-100 px-2 rounded">{summary.scannerStatus.mode}</span>
+              <span className="font-mono bg-slate-100 px-2 rounded">{summary?.scannerStatus?.mode ?? "disabled"}</span>
             </div>
             <div className="flex justify-between border-b pb-1">
               <span>AWS API Executed</span>
@@ -159,11 +159,11 @@ export default function DashboardHome() {
           <div className="mt-3 space-y-2 text-sm text-slate-600">
             <div className="flex justify-between border-b pb-1">
               <span>Connector Mode</span>
-              <span className="font-mono bg-slate-100 px-2 rounded">{summary.connectorStatus.mode}</span>
+              <span className="font-mono bg-slate-100 px-2 rounded">{summary?.connectorStatus?.mode ?? "disabled"}</span>
             </div>
             <div className="flex justify-between">
               <span>Configured</span>
-              <span className="font-mono bg-slate-100 px-2 rounded">{summary.connectorStatus.configured ? "Yes" : "No"}</span>
+              <span className="font-mono bg-slate-100 px-2 rounded">{summary?.connectorStatus?.configured ? "Yes" : "No"}</span>
             </div>
           </div>
         </div>
