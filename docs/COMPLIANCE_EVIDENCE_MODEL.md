@@ -55,3 +55,16 @@ CloudShield does not claim official CIS certification, SOC2 certification, audit
 * Findings contain evidence and business impact.
 * Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
 * Sample/demo data remains clearly labeled.
+## Evidence Center Upgrade
+
+The compliance evidence model now includes a dedicated evidence center foundation. Controls include framework, control code, objective, category, severity, status, finding count, evidence count, failed resources, and last evaluation time.
+
+Evidence records include source type, source id, summary, evidence JSON, confidence, notes, sample/demo labeling, and organization scope.
+
+Allowed language remains:
+
+- CIS-inspired controls
+- SOC2-inspired evidence
+- internal cloud governance evidence
+
+CloudShield does not claim official CIS/SOC2 certification. Compliance evaluation generates evidence from CloudShield records only and does not trigger AWS scans or AWS changes.

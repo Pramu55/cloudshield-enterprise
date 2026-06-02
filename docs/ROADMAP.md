@@ -144,3 +144,14 @@ Planned:
 * Findings contain evidence and business impact.
 * Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
 * Sample/demo data remains clearly labeled.
+## Compliance Evidence Center Foundation
+
+`CLOUDSHIELD_COMPLIANCE_EVIDENCE_CENTER_GREEN` adds the first evidence center foundation:
+
+- Initial CIS-inspired control catalog
+- Initial SOC2-inspired evidence catalog
+- Internal cloud governance controls
+- Evidence mapping from CloudShield findings, risk acceptances, audit events, and recommendations
+- JSON export preview foundation
+
+This milestone does not add AWS scanning, AWS mutation, automatic remediation, Terraform apply, official CIS/SOC2 certification claims, or real customer deployment claims.

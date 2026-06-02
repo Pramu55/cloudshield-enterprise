@@ -41,6 +41,7 @@ CloudShield provides the foundation for that operating model without automatic r
 - AWS inventory scanner read-only plan with execution blocked
 - Sample/demo inventory, findings, compliance evidence, and recommendations
 - Security finding risk workflow with ownership, priority, acceptance, and audit events
+- Compliance Evidence Center for CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence
 - Review-only recommendation model with execution blocked
 
 ## Safety Model
@@ -170,6 +171,12 @@ POST /api/v1/risk/findings/:findingId/acknowledge
 POST /api/v1/risk/findings/:findingId/assign
 POST /api/v1/risk/findings/:findingId/plan-remediation
 POST /api/v1/risk/findings/:findingId/accept-risk
+GET /api/v1/compliance/evidence-center
+GET /api/v1/compliance/controls
+GET /api/v1/compliance/controls/:controlId
+POST /api/v1/compliance/evaluate
+GET /api/v1/compliance/evidence
+GET /api/v1/compliance/export/preview
 ```
 
 Protected routes require `Authorization: Bearer <token>` and must derive tenant scope from the authenticated organization context.
@@ -188,6 +195,7 @@ Implemented foundation:
 - AWS inventory read-only scanner plan with disabled execution gate
 - Security posture rules foundation
 - Risk workflow and ownership foundation
+- Compliance evidence center foundation
 
 ## Future Roadmap
 

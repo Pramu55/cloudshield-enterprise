@@ -17,3 +17,8 @@ This document outlines the security posture rules implementation for CloudShield
 Security findings now feed the enterprise risk workflow foundation. Reviewers can acknowledge, assign, plan review-only remediation, accept risk with business justification, mark false positive, resolve, archive, or reopen findings.
 
 These workflow actions update CloudShield database records and audit events only. They do not call AWS, mutate cloud resources, execute automatic remediation, or run Terraform apply.
+## Compliance Evidence Integration
+
+Security posture findings can be mapped into the Compliance Evidence Center as CIS-inspired controls, SOC2-inspired evidence, or internal cloud governance evidence. The mapping uses stored CloudShield records only.
+
+Rule evaluation and compliance evaluation remain separate from AWS scanning. No AWS scan, AWS mutation, automatic remediation, or Terraform apply is triggered by evidence generation.

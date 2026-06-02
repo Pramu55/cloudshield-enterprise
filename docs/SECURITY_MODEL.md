@@ -127,3 +127,16 @@ Risk acceptance requires business justification and an expiration date. Remediat
 * Findings contain evidence and business impact.
 * Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
 * Sample/demo data remains clearly labeled.
+## Compliance Evidence Center Safety
+
+Compliance evaluation is an internal CloudShield database workflow. It uses authenticated organization scope and maps only existing CloudShield records into CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence.
+
+Safety guarantees:
+
+- No AWS scan is triggered by compliance evaluation.
+- No AWS inventory API is called.
+- No AWS mutation is executed.
+- No automatic remediation is executed.
+- No Terraform apply is executed.
+- No official CIS/SOC2 certification is claimed.
+- Sample/demo evidence remains labeled.

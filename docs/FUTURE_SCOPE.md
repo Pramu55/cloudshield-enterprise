@@ -15,6 +15,7 @@ The platform direction is an AWS governance control plane for company IT, cloud 
 - SOC2-inspired evidence
 - Internal cloud governance evidence
 - Compliance evidence center
+- Evidence export preview and retention workflow
 - Risk workflow and ownership
 - Risk acceptance and audit trail
 - Cloud risk graph

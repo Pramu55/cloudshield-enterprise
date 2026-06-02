@@ -147,3 +147,8 @@ This path is a production deployment roadmap, not a claim that the current repos
 * Findings contain evidence and business impact.
 * Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
 * Sample/demo data remains clearly labeled.
+## Compliance Evidence Center Direction
+
+CloudShield's client-evaluation ready blueprint now includes a Compliance Evidence Center for enterprise cloud governance conversations. It presents CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence generated from CloudShield records.
+
+The blueprint remains a future-scope enterprise platform plan. It does not claim deployment to Accenture, does not claim Accenture is a customer, and does not claim any real client deployment.

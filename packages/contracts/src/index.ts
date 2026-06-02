@@ -198,8 +198,22 @@ export type RiskWorkflowStatus = z.infer<typeof RiskWorkflowStatusSchema>;
 export const RiskPrioritySchema = z.enum(["P0", "P1", "P2", "P3", "P4"]);
 export type RiskPriority = z.infer<typeof RiskPrioritySchema>;
 
-export const ComplianceStatusSchema = z.enum(["PASS", "FAIL", "WARNING"]);
+export const ComplianceStatusSchema = z.enum([
+  "PASS",
+  "FAIL",
+  "WARNING",
+  "NEEDS_REVIEW",
+  "NOT_APPLICABLE",
+  "NOT_EVALUATED"
+]);
 export type ComplianceStatus = z.infer<typeof ComplianceStatusSchema>;
+
+export const ComplianceFrameworkSchema = z.enum([
+  "CIS_INSPIRED",
+  "SOC2_INSPIRED",
+  "INTERNAL_GOVERNANCE"
+]);
+export type ComplianceFramework = z.infer<typeof ComplianceFrameworkSchema>;
 
 export const ScanRunStatusSchema = z.enum([
   "QUEUED",
@@ -246,7 +260,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_ENTERPRISE_CLIENT_PLATFORM_BLUEPRINT_GREEN",
   "CLOUDSHIELD_AWS_INVENTORY_READONLY_SCANNER_PLAN_GREEN",
   "CLOUDSHIELD_SECURITY_POSTURE_RULES_FOUNDATION_GREEN",
-  "CLOUDSHIELD_RISK_WORKFLOW_AND_OWNERSHIP_GREEN"
+  "CLOUDSHIELD_RISK_WORKFLOW_AND_OWNERSHIP_GREEN",
+  "CLOUDSHIELD_COMPLIANCE_EVIDENCE_CENTER_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -756,4 +771,141 @@ export const RiskWorkflowActionDtoSchema = z.object({
 });
 export type RiskWorkflowActionDto = z.infer<
   typeof RiskWorkflowActionDtoSchema
+>;
+
+// Compliance Evidence Center
+
+export const ComplianceEvidenceDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  controlId: z.string(),
+  controlCode: z.string(),
+  resourceId: z.string().nullable(),
+  resourceName: z.string().nullable(),
+  resourceType: z.string().nullable(),
+  status: ComplianceStatusSchema,
+  evidenceType: z.string(),
+  source: z.string(),
+  sourceType: z.string(),
+  sourceId: z.string().nullable(),
+  summary: z.string(),
+  evidenceJson: z.record(z.string(), z.any()),
+  sampleData: z.boolean(),
+  confidence: z.string(),
+  notes: z.string().nullable(),
+  collectedAt: z.string(),
+  createdAt: z.string()
+});
+export type ComplianceEvidenceDto = z.infer<
+  typeof ComplianceEvidenceDtoSchema
+>;
+
+export const ComplianceControlDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  controlId: z.string(),
+  framework: ComplianceFrameworkSchema,
+  controlCode: z.string(),
+  controlTitle: z.string(),
+  controlDescription: z.string(),
+  controlObjective: z.string(),
+  category: z.string(),
+  severity: FindingSeveritySchema,
+  group: z.string(),
+  title: z.string(),
+  description: z.string(),
+  status: ComplianceStatusSchema,
+  evidenceCount: z.number().int(),
+  findingCount: z.number().int(),
+  failedResources: z.number().int(),
+  ownerTeamId: z.string().nullable(),
+  ownerTeamName: z.string().nullable(),
+  lastScanAt: z.string().nullable(),
+  lastEvaluatedAt: z.string().nullable(),
+  sampleData: z.boolean()
+});
+export type ComplianceControlDto = z.infer<typeof ComplianceControlDtoSchema>;
+
+const ComplianceEvidenceSafetySchema = z.object({
+  sampleData: z.literal(true),
+  sampleDataLabel: z.literal(
+    "Sample demo data - real AWS scanning is not enabled yet."
+  ),
+  officialCertificationClaim: z.literal(false),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false),
+  generatedFromCloudShieldRecordsOnly: z.literal(true),
+  message: z.string()
+});
+
+export const ComplianceEvidenceCenterResponseSchema =
+  ComplianceEvidenceSafetySchema.extend({
+    summary: z.object({
+      totalControls: z.number().int(),
+      pass: z.number().int(),
+      fail: z.number().int(),
+      warning: z.number().int(),
+      needsReview: z.number().int(),
+      evidenceItems: z.number().int(),
+      linkedFindings: z.number().int(),
+      riskAccepted: z.number().int(),
+      lastEvaluatedAt: z.string().nullable()
+    }),
+    controls: z.array(ComplianceControlDtoSchema),
+    evidence: z.array(ComplianceEvidenceDtoSchema)
+  });
+export type ComplianceEvidenceCenterResponse = z.infer<
+  typeof ComplianceEvidenceCenterResponseSchema
+>;
+
+export const ComplianceControlListResponseSchema =
+  ComplianceEvidenceSafetySchema.extend({
+    items: z.array(ComplianceControlDtoSchema)
+  });
+export type ComplianceControlListResponse = z.infer<
+  typeof ComplianceControlListResponseSchema
+>;
+
+export const ComplianceControlDetailResponseSchema =
+  ComplianceEvidenceSafetySchema.extend({
+    item: ComplianceControlDtoSchema,
+    evidence: z.array(ComplianceEvidenceDtoSchema)
+  });
+export type ComplianceControlDetailResponse = z.infer<
+  typeof ComplianceControlDetailResponseSchema
+>;
+
+export const ComplianceEvidenceListResponseSchema =
+  ComplianceEvidenceSafetySchema.extend({
+    items: z.array(ComplianceEvidenceDtoSchema)
+  });
+export type ComplianceEvidenceListResponse = z.infer<
+  typeof ComplianceEvidenceListResponseSchema
+>;
+
+export const ComplianceEvaluationResponseSchema =
+  ComplianceEvidenceSafetySchema.extend({
+    evaluatedControlCount: z.number().int(),
+    evidenceGenerated: z.number().int(),
+    updatedControlIds: z.array(z.string())
+  });
+export type ComplianceEvaluationResponse = z.infer<
+  typeof ComplianceEvaluationResponseSchema
+>;
+
+export const ComplianceExportPreviewResponseSchema =
+  ComplianceEvidenceSafetySchema.extend({
+    format: z.literal("json-preview"),
+    exportReady: z.literal(false),
+    preview: z.object({
+      controls: z.array(ComplianceControlDtoSchema),
+      evidenceCount: z.number().int(),
+      certificationDisclaimer: z.literal(
+        "No official CIS/SOC2 certification is claimed."
+      )
+    })
+  });
+export type ComplianceExportPreviewResponse = z.infer<
+  typeof ComplianceExportPreviewResponseSchema
 >;

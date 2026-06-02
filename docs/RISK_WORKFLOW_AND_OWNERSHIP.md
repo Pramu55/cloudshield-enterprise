@@ -51,3 +51,8 @@ Audit event metadata is sanitized and must not contain secrets.
 - No Terraform apply is available.
 - Sample/demo data remains clearly labeled.
 - Compliance wording remains limited to CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence.
+## Compliance Evidence Integration
+
+Risk workflow records feed the Compliance Evidence Center. Security finding ownership, remediation planning, risk acceptance, and workflow audit events can be mapped into internal cloud governance evidence and SOC2-inspired evidence.
+
+This integration is evidence-only. It does not execute remediation, does not call AWS APIs, and does not claim official compliance certification.

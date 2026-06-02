@@ -470,17 +470,45 @@ async function main() {
   ]);
 
   const controls = await Promise.all([
-    createControl(organization.id, securityTeam.id, "CS-CIS-NET-001", "Network Exposure Control", "CIS-inspired network exposure control", "FAIL", 1, 1),
-    createControl(organization.id, securityTeam.id, "CS-CIS-ENC-001", "Encryption at Rest", "CIS-inspired encryption at rest control", "FAIL", 1, 1),
-    createControl(organization.id, securityTeam.id, "CS-SOC2-IAM-001", "IAM Access Governance", "SOC2-inspired access governance evidence", "WARNING", 1, 1),
-    createControl(organization.id, finopsTeam.id, "CS-INT-COST-001", "Cost Tagging Hygiene", "Internal cost tagging hygiene control", "WARNING", 1, 1)
+    createControl(organization.id, securityTeam.id, "CIS-NETWORK-001", "CIS-inspired controls", "Public SSH exposure should be restricted", "Reviews CloudShield security findings for public SSH exposure evidence.", "Reduce administrative network exposure using internal governance evidence.", "Network exposure", "HIGH", "FAIL", 1, 1),
+    createControl(organization.id, securityTeam.id, "CIS-NETWORK-002", "CIS-inspired controls", "Public RDP exposure should be restricted", "Prepared control for reviewing public RDP exposure when findings exist.", "Keep remote administration exposure reviewable and owner-scoped.", "Network exposure", "HIGH", "NOT_APPLICABLE", 0, 0),
+    createControl(organization.id, securityTeam.id, "CIS-STORAGE-001", "CIS-inspired controls", "Attached storage should use encryption at rest", "Reviews CloudShield findings for storage encryption posture.", "Provide internal evidence for encryption-at-rest governance.", "Storage encryption", "MEDIUM", "FAIL", 1, 1),
+    createControl(organization.id, platformTeam.id, "CIS-TAGGING-001", "CIS-inspired controls", "Cloud resources should include owner and environment tags", "Reviews cost and inventory records for ownership tag evidence.", "Improve ownership and allocation accountability.", "Tagging", "LOW", "WARNING", 1, 1),
+    createControl(organization.id, securityTeam.id, "SOC2-ACCESS-001", "SOC2-inspired evidence", "Access governance evidence should be reviewable", "Reviews privileged IAM posture findings and ownership workflow.", "Support SOC2-inspired access governance evidence without certification claims.", "Access governance", "HIGH", "WARNING", 1, 1),
+    createControl(organization.id, securityTeam.id, "SOC2-CHANGE-001", "SOC2-inspired evidence", "Remediation planning and risk decisions should be auditable", "Reviews risk workflow audit events and remediation plans.", "Show change governance evidence generated from CloudShield workflow records.", "Change governance", "MEDIUM", "NEEDS_REVIEW", 0, 0),
+    createControl(organization.id, securityTeam.id, "SOC2-MONITORING-001", "SOC2-inspired evidence", "Cloud risk findings should have evidence and lifecycle state", "Reviews finding lifecycle state and evidence summaries.", "Keep risk monitoring evidence reviewable for client evaluation.", "Monitoring", "MEDIUM", "WARNING", 3, 3),
+    createControl(organization.id, securityTeam.id, "INT-RISK-001", "internal cloud governance evidence", "High-risk findings require ownership", "Reviews high-risk findings for owner team and assignee evidence.", "Make risk ownership visible for company IT-level governance.", "Risk ownership", "HIGH", "WARNING", 2, 2),
+    createControl(organization.id, securityTeam.id, "INT-RISK-002", "internal cloud governance evidence", "Risk acceptance requires business justification and expiry", "Reviews risk acceptance records for justification and expiration metadata.", "Keep accepted risk accountable and time-bounded.", "Risk acceptance", "MEDIUM", "NEEDS_REVIEW", 0, 0),
+    createControl(organization.id, finopsTeam.id, "INT-COST-001", "internal cloud governance evidence", "Cost ownership tags should be present", "Reviews cost governance findings for missing ownership tags.", "Support FinOps ownership evidence from CloudShield records.", "Cost governance", "LOW", "WARNING", 1, 1)
   ]);
 
   await Promise.all(
     controls.map((control) =>
       prisma.complianceEvidence.upsert({
         where: { id: `sample-evidence-${control.controlId.toLowerCase()}` },
-        update: {},
+        update: {
+          status: control.status,
+          evidence: { sampleData: true, note: "Sample demo data - real AWS scanning is not enabled yet." },
+          evidenceType: control.group,
+          source: control.group.includes("SOC2")
+            ? "SOC2-inspired evidence"
+            : control.group.includes("CIS")
+              ? "CIS-inspired controls"
+              : "internal cloud governance evidence",
+          sourceType: "seeded_cloudshield_record",
+          sourceId: control.controlId,
+          summary: `${control.controlCode ?? control.controlId}: ${control.title}`,
+          evidenceJson: {
+            sampleData: true,
+            generatedFromCloudShieldRecordsOnly: true,
+            awsApiCallExecuted: false,
+            mutationExecuted: false
+          },
+          sampleData: true,
+          confidence: "medium",
+          notes: "Internal governance evidence only. No official CIS/SOC2 certification is claimed.",
+          collectedAt: new Date()
+        },
         create: {
           id: `sample-evidence-${control.controlId.toLowerCase()}`,
           organizationId: organization.id,
@@ -490,7 +518,21 @@ async function main() {
           evidenceType: control.group,
           source: control.group.includes("SOC2")
             ? "SOC2-inspired evidence"
-            : "internal cloud governance evidence"
+            : control.group.includes("CIS")
+              ? "CIS-inspired controls"
+              : "internal cloud governance evidence",
+          sourceType: "seeded_cloudshield_record",
+          sourceId: control.controlId,
+          summary: `${control.controlCode ?? control.controlId}: ${control.title}`,
+          evidenceJson: {
+            sampleData: true,
+            generatedFromCloudShieldRecordsOnly: true,
+            awsApiCallExecuted: false,
+            mutationExecuted: false
+          },
+          sampleData: true,
+          confidence: "medium",
+          notes: "Internal governance evidence only. No official CIS/SOC2 certification is claimed."
         }
       })
     )
@@ -573,10 +615,20 @@ async function createControl(
   controlId: string,
   group: string,
   title: string,
-  status: "PASS" | "FAIL" | "WARNING",
+  description: string,
+  objective: string,
+  category: string,
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO",
+  status: "PASS" | "FAIL" | "WARNING" | "NEEDS_REVIEW" | "NOT_APPLICABLE" | "NOT_EVALUATED",
   evidenceCount: number,
   failedResources: number
 ) {
+  const framework = group.includes("CIS")
+    ? "CIS_INSPIRED"
+    : group.includes("SOC2")
+      ? "SOC2_INSPIRED"
+      : "INTERNAL_GOVERNANCE";
+
   return prisma.complianceControl.upsert({
     where: {
       organizationId_controlId: {
@@ -585,23 +637,43 @@ async function createControl(
       }
     },
     update: {
+      framework,
+      controlCode: controlId,
+      controlTitle: title,
+      controlDescription: description,
+      controlObjective: objective,
+      category,
+      severity,
       group,
       title,
+      description: `${description} Internal governance evidence only. No official CIS/SOC2 certification is claimed.`,
       status,
       evidenceCount,
+      findingCount: failedResources,
       failedResources,
-      lastScanAt: new Date()
+      lastScanAt: new Date(),
+      lastEvaluatedAt: new Date(),
+      ownerTeamId
     },
     create: {
       organizationId,
       controlId,
+      framework,
+      controlCode: controlId,
+      controlTitle: title,
+      controlDescription: description,
+      controlObjective: objective,
+      category,
+      severity,
       group,
       title,
-      description: `${title}. Sample demo data - real AWS scanning is not enabled yet.`,
+      description: `${description} Internal governance evidence only. No official CIS/SOC2 certification is claimed.`,
       status,
       evidenceCount,
+      findingCount: failedResources,
       failedResources,
       lastScanAt: new Date(),
+      lastEvaluatedAt: new Date(),
       ownerTeamId
     }
   });

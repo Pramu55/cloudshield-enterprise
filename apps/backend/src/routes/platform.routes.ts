@@ -31,7 +31,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/v1/platform/status", async () => {
-    const milestone = "CLOUDSHIELD_RISK_WORKFLOW_AND_OWNERSHIP_GREEN";
+    const milestone = "CLOUDSHIELD_COMPLIANCE_EVIDENCE_CENTER_GREEN";
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,
@@ -67,6 +67,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
         "read-only AWS connector status and STS identity validation path",
         "AWS inventory scanner read-only API plan and disabled execution gate",
         "security finding risk workflow, ownership, and audit trail foundation",
+        "compliance evidence center for CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence",
         "sample/demo governance data for local evaluation",
         "non-executable remediation recommendation model"
       ],

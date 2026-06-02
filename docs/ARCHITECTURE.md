@@ -29,6 +29,7 @@ The current product direction is an enterprise-client-ready AWS governance contr
 - AWS connector routes expose safe readiness and read-only validation status. The default connector mode is disabled; the only enabled AWS SDK action in this milestone is STS `GetCallerIdentity`.
 - AWS inventory routes expose the future scanner plan only. They do not enqueue scanner jobs or execute EC2, S3, IAM, Security Group, EBS, VPC, subnet, RDS, Lambda, CloudTrail, KMS, or billing inventory APIs.
 - Risk workflow routes turn security findings into organization-scoped ownership, SLA, risk acceptance, and audit records. They update CloudShield database records only.
+- Compliance evidence routes map CloudShield security findings, cost findings, risk acceptances, audit events, and recommendations into CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence. Evaluation uses CloudShield records only and returns `awsApiCallExecuted=false`, `mutationExecuted=false`, and `remediationExecuted=false`.
 
 ## Data Boundary
 
@@ -87,6 +88,19 @@ The backend module at `apps/backend/src/modules/risk-workflow` provides tenant-s
 
 Supported lifecycle states are `OPEN`, `ACKNOWLEDGED`, `ASSIGNED`, `REMEDIATION_PLANNED`, `RISK_ACCEPTED`, `FALSE_POSITIVE`, `RESOLVED`, `ARCHIVED`, and `REOPENED`.
 
+## Compliance Evidence Center
+
+The backend module at `apps/backend/src/modules/compliance-evidence` provides the evidence center foundation. It owns the initial control catalog, evidence mapping policy, DTO mapping, and deterministic evaluation service.
+
+The current evidence center:
+
+- Generates evidence from CloudShield database records only.
+- Does not trigger AWS scanning.
+- Does not call AWS inventory APIs.
+- Does not execute AWS changes, automatic remediation, or Terraform apply.
+- Does not claim official CIS/SOC2 certification.
+- Keeps sample/demo records clearly labeled.
+
 ## Enterprise Blueprint References
 
 - `docs/ENTERPRISE_CLIENT_BLUEPRINT.md`
@@ -95,6 +109,7 @@ Supported lifecycle states are `OPEN`, `ACKNOWLEDGED`, `ASSIGNED`, `REMEDIATION_
 - `docs/SECURITY_AND_TENANT_ISOLATION.md`
 - `docs/RISK_WORKFLOW_MODEL.md`
 - `docs/COMPLIANCE_EVIDENCE_MODEL.md`
+- `docs/COMPLIANCE_EVIDENCE_CENTER.md`
 - `docs/AWS_INVENTORY_SCANNER_PLAN.md`
 - `docs/RISK_WORKFLOW_AND_OWNERSHIP.md`
 

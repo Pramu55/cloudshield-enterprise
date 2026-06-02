@@ -178,3 +178,8 @@ This plan describes a real-world deployment architecture for a company IT-level 
 8. Risk workflow, ownership, acceptance, and audit trail
 9. SIEM and ticketing integrations
 10. Production deployment hardening and client-ready onboarding workflow
+## Compliance Evidence Deployment Considerations
+
+For a company/client environment, the Compliance Evidence Center should be reviewed as an internal governance evidence workflow. Evidence exports should be protected by RBAC, logged as audit events, retained according to company policy, and reviewed before any external audit conversation.
+
+Current implementation is local/demo foundation only. It does not claim official CIS/SOC2 certification and does not claim any real client deployment.

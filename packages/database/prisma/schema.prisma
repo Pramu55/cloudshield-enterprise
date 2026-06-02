@@ -71,6 +71,9 @@ enum ComplianceStatus {
   PASS
   FAIL
   WARNING
+  NEEDS_REVIEW
+  NOT_APPLICABLE
+  NOT_EVALUATED
 }
 
 enum ScanRunStatus {
@@ -333,13 +336,22 @@ model ComplianceControl {
   organizationId String
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   controlId      String
+  framework      String           @default("INTERNAL_GOVERNANCE")
+  controlCode    String?
+  controlTitle   String?
+  controlDescription String?
+  controlObjective String?
+  category       String?
+  severity       FindingSeverity  @default(MEDIUM)
   group          String
   title          String
   description    String
   status         ComplianceStatus @default(WARNING)
   evidenceCount  Int              @default(0)
+  findingCount   Int              @default(0)
   failedResources Int             @default(0)
   lastScanAt     DateTime?
+  lastEvaluatedAt DateTime?
   ownerTeamId    String?
   ownerTeam      Team?            @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
   createdAt      DateTime         @default(now())
@@ -364,11 +376,19 @@ model ComplianceEvidence {
   evidence       Json              @default("{}")
   evidenceType   String
   source         String            @default("internal cloud governance evidence")
+  sourceType     String            @default("cloudshield_record")
+  sourceId       String?
+  summary        String?
+  evidenceJson   Json              @default("{}")
+  sampleData     Boolean           @default(true)
+  confidence     String            @default("medium")
+  notes          String?
   collectedAt    DateTime          @default(now())
   createdAt      DateTime          @default(now())
 
   @@index([organizationId])
   @@index([organizationId, controlId])
+  @@index([organizationId, sourceType])
 }
 
 model Recommendation {

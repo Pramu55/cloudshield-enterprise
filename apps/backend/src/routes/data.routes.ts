@@ -17,6 +17,9 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       securityFindingCount,
       costFindingCount,
       complianceControlCount,
+      complianceEvidenceCount,
+      complianceNeedsReviewCount,
+      riskAcceptanceCount,
       recommendationCount,
       latestScan
     ] = await Promise.all([
@@ -26,6 +29,16 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       prisma.securityFinding.count({ where: organizationScope }),
       prisma.costFinding.count({ where: organizationScope }),
       prisma.complianceControl.count({ where: organizationScope }),
+      prisma.complianceEvidence.count({ where: organizationScope }),
+      prisma.complianceControl.count({
+        where: {
+          ...organizationScope,
+          status: {
+            in: ["FAIL", "WARNING", "NEEDS_REVIEW"]
+          }
+        }
+      }),
+      prisma.riskAcceptance.count({ where: organizationScope }),
       prisma.recommendation.count({ where: organizationScope }),
       prisma.scanRun.findFirst({
         where: organizationScope,
@@ -56,6 +69,9 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
         securityFindings: securityFindingCount,
         costFindings: costFindingCount,
         complianceControls: complianceControlCount,
+        complianceEvidence: complianceEvidenceCount,
+        complianceNeedsReview: complianceNeedsReviewCount,
+        riskAcceptances: riskAcceptanceCount,
         recommendations: recommendationCount
       },
       latestScanStatus: latestScan
@@ -113,24 +129,6 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
         estimatedMonthlyWaste: finding.estimatedMonthlyWaste.toString(),
         estimatedAnnualWaste: finding.estimatedAnnualWaste.toString()
       }))
-    };
-  });
-
-  app.get("/api/v1/compliance/controls", { preHandler: requireAuth }, async (request) => {
-    const auth = getAuthContext(request);
-    const controls = await prisma.complianceControl.findMany({
-      where: scopeByOrganization(auth.organizationId),
-      take: DEFAULT_LIMIT,
-      orderBy: [{ group: "asc" }, { controlId: "asc" }],
-      include: {
-        ownerTeam: { select: { name: true } }
-      }
-    });
-
-    return {
-      sampleData: true,
-      sampleDataLabel: "Sample demo data - real AWS scanning is not enabled yet.",
-      items: controls
     };
   });
 

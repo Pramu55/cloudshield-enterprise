@@ -156,3 +156,11 @@ This checklist describes what CloudShield should satisfy before production deplo
 - Confirm remediation plans are review-only.
 - Confirm workflow action metadata contains no secrets.
 - Confirm workflow exports use internal cloud governance evidence language only.
+## Compliance Evidence Readiness
+
+- Confirm control language uses only CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence.
+- Confirm no official CIS/SOC2 certification claim appears in product text or reports.
+- Confirm evidence exports are generated from organization-scoped CloudShield records.
+- Confirm evidence evaluation does not trigger AWS scans or AWS changes.
+- Confirm sample/demo data labels are visible in demo environments.
+- Review data retention, access control, export approval, and audit logging before production deployment.
