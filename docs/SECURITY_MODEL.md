@@ -154,3 +154,13 @@ Safety guarantees:
 - No Terraform apply is executed.
 - No official audit report is claimed.
 - No official CIS/SOC2 certification is claimed.
+
+
+---
+### Executive Demo Freeze Note
+CloudShield is in the CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN milestone.
+* The platform is evaluation/demo ready.
+* AWS scanner execution and mutations are disabled by default.
+* Compliance reports are internal/inspired and do not constitute official certification.
+* All visible metrics use explicitly labeled sample/demo data.
+* We do not claim any real client or Accenture deployment.

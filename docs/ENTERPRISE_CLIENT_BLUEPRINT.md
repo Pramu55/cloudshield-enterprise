@@ -158,3 +158,13 @@ The blueprint remains a future-scope enterprise platform plan. It does not claim
 CloudShield's client-evaluation ready blueprint includes a Reports and Evidence Export Center for executive, security, compliance, risk, AWS account governance, and cost governance previews.
 
 Current report exports are safe JSON preview records generated from CloudShield records only. They are not official audit reports and do not claim official CIS/SOC2 certification.
+
+
+---
+### Executive Demo Freeze Note
+CloudShield is in the CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN milestone.
+* The platform is evaluation/demo ready.
+* AWS scanner execution and mutations are disabled by default.
+* Compliance reports are internal/inspired and do not constitute official certification.
+* All visible metrics use explicitly labeled sample/demo data.
+* We do not claim any real client or Accenture deployment.

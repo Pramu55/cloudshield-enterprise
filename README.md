@@ -1,10 +1,14 @@
 # CloudShield Enterprise
 
-**CloudShield Enterprise - AWS Security Posture, Cost Governance & Compliance Evidence Platform**
+CloudShield Enterprise is a future-scope enterprise AWS governance platform foundation for security posture, risk workflow, compliance evidence, and reports.
 
-CloudShield Enterprise is a production-style, enterprise-client-ready AWS governance control plane for company IT, cloud security, platform engineering, SRE, FinOps, and compliance teams. It is designed to help teams understand cloud ownership, risk posture, cost governance signals, compliance evidence readiness, and review-only remediation recommendations across AWS accounts.
+Current implementation is a safe local/demo foundation designed with enterprise safety boundaries. It is not a toy dashboard, but a real architecture blueprint.
 
-This repository is a consulting-demo ready platform foundation. It does not claim deployment to any real customer, does not claim official CIS or SOC2 certification, and does not claim real AWS inventory data while scanning remains disabled.
+**Important Safety & Scope Limits:**
+* We do **not** claim real client deployment (e.g. to Accenture).
+* We do **not** claim official CIS or SOC2 certification.
+* We do **not** execute AWS changes or mutation.
+* The AWS scanner is **not** run by default.
 
 ## Problem It Solves
 

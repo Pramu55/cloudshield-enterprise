@@ -168,3 +168,13 @@ This milestone does not add AWS scanning, AWS mutation, automatic remediation, T
 - Cost governance summary
 
 Report generation creates JSON preview records from CloudShield database records only. PDF, CSV, signed evidence packs, scheduled reports, official audit reports, and external delivery are future scope.
+
+
+---
+### Executive Demo Freeze Note
+CloudShield is in the CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN milestone.
+* The platform is evaluation/demo ready.
+* AWS scanner execution and mutations are disabled by default.
+* Compliance reports are internal/inspired and do not constitute official certification.
+* All visible metrics use explicitly labeled sample/demo data.
+* We do not claim any real client or Accenture deployment.

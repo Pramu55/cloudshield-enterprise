@@ -173,3 +173,13 @@ This checklist describes what CloudShield should satisfy before production deplo
 - Confirm report generation does not trigger AWS scans or AWS changes.
 - Confirm JSON preview records remain clearly labeled as sample/demo in local environments.
 - Confirm PDF/CSV/signed evidence pack workflows remain future scope until separately approved.
+
+
+---
+### Executive Demo Freeze Note
+CloudShield is in the CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN milestone.
+* The platform is evaluation/demo ready.
+* AWS scanner execution and mutations are disabled by default.
+* Compliance reports are internal/inspired and do not constitute official certification.
+* All visible metrics use explicitly labeled sample/demo data.
+* We do not claim any real client or Accenture deployment.

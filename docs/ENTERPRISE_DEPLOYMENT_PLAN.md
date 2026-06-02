@@ -183,3 +183,13 @@ This plan describes a real-world deployment architecture for a company IT-level 
 For a company/client environment, the Compliance Evidence Center should be reviewed as an internal governance evidence workflow. Evidence exports should be protected by RBAC, logged as audit events, retained according to company policy, and reviewed before any external audit conversation.
 
 Current implementation is local/demo foundation only. It does not claim official CIS/SOC2 certification and does not claim any real client deployment.
+
+
+---
+### Executive Demo Freeze Note
+CloudShield is in the CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN milestone.
+* The platform is evaluation/demo ready.
+* AWS scanner execution and mutations are disabled by default.
+* Compliance reports are internal/inspired and do not constitute official certification.
+* All visible metrics use explicitly labeled sample/demo data.
+* We do not claim any real client or Accenture deployment.

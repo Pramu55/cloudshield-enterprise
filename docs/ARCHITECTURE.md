@@ -139,3 +139,13 @@ The current reports foundation:
 * Findings contain evidence and business impact.
 * Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
 * Sample/demo data remains clearly labeled.
+
+
+---
+### Executive Demo Freeze Note
+CloudShield is in the CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN milestone.
+* The platform is evaluation/demo ready.
+* AWS scanner execution and mutations are disabled by default.
+* Compliance reports are internal/inspired and do not constitute official certification.
+* All visible metrics use explicitly labeled sample/demo data.
+* We do not claim any real client or Accenture deployment.

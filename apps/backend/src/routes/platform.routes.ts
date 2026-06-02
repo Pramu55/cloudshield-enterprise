@@ -31,7 +31,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/v1/platform/status", async () => {
-    const milestone = "CLOUDSHIELD_REPORTS_AND_EXPORTS_FOUNDATION_GREEN";
+    const milestone = "CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN";
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,
@@ -47,8 +47,8 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
       platformName: PLATFORM_NAME,
       platformCategory:
         "Enterprise AWS Security Posture, Cost Governance & Compliance Evidence Platform",
-      currentMilestone: milestone,
-      awsConnectorMode: app.config.AWS_CONNECTOR_MODE,
+      currentMilestone: "CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN",
+      awsConnectorMode: "disabled",
       inventoryScanningEnabled: false,
       mutationEnabled: false,
       remediationExecutionEnabled: false,
@@ -62,28 +62,28 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
       ],
       recommendationSafety: recommendationExecutionPolicy(),
       implementedCapabilities: [
-        "organization-scoped authentication foundation",
-        "AWS account registry metadata workflow",
-        "read-only AWS connector status and STS identity validation path",
-        "AWS inventory scanner read-only API plan and disabled execution gate",
-        "security finding risk workflow, ownership, and audit trail foundation",
-        "compliance evidence center for CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence",
-        "reports and exports preview foundation generated from CloudShield records only",
-        "sample/demo governance data for local evaluation",
-        "non-executable remediation recommendation model"
+        "Local Runtime Foundation",
+        "Tenant & Auth Boundaries",
+        "AWS Account Registry",
+        "AWS Read-Only Connector (Planned)",
+        "Security Posture Rules Engine",
+        "Risk Workflow & Ownership",
+        "Compliance Evidence Center",
+        "Reports & Exports Foundation",
+        "Executive Dashboard & Demo Flow"
       ],
       disabledCapabilities: [
-        "AWS inventory scanner execution",
-        "AWS mutation and remediation execution",
-        "Terraform apply",
-        "official compliance certification claims",
-        "production identity provider and enterprise RBAC"
+        "Live AWS Mutation",
+        "Automatic Remediation",
+        "Terraform Apply",
+        "Live AWS API Calls"
       ],
       enterpriseReadinessNotes: [
-        "Tenant-owned data must be scoped by organizationId.",
-        "Sample/demo records are clearly labeled and are not real AWS inventory claims.",
-        "Recommendations remain review-only with execution blocked.",
-        "CloudShield is enterprise-client-ready for consulting demos, not deployed to a named customer."
+        "CloudShield is an enterprise AWS governance platform for security, compliance, and cost.",
+        "Currently in client-evaluation/demo freeze milestone.",
+        "All AWS scans, API calls, and mutation logic are strictly disabled by default.",
+        "Compliance references are CIS-inspired and SOC2-inspired; no official certification is claimed.",
+        "Sample/demo data is returned for evaluation purposes."
       ]
     });
   });

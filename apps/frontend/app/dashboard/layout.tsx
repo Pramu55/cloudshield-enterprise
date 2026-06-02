@@ -226,7 +226,7 @@ export default function DashboardLayout({
           <header className="flex h-16 items-center justify-between border-b border-line bg-white px-6">
             <div>
               <p className="text-sm font-semibold text-ink">
-                CLOUDSHIELD_ENTERPRISE_CLIENT_PLATFORM_BLUEPRINT_GREEN
+                CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN
               </p>
               <p className="text-xs text-slate-500">
                 Read-only posture, evidence, recommendations, and tenant-scoped access
