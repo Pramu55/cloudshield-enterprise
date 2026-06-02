@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Cloud,
   Database,
@@ -51,10 +53,16 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authState, setAuthState] = useState<AuthState>("checking");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     navItems.forEach((item) => router.prefetch(item.href));
   }, [router]);
+
+  useEffect(() => {
+    const savedState = window.localStorage.getItem("cloudshield_sidebar_collapsed");
+    setIsSidebarCollapsed(savedState === "true");
+  }, []);
 
   useEffect(() => {
     const token = window.localStorage.getItem("cloudshield_access_token");
@@ -97,6 +105,17 @@ export default function DashboardLayout({
     }
   }, [authState, router]);
 
+  function toggleSidebar() {
+    setIsSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(
+        "cloudshield_sidebar_collapsed",
+        String(next)
+      );
+      return next;
+    });
+  }
+
   const showConsole = useMemo(
     () => authState === "authenticated" || Boolean(currentUser),
     [authState, currentUser]
@@ -124,22 +143,61 @@ export default function DashboardLayout({
 
   return (
     <main className="min-h-screen bg-panel">
-      <div className="grid min-h-screen lg:grid-cols-[264px_1fr]">
-        <aside className="border-r border-line bg-white">
-          <div className="border-b border-line p-5">
-            <p className="text-sm font-semibold uppercase tracking-wide text-signal">
-              CloudShield
-            </p>
-            <h1 className="mt-1 text-lg font-semibold text-ink">
-              Governance Console
-            </h1>
+      <div
+        className={`grid min-h-screen transition-[grid-template-columns] duration-300 ease-out ${
+          isSidebarCollapsed
+            ? "lg:grid-cols-[76px_1fr]"
+            : "lg:grid-cols-[264px_1fr]"
+        }`}
+      >
+        <aside className="overflow-hidden border-r border-line bg-white transition-all duration-300 ease-out">
+          <div
+            className={`flex h-[97px] items-center border-b border-line transition-all duration-300 ${
+              isSidebarCollapsed ? "justify-center px-3" : "justify-between p-5"
+            }`}
+          >
+            <div
+              className={`min-w-0 transition-all duration-200 ${
+                isSidebarCollapsed
+                  ? "w-0 scale-95 overflow-hidden opacity-0"
+                  : "w-auto scale-100 opacity-100"
+              }`}
+            >
+              <p className="text-sm font-semibold uppercase tracking-wide text-signal">
+                CloudShield
+              </p>
+              <h1 className="mt-1 whitespace-nowrap text-lg font-semibold text-ink">
+                Governance Console
+              </h1>
+            </div>
+            <button
+              aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line text-slate-700 transition hover:bg-panel hover:text-ink"
+              onClick={toggleSidebar}
+              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              type="button"
+            >
+              {isSidebarCollapsed ? (
+                <ChevronRight size={17} />
+              ) : (
+                <ChevronLeft size={17} />
+              )}
+            </button>
           </div>
-          <nav className="space-y-1 p-3">
+          <nav
+            className={`space-y-1 transition-all duration-300 ${
+              isSidebarCollapsed ? "p-2" : "p-3"
+            }`}
+          >
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
                 <Link
-                  className={`flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium hover:bg-panel hover:text-ink ${
+                  className={`flex h-10 items-center rounded-md text-sm font-medium transition-all duration-200 hover:bg-panel hover:text-ink ${
+                    isSidebarCollapsed
+                      ? "justify-center px-0"
+                      : "gap-3 px-3"
+                  } ${
                     pathname === item.href
                       ? "bg-panel text-ink"
                       : "text-slate-700"
@@ -147,9 +205,18 @@ export default function DashboardLayout({
                   href={item.href}
                   key={item.href}
                   prefetch
+                  title={item.label}
                 >
-                  <Icon size={17} />
-                  {item.label}
+                  <Icon className="shrink-0" size={17} />
+                  <span
+                    className={`whitespace-nowrap transition-all duration-200 ${
+                      isSidebarCollapsed
+                        ? "w-0 translate-x-1 overflow-hidden opacity-0"
+                        : "w-auto translate-x-0 opacity-100"
+                    }`}
+                  >
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}
