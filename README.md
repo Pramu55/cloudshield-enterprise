@@ -200,3 +200,15 @@ CloudShield demonstrates how to design an enterprise AWS governance product with
 The safest summary:
 
 > CloudShield is an enterprise-client-ready AWS governance platform foundation for security posture, cost governance, compliance evidence, and cloud risk workflow. It currently uses sample/demo data and a disabled-by-default read-only connector. It does not mutate AWS or claim official compliance certification.
+
+
+---
+### Security Posture Rules Foundation Note
+* Security rules are strictly deterministic.
+* Rules evaluate stored CloudShield inventory records only.
+* No AWS scan is triggered by rule evaluation.
+* No AWS mutation is executed.
+* No automatic remediation is performed.
+* Findings contain evidence and business impact.
+* Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
+* Sample/demo data remains clearly labeled.

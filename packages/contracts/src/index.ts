@@ -226,7 +226,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN",
   "CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN",
   "CLOUDSHIELD_ENTERPRISE_CLIENT_PLATFORM_BLUEPRINT_GREEN",
-  "CLOUDSHIELD_AWS_INVENTORY_READONLY_SCANNER_PLAN_GREEN"
+  "CLOUDSHIELD_AWS_INVENTORY_READONLY_SCANNER_PLAN_GREEN",
+  "CLOUDSHIELD_SECURITY_POSTURE_RULES_FOUNDATION_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -513,3 +514,79 @@ export const AwsInventoryScanStatusResponseSchema = z.object({
 export type AwsInventoryScanStatusResponse = z.infer<
   typeof AwsInventoryScanStatusResponseSchema
 >;
+
+// ── Security Posture Rules ──────────────────────────────────────────────
+
+export const SecurityRuleSeveritySchema = z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]);
+export type SecurityRuleSeverity = z.infer<typeof SecurityRuleSeveritySchema>;
+
+export const SecurityRuleEvaluationStatusSchema = z.enum([
+  "finding_created",
+  "finding_updated",
+  "not_applicable",
+  "pass",
+  "error"
+]);
+export type SecurityRuleEvaluationStatus = z.infer<typeof SecurityRuleEvaluationStatusSchema>;
+
+export const SecurityRuleDtoSchema = z.object({
+  ruleId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  severity: SecurityRuleSeveritySchema,
+  resourceTypes: z.array(z.string()),
+  complianceRefs: z.array(z.string()),
+  enabled: z.literal(true),
+  mutationRequired: z.literal(false)
+});
+export type SecurityRuleDto = z.infer<typeof SecurityRuleDtoSchema>;
+
+export const SecurityRulesResponseSchema = z.object({
+  rules: z.array(SecurityRuleDtoSchema),
+  message: z.string()
+});
+export type SecurityRulesResponse = z.infer<typeof SecurityRulesResponseSchema>;
+
+export const SecurityEvaluationResponseSchema = z.object({
+  evaluatedResourceCount: z.number(),
+  findingsCreated: z.number(),
+  findingsUpdated: z.number(),
+  findingsResolved: z.number(),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  message: z.string()
+});
+export type SecurityEvaluationResponse = z.infer<typeof SecurityEvaluationResponseSchema>;
+
+export const SecurityFindingDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  awsAccountId: z.string(),
+  resourceId: z.string().nullable(),
+  ruleId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  severity: SecurityRuleSeveritySchema,
+  status: RiskStatusSchema,
+  evidence: z.record(z.string(), z.any()),
+  businessImpact: z.string().nullable(),
+  recommendation: z.string().nullable(),
+  complianceRefs: z.array(z.string()),
+  ownerTeamId: z.string().nullable(),
+  ownerTeamName: z.string().nullable(),
+  resourceName: z.string().nullable(),
+  resourceType: z.string().nullable(),
+  awsAccountName: z.string().nullable(),
+  firstSeenAt: z.string(),
+  lastSeenAt: z.string()
+});
+export type SecurityFindingDto = z.infer<typeof SecurityFindingDtoSchema>;
+
+export const SecurityFindingsResponseSchema = z.object({
+  sampleData: z.boolean(),
+  sampleDataLabel: z.string(),
+  items: z.array(SecurityFindingDtoSchema),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false)
+});
+export type SecurityFindingsResponse = z.infer<typeof SecurityFindingsResponseSchema>;

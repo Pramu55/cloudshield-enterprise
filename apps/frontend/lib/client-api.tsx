@@ -11,13 +11,21 @@ type ClientDataState<T> = {
   isRefreshing: boolean;
 };
 
-export async function fetchCloudShieldClient<T>(path: string): Promise<T> {
+export async function fetchCloudShieldClient<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
   const token = window.localStorage.getItem("cloudshield_access_token");
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token || ""}`
-    }
-  });
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token || ""}`
+  };
+  const init: RequestInit = { headers };
+  if (options?.method) {
+    init.method = options.method;
+  }
+  if (options?.body) {
+    headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(options.body);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, init);
 
   if (!response.ok) {
     throw new Error("CloudShield API request failed.");

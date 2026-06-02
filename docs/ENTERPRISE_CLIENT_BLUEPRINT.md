@@ -132,3 +132,15 @@ This path is a production deployment roadmap, not a claim that the current repos
 5. Risk workflow, ownership, and acceptance
 6. Reports and exports
 7. Production hardening, RBAC, audit logging, and observability
+
+
+---
+### Security Posture Rules Foundation Note
+* Security rules are strictly deterministic.
+* Rules evaluate stored CloudShield inventory records only.
+* No AWS scan is triggered by rule evaluation.
+* No AWS mutation is executed.
+* No automatic remediation is performed.
+* Findings contain evidence and business impact.
+* Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
+* Sample/demo data remains clearly labeled.
