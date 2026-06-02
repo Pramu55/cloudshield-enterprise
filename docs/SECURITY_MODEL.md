@@ -164,3 +164,16 @@ CloudShield is in the CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN mile
 * Compliance reports are internal/inspired and do not constitute official certification.
 * All visible metrics use explicitly labeled sample/demo data.
 * We do not claim any real client or Accenture deployment.
+## AWS Credential Readiness Safety
+
+CloudShield credential readiness is metadata-only. It inspects whether expected environment variables are present and reports booleans such as `awsRoleArnConfigured`, `roleBasedReadiness`, and `localAccessKeyFallbackDetected`.
+
+Safety guarantees:
+
+- No AWS credentials are committed.
+- No `.env` file is committed.
+- No AWS secret values are returned by API responses.
+- No credentials are stored in CloudShield DB.
+- No AWS validation is run by the readiness endpoint.
+- No AWS scanner is run.
+- No AWS mutation, Terraform apply, or automatic remediation is added.

@@ -8,6 +8,7 @@ import {
 } from "@cloudshield/contracts";
 import { recommendationExecutionPolicy } from "@cloudshield/security";
 import { nowIso } from "@cloudshield/utils";
+import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
 
 export async function registerPlatformRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health", async () => {
@@ -31,7 +32,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/v1/platform/status", async () => {
-    const milestone = "CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN";
+    const milestone = "CLOUDSHIELD_AWS_CREDENTIAL_ENABLEMENT_READONLY_GREEN";
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,
@@ -47,8 +48,8 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
       platformName: PLATFORM_NAME,
       platformCategory:
         "Enterprise AWS Security Posture, Cost Governance & Compliance Evidence Platform",
-      currentMilestone: "CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN",
-      awsConnectorMode: "disabled",
+      currentMilestone: milestone,
+      awsConnectorMode: app.config.AWS_CONNECTOR_MODE,
       inventoryScanningEnabled: false,
       mutationEnabled: false,
       remediationExecutionEnabled: false,
@@ -61,6 +62,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
         "internal cloud governance evidence"
       ],
       recommendationSafety: recommendationExecutionPolicy(),
+      credentialReadiness: getAwsCredentialReadiness(app.config),
       implementedCapabilities: [
         "Local Runtime Foundation",
         "Tenant & Auth Boundaries",
@@ -70,7 +72,8 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
         "Risk Workflow & Ownership",
         "Compliance Evidence Center",
         "Reports & Exports Foundation",
-        "Executive Dashboard & Demo Flow"
+        "Executive Dashboard & Demo Flow",
+        "AWS credential readiness metadata foundation"
       ],
       disabledCapabilities: [
         "Live AWS Mutation",

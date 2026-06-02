@@ -24,3 +24,21 @@ CloudShield enforces a strict zero-mutation policy.
 - There are no IAM policies attached to the scanner role that allow `Create`, `Update`, `Put`, or `Delete` actions.
 - There is no code in the application capable of mutating AWS resources or applying Terraform.
 - Automatic remediation is intentionally out of scope to ensure the platform can be safely deployed in highly regulated enterprise environments without risk of destructive actions.
+## Corrected Read-Only Credential Readiness Model
+
+CloudShield does not make `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` mandatory. Enterprise readiness should prefer role-based setup:
+
+- `AWS_REGION`
+- `AWS_ROLE_ARN`
+- `AWS_CONNECTOR_MODE`
+- `AWS_INVENTORY_SCANNER_MODE`
+
+Optional local-development fallback indicators:
+
+- `AWS_EXTERNAL_ID`
+- `AWS_ACCOUNT_ID`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN`
+
+The readiness API inspects environment variable presence only and returns booleans. It never returns secret values, never stores credentials in the database, never logs credentials, and does not call AWS.

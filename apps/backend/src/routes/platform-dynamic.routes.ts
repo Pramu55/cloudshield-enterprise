@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 
 export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promise<void> {
@@ -36,10 +37,16 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
       scannerStatus: "disabled",
       onboardingComplete: false
     }));
-    return { awsAccounts, overallReadiness: "EVALUATION_MODE" };
+    return {
+      awsAccounts,
+      overallReadiness: "EVALUATION_MODE",
+      credentialReadiness: getAwsCredentialReadiness(app.config)
+    };
   });
 
   app.get("/api/v1/settings/safety", { preHandler: requireAuth }, async () => {
+    const credentialReadiness = getAwsCredentialReadiness(app.config);
+
     return {
       status: {
         mutationEnabled: false,
@@ -47,7 +54,10 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
         awsScannerEnabled: false,
         terraformApplyEnabled: false,
         environmentMode: "local-evaluator",
-        credentialReadiness: "not-configured"
+        credentialReadiness: credentialReadiness.roleBasedReadiness
+          ? "role-based-ready"
+          : "not-configured",
+        credentialReadinessDetails: credentialReadiness
       },
       message: "Safety guardrails are active."
     };

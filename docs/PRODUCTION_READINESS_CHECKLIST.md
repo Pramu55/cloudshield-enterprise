@@ -183,3 +183,12 @@ CloudShield is in the CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN mile
 * Compliance reports are internal/inspired and do not constitute official certification.
 * All visible metrics use explicitly labeled sample/demo data.
 * We do not claim any real client or Accenture deployment.
+## AWS Credential Readiness Checklist
+
+- Prefer IAM role assumption over access keys.
+- Keep `.env` local and ignored.
+- Confirm `AWS_REGION`, `AWS_ROLE_ARN`, `AWS_CONNECTOR_MODE`, and `AWS_INVENTORY_SCANNER_MODE` are managed through deployment configuration.
+- Treat access keys as optional local-development fallback indicators only.
+- Use a secret manager or workload identity for production.
+- Confirm readiness APIs return booleans only and never secret values.
+- Confirm no AWS validation, scanner, mutation, Terraform apply, or automatic remediation is run during readiness checks.

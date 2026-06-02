@@ -1,9 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
+  AwsCredentialReadinessResponseSchema,
   ValidateReadonlyConnectionResponseSchema,
   type AwsReadonlyValidationStatus
 } from "@cloudshield/contracts";
+import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
 import { prisma } from "@cloudshield/database";
 import { getAwsConnectorConfig } from "../modules/aws-connector/aws-connector.config.js";
 import { AwsConnectorService } from "../modules/aws-connector/aws-connector.service.js";
@@ -22,6 +24,17 @@ export async function registerAwsConnectorRoutes(
     async (request) => {
       getAuthContext(request);
       return getConnectorService(app).getStatus();
+    }
+  );
+
+  app.get(
+    "/api/v1/aws/readiness",
+    { preHandler: requireAuth },
+    async (request) => {
+      getAuthContext(request);
+      return AwsCredentialReadinessResponseSchema.parse(
+        getAwsCredentialReadiness(app.config)
+      );
     }
   );
 

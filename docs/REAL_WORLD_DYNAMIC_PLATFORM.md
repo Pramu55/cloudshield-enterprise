@@ -12,3 +12,8 @@ CloudShield Enterprise is not just a static set of dashboards with hardcoded dat
 Enterprise cloud environments contain thousands of resources. By building the entire workflow around deterministic, sample-based records first, we prove the UI scalability, relationship mapping, and state management (like "Accepted Risks") *before* running live scans. 
 
 This ensures that when real AWS connections are made, the governance platform can seamlessly digest the scale of the data without UI locks or confusing user journeys.
+## AWS Credential Readiness Foundation
+
+CloudShield's real-world deployment architecture should use IAM role assumption or managed secret infrastructure. The local readiness foundation reports credential setup posture through safe metadata only and does not require access keys.
+
+The readiness workflow does not run AWS validation, does not scan AWS inventory, and does not mutate AWS resources.

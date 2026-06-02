@@ -56,3 +56,8 @@ Instead of being a simple CRUD dashboard, CloudShield integrates complex backend
 
 **2-Minute Version:**
 "CloudShield is a comprehensive cloud governance foundation. I saw a need for a unified platform that not only lists AWS resources but actively evaluates them against CIS and SOC2-inspired rules, mapping those to compliance evidence. I built the backend using Fastify and Prisma with PostgreSQL, leveraging BullMQ and Redis for background scanning tasks. The frontend is a Next.js App Router application. A key architectural decision was building a 'safety-first' engine: the platform strictly disables AWS mutations, automated remediations, and Terraform applies. This makes it an ideal evaluation and demonstration platform for enterprise IT environments, showcasing how to manage risk workflows safely."
+## Credential Readiness Design Note
+
+CloudShield demonstrates enterprise-grade AWS readiness by preferring role-based setup and secret-manager guidance. Access keys are treated as optional local-development fallback indicators, not production readiness requirements.
+
+The platform reports readiness through booleans only and does not expose, store, or log secret values.

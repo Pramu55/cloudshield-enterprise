@@ -24,6 +24,32 @@ type ReadinessResponse = {
     onboardingComplete: boolean;
   }>;
   overallReadiness: string;
+  credentialReadiness: AwsCredentialReadiness;
+};
+
+type AwsCredentialReadiness = {
+  connectorMode: string;
+  scannerMode: string;
+  requiredEnvPresent: boolean;
+  missingEnvKeys: string[];
+  awsRegionConfigured: boolean;
+  awsRoleArnConfigured: boolean;
+  awsExternalIdConfigured: boolean;
+  awsAccountIdConfigured: boolean;
+  awsAccessKeyIdConfigured: boolean;
+  awsSecretAccessKeyConfigured: boolean;
+  awsSessionTokenConfigured: boolean;
+  roleBasedReadiness: boolean;
+  localAccessKeyFallbackDetected: boolean;
+  credentialStorageMode: "environment-only";
+  secretManagerRecommended: true;
+  stsValidationAvailable: boolean;
+  inventoryScanAvailable: boolean;
+  mutationEnabled: false;
+  terraformApplyEnabled: false;
+  remediationExecutionEnabled: false;
+  awsApiCallExecuted: false;
+  message: string;
 };
 
 const now = new Date(0).toISOString();
@@ -276,14 +302,14 @@ export default function AccountsPage() {
                   <div className="mt-0.5"><CircleDashed size={18} className="text-amber-500" /></div>
                   <div>
                     <p className="text-sm font-semibold text-ink">Configure AWS Connector</p>
-                    <p className="text-xs text-slate-600 mt-1">Enable read-only validation for your environments to begin scanning.</p>
+                    <p className="text-xs text-slate-600 mt-1">Use IAM role assumption with environment variables for read-only STS validation readiness.</p>
                   </div>
                 </li>
                 <li className="flex gap-3">
                   <div className="mt-0.5"><CircleDashed size={18} className="text-amber-500" /></div>
                   <div>
                     <p className="text-sm font-semibold text-ink">Enable Inventory Scanner</p>
-                    <p className="text-xs text-slate-600 mt-1">Turn on automated discovery for supported AWS resources.</p>
+                    <p className="text-xs text-slate-600 mt-1">Scanner execution remains disabled by default and is separate from credential readiness.</p>
                   </div>
                 </li>
               </ul>
@@ -294,6 +320,8 @@ export default function AccountsPage() {
               </div>
             </div>
           </div>
+
+          <CredentialReadinessPanel readiness={readiness.credentialReadiness} />
         </div>
       )}
 
@@ -304,5 +332,81 @@ export default function AccountsPage() {
         inventoryPlan={inventoryPlan}
       />
     </DashboardPage>
+  );
+}
+
+function CredentialReadinessPanel({
+  readiness
+}: {
+  readiness: AwsCredentialReadiness;
+}) {
+  const envChecks = [
+    ["AWS_REGION", readiness.awsRegionConfigured],
+    ["AWS_ROLE_ARN", readiness.awsRoleArnConfigured],
+    ["AWS_EXTERNAL_ID", readiness.awsExternalIdConfigured],
+    ["AWS_ACCOUNT_ID", readiness.awsAccountIdConfigured],
+    ["AWS_CONNECTOR_MODE", readiness.connectorMode !== ""],
+    ["AWS_INVENTORY_SCANNER_MODE", readiness.scannerMode !== ""]
+  ] as const;
+
+  return (
+    <section className="rounded-md border border-line bg-white p-5">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-ink">AWS Credential Readiness</h3>
+          <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">
+            No credentials are stored in CloudShield DB. Use environment variables locally and
+            secret manager/IAM role assumption in production. Access keys are optional local-dev
+            fallback only and are not recommended for production.
+          </p>
+        </div>
+        <span className="rounded-md border border-line bg-panel px-3 py-2 text-xs font-semibold text-slate-700">
+          {readiness.credentialStorageMode}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <ReadinessTile label="Connector mode" value={readiness.connectorMode} />
+        <ReadinessTile label="Scanner mode" value={readiness.scannerMode} />
+        <ReadinessTile label="Role-based setup" value={readiness.roleBasedReadiness ? "ready" : "not ready"} />
+        <ReadinessTile label="STS validation" value={readiness.stsValidationAvailable ? "available" : "not available"} />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+        <div className="rounded-md border border-line p-4">
+          <p className="text-xs font-semibold uppercase text-slate-500">Environment checklist</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {envChecks.map(([label, configured]) => (
+              <div className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-3 py-2" key={label}>
+                <span className="text-xs font-semibold text-slate-600">{label}</span>
+                <span className={`text-xs font-semibold ${configured ? "text-emerald-700" : "text-amber-700"}`}>
+                  {configured ? "configured" : "missing"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-md border border-line p-4">
+          <p className="text-xs font-semibold uppercase text-slate-500">Safety posture</p>
+          <ul className="mt-3 space-y-2 text-sm text-slate-600">
+            <li>No AWS API call executed: {String(readiness.awsApiCallExecuted)}</li>
+            <li>No AWS mutation: {String(readiness.mutationEnabled)}</li>
+            <li>No Terraform apply: {String(readiness.terraformApplyEnabled)}</li>
+            <li>No automatic remediation: {String(readiness.remediationExecutionEnabled)}</li>
+            <li>Local access-key fallback detected: {String(readiness.localAccessKeyFallbackDetected)}</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ReadinessTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-line bg-panel p-3">
+      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-ink">{value}</p>
+    </div>
   );
 }

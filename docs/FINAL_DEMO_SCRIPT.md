@@ -41,3 +41,13 @@ This script is designed for walking an evaluator, interviewer, or client through
 ## 10. Enterprise Production Roadmap
 **Action**: Conclude the demo.
 **Script**: "While this is a robust foundation, our future roadmap includes FinOps cost governance integrations, real-time EventBridge listeners for live inventory updates, and enterprise SSO integrations like Okta. This architecture proves out the difficult parts of tenant isolation, deterministic rule evaluation, and safe cloud governance."
+## AWS Credential Readiness Demo Step
+
+Show the AWS Account Governance and Settings pages. Point out:
+
+- Role-based setup is preferred.
+- Access keys are optional local-development fallback indicators only.
+- No secret input fields are shown.
+- No credentials are stored in CloudShield DB.
+- Scanner execution remains disabled by default.
+- No AWS mutation, Terraform apply, or automatic remediation is available.

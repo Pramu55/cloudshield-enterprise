@@ -265,7 +265,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_REPORTS_AND_EXPORTS_FOUNDATION_GREEN",
   "CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN",
   "CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN",
-  "CLOUDSHIELD_REAL_WORLD_DYNAMIC_PLATFORM_FOUNDATION_GREEN"
+  "CLOUDSHIELD_REAL_WORLD_DYNAMIC_PLATFORM_FOUNDATION_GREEN",
+  "CLOUDSHIELD_AWS_CREDENTIAL_ENABLEMENT_READONLY_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -476,6 +477,41 @@ export type AwsConnectorStatusResponse = z.infer<
   typeof AwsConnectorStatusResponseSchema
 >;
 
+export const AwsCredentialReadinessSchema = z.object({
+  connectorMode: AwsConnectorModeSchema,
+  scannerMode: AwsInventoryScannerModeSchema,
+  requiredEnvPresent: z.boolean(),
+  missingEnvKeys: z.array(z.string()),
+  awsRegionConfigured: z.boolean(),
+  awsRoleArnConfigured: z.boolean(),
+  awsExternalIdConfigured: z.boolean(),
+  awsAccountIdConfigured: z.boolean(),
+  awsAccessKeyIdConfigured: z.boolean(),
+  awsSecretAccessKeyConfigured: z.boolean(),
+  awsSessionTokenConfigured: z.boolean(),
+  roleBasedReadiness: z.boolean(),
+  localAccessKeyFallbackDetected: z.boolean(),
+  awsConnectorMode: AwsConnectorModeSchema,
+  awsInventoryScannerMode: AwsInventoryScannerModeSchema,
+  credentialStorageMode: z.literal("environment-only"),
+  secretManagerRecommended: z.literal(true),
+  stsValidationAvailable: z.boolean(),
+  inventoryScanAvailable: z.boolean(),
+  mutationEnabled: z.literal(false),
+  terraformApplyEnabled: z.literal(false),
+  remediationExecutionEnabled: z.literal(false),
+  awsApiCallExecuted: z.literal(false),
+  message: z.string()
+});
+export type AwsCredentialReadiness = z.infer<
+  typeof AwsCredentialReadinessSchema
+>;
+
+export const AwsCredentialReadinessResponseSchema = AwsCredentialReadinessSchema;
+export type AwsCredentialReadinessResponse = z.infer<
+  typeof AwsCredentialReadinessResponseSchema
+>;
+
 export const EnterprisePlatformStatusSchema = PlatformStatusSchema.extend({
   platformName: z.literal(PLATFORM_NAME),
   platformCategory: z.literal(
@@ -493,7 +529,8 @@ export const EnterprisePlatformStatusSchema = PlatformStatusSchema.extend({
   backend: z.string(),
   contracts: z.string(),
   complianceLanguage: z.array(z.string()),
-  recommendationSafety: RecommendationSafetySchema
+  recommendationSafety: RecommendationSafetySchema,
+  credentialReadiness: z.lazy(() => AwsCredentialReadinessSchema)
 });
 export type EnterprisePlatformStatus = z.infer<
   typeof EnterprisePlatformStatusSchema
@@ -1079,7 +1116,8 @@ export type AwsReadinessDto = z.infer<typeof AwsReadinessDtoSchema>;
 
 export const PlatformReadinessDtoSchema = z.object({
   awsAccounts: z.array(AwsReadinessDtoSchema),
-  overallReadiness: z.string()
+  overallReadiness: z.string(),
+  credentialReadiness: AwsCredentialReadinessSchema
 });
 export type PlatformReadinessDto = z.infer<typeof PlatformReadinessDtoSchema>;
 
@@ -1089,7 +1127,8 @@ export const SafetyStatusDtoSchema = z.object({
   awsScannerEnabled: z.boolean(),
   terraformApplyEnabled: z.boolean(),
   environmentMode: z.string(),
-  credentialReadiness: z.string()
+  credentialReadiness: z.string(),
+  credentialReadinessDetails: AwsCredentialReadinessSchema
 });
 export type SafetyStatusDto = z.infer<typeof SafetyStatusDtoSchema>;
 

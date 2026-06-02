@@ -46,6 +46,8 @@ For safety and evaluation purposes, the following are strictly disabled:
 - **Read-Only**: The platform operates in a strict read-only mode.
 - **No Secrets**: No real AWS credentials or customer data are committed or required to run the demo.
 - **Sample Data**: The evaluator demo mode is populated with safe, deterministic sample data.
+- **Credential Readiness**: CloudShield prefers role-based AWS readiness using `AWS_REGION`, `AWS_ROLE_ARN`, `AWS_CONNECTOR_MODE`, and `AWS_INVENTORY_SCANNER_MODE`. Access keys are optional local-development fallback indicators only.
+- **No Secret Exposure**: `/api/v1/aws/readiness` returns safe booleans only, never raw secret values, and does not call AWS.
 
 ## Local Quickstart
 
