@@ -1,7 +1,8 @@
-import { DashboardPage } from "../shared";
-import { EmptyState, fetchCloudShield, SampleDataNotice } from "../../../lib/api";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { DashboardPage } from "../shared";
+import { EmptyState, SampleDataNotice } from "../../../lib/ui";
+import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
 
 type ComplianceResponse = {
   items: Array<{
@@ -16,8 +17,36 @@ type ComplianceResponse = {
   }>;
 };
 
-export default async function CompliancePage() {
-  const data = await fetchCloudShield<ComplianceResponse>("/api/v1/compliance/controls");
+const InstantCompliance: ComplianceResponse = {
+  items: [
+    {
+      id: "instant-compliance-1",
+      controlId: "CIS-INSPIRED-1.1",
+      group: "Identity and access governance",
+      title: "Account access review evidence",
+      status: "NEEDS_REVIEW",
+      evidenceCount: 2,
+      failedResources: 1,
+      ownerTeam: { name: "Security Operations" }
+    },
+    {
+      id: "instant-compliance-2",
+      controlId: "SOC2-INSPIRED-CC6",
+      group: "Logical access controls",
+      title: "Read-only connector boundary evidence",
+      status: "READY",
+      evidenceCount: 3,
+      failedResources: 0,
+      ownerTeam: { name: "Cloud Platform" }
+    }
+  ]
+};
+
+export default function CompliancePage() {
+  const { data, error, isRefreshing } = useCloudShieldData<ComplianceResponse>(
+    "/api/v1/compliance/controls",
+    InstantCompliance
+  );
 
   return (
     <DashboardPage
@@ -25,6 +54,7 @@ export default async function CompliancePage() {
       description="Evidence workspace for CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence. No official certification is claimed."
     >
       <SampleDataNotice />
+      <RefreshBadge error={error} isRefreshing={isRefreshing} />
       {!data?.items.length ? (
         <EmptyState label="No sample compliance controls are available yet." />
       ) : (

@@ -58,9 +58,90 @@ This checklist describes what CloudShield should satisfy before production deplo
 - Keep STS identity validation as the only current AWS API path.
 - Explicitly block AWS mutation APIs and Terraform apply.
 
-## Incident Response
+## Incident Response Program
 
 - Define escalation paths for data exposure, auth incidents, connector misuse, and queue failures.
 - Keep audit records immutable where possible.
 - Rotate secrets after any suspected compromise.
 - Document safe shutdown of connector and worker services.
+
+## Company Deployment Readiness
+
+- Confirm the target deployment model: internal company IT tool, enterprise SaaS-style platform, or client-evaluation environment.
+- Document production owners for frontend, backend, worker, database, Redis, security, and incident response.
+- Separate local, development, staging, and production environments.
+- Require production deployment approval and rollback ownership.
+- Keep the current repository language clear: CloudShield is enterprise-company deployment ready in direction, not claimed as deployed to a real client.
+
+## Client Onboarding Checklist
+
+- Confirm organization name, tenant boundary, admin users, and evaluator roles.
+- Confirm whether onboarding is a local consulting/client demo, staging evaluation, or future production deployment.
+- Review safety boundaries before any AWS connector configuration.
+- Confirm sample/demo data labels remain visible until real read-only collection is explicitly approved.
+- Document support contacts, escalation process, and demo success criteria.
+
+## Security Approval Checklist
+
+- Review authentication model and planned identity provider.
+- Review RBAC roles and access review cadence.
+- Review tenant isolation controls and tests.
+- Review secrets management and rotation.
+- Review audit logging coverage.
+- Review AWS role permissions for read-only scope only.
+- Confirm no automatic remediation, AWS mutation, or Terraform apply is enabled.
+
+## Cloud Account Onboarding Process
+
+- Register AWS account metadata with owner, environment, business context, and regions.
+- Store only governance metadata and role placeholders.
+- Do not store AWS secret access keys or session tokens.
+- Validate external ID and role assumption readiness before any future read-only connector use.
+- Keep inventory scanning disabled until an approved scanner milestone exists.
+
+## IAM Role And External ID Validation
+
+- Use IAM role assumption with customer-controlled role trust policy.
+- Require external ID for cross-account trust.
+- Start with STS `GetCallerIdentity` validation only.
+- Document validation results in audit events.
+- Do not expand to inventory APIs without explicit allowlist approval.
+
+## Non-Production Vs Production Separation
+
+- Use separate identity provider apps, databases, Redis instances, secrets, and AWS role assumptions.
+- Keep demo credentials out of production.
+- Block local environment variables from being reused in production.
+- Require staging validation before production deployment.
+- Keep production data out of local demos.
+
+## Incident Response
+
+- Define severity levels for auth incidents, data exposure, connector misuse, queue failure, and database outage.
+- Document who can disable connector modes and stop workers.
+- Capture timeline, affected tenant, audit events, and remediation decisions.
+- Rotate secrets after suspected credential exposure.
+- Run post-incident review and update controls.
+
+## Audit Evidence Export
+
+- Define export formats for internal cloud governance evidence.
+- Include actor, organization, timestamp, control, finding, risk, and recommendation context.
+- Exclude secrets and credential-like values.
+- Label exports as CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence.
+- Do not label exports as official certification evidence.
+
+## Data Retention
+
+- Define retention periods for audit events, scan runs, findings, evidence, risk acceptances, and report exports.
+- Define deletion and archival workflows by tenant.
+- Document backup retention separately from application retention.
+- Review retention rules with security and compliance stakeholders.
+
+## Access Control Review
+
+- Review admin, security, platform, FinOps, compliance, auditor, and viewer role assignments.
+- Remove stale users and rotate tokens.
+- Audit privileged actions.
+- Require periodic access review sign-off.
+- Add evidence of access review to internal governance records.

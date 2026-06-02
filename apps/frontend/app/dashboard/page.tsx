@@ -1,8 +1,9 @@
+"use client";
+
 import { BarChart3, FileCheck2, ShieldCheck, WalletCards } from "lucide-react";
 import { DashboardPage } from "./shared";
-import { EmptyState, fetchCloudShield, SampleDataNotice } from "../../lib/api";
-
-export const dynamic = "force-dynamic";
+import { SampleDataNotice } from "../../lib/ui";
+import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
 
 type DashboardSummary = {
   counts: {
@@ -19,18 +20,34 @@ type DashboardSummary = {
   } | null;
 };
 
-export default async function DashboardHome() {
-  const summary = await fetchCloudShield<DashboardSummary>("/api/v1/dashboard/summary");
-  const metrics = summary
-    ? [
-        { label: "AWS accounts", value: summary.counts.awsAccounts, icon: ShieldCheck },
-        { label: "Resources", value: summary.counts.resources, icon: BarChart3 },
-        { label: "Security findings", value: summary.counts.securityFindings, icon: ShieldCheck },
-        { label: "Cost findings", value: summary.counts.costFindings, icon: WalletCards },
-        { label: "Compliance controls", value: summary.counts.complianceControls, icon: FileCheck2 },
-        { label: "Recommendations", value: summary.counts.recommendations, icon: BarChart3 }
-      ]
-    : [];
+const InstantSummary: DashboardSummary = {
+  counts: {
+    awsAccounts: 4,
+    resources: 5,
+    securityFindings: 3,
+    costFindings: 2,
+    complianceControls: 4,
+    recommendations: 5
+  },
+  latestScanStatus: {
+    status: "COMPLETED",
+    jobType: "SAMPLE_DEMO_DATA_LOAD"
+  }
+};
+
+export default function DashboardHome() {
+  const { data: summary, error, isRefreshing } = useCloudShieldData<DashboardSummary>(
+    "/api/v1/dashboard/summary",
+    InstantSummary
+  );
+  const metrics = [
+    { label: "AWS accounts", value: summary.counts.awsAccounts, icon: ShieldCheck },
+    { label: "Resources", value: summary.counts.resources, icon: BarChart3 },
+    { label: "Security findings", value: summary.counts.securityFindings, icon: ShieldCheck },
+    { label: "Cost findings", value: summary.counts.costFindings, icon: WalletCards },
+    { label: "Compliance controls", value: summary.counts.complianceControls, icon: FileCheck2 },
+    { label: "Recommendations", value: summary.counts.recommendations, icon: BarChart3 }
+  ];
 
   return (
     <DashboardPage
@@ -38,7 +55,7 @@ export default async function DashboardHome() {
       description="Enterprise governance overview for account coverage, cloud risk, cost governance signals, compliance evidence readiness, and review-only recommendations."
     >
       <SampleDataNotice />
-      {!summary && <EmptyState label="Backend sample summary is not available yet." />}
+      <RefreshBadge error={error} isRefreshing={isRefreshing} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => {
           const Icon = metric.icon;

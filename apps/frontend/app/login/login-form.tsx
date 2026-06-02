@@ -39,8 +39,20 @@ export function LoginForm() {
       };
 
       localStorage.setItem("cloudshield_access_token", data.accessToken);
+      localStorage.setItem(
+        "cloudshield_current_user",
+        JSON.stringify({
+          user: data.user,
+          organization: data.organization
+        })
+      );
       document.cookie = `cloudshield_access_token=${data.accessToken}; path=/; SameSite=Lax; max-age=3600`;
-      router.push("/dashboard");
+      const nextPath = new URLSearchParams(window.location.search).get("next");
+      const destination = nextPath?.startsWith("/dashboard")
+        ? nextPath
+        : "/dashboard";
+      router.prefetch(destination);
+      router.replace(destination);
       router.refresh();
     } catch {
       setError("Unable to reach the CloudShield backend.");
@@ -77,7 +89,7 @@ export function LoginForm() {
         </div>
       )}
       <button
-        className="flex h-11 w-full items-center justify-center rounded-md bg-ink text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+        className="cs-action-primary flex h-11 w-full items-center justify-center rounded-md text-sm font-semibold"
         disabled={isSubmitting}
         type="submit"
       >

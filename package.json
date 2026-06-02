@@ -10,6 +10,10 @@
     "dev:backend": "pnpm --filter @cloudshield/backend dev",
     "dev:frontend": "pnpm --filter @cloudshield/frontend dev",
     "dev:worker": "pnpm --filter @cloudshield/worker dev",
+    "cloudshield": "powershell -ExecutionPolicy Bypass -File ./scripts/cloudshield.ps1",
+    "cloudshield:start": "pnpm cloudshield start",
+    "cloudshield:stop": "pnpm cloudshield stop",
+    "cloudshield:status": "pnpm cloudshield status",
     "prisma:generate": "pnpm --filter @cloudshield/database prisma:generate"
   },
   "devDependencies": {

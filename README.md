@@ -65,6 +65,14 @@ AWS_CONNECTOR_MODE=disabled
 
 When explicitly set to `readonly-validation` and configured, the only supported AWS API path is STS `GetCallerIdentity`. Real inventory scanning remains planned for a later milestone.
 
+## Enterprise Deployment Direction
+
+CloudShield is designed as a future-scope enterprise AWS governance platform that can be evolved toward company/client deployment readiness. The current implementation is a safe local/demo foundation with read-only AWS validation architecture, sample data clearly labeled, and AWS inventory scanning disabled by default.
+
+Safe positioning language for this repository includes enterprise-company deployment ready direction, client-evaluation ready foundation, Accenture-style enterprise delivery readiness, consulting/client demo ready workflow, production deployment roadmap, company IT-level cloud governance platform, and real-world deployment architecture.
+
+CloudShield does not claim deployment to Accenture, does not claim Accenture is a customer, and does not claim any real client deployment.
+
 ## Architecture Overview
 
 ```text
@@ -96,7 +104,14 @@ pnpm install
 Start the full local stack:
 
 ```powershell
-docker compose up -d --build
+pnpm cloudshield start
+```
+
+Check or stop the local stack:
+
+```powershell
+pnpm cloudshield status
+pnpm cloudshield stop
 ```
 
 Apply migrations:

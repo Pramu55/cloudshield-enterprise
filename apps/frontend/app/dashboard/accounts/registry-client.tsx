@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   AwsAccountDto,
   AwsAccountEnvironment,
@@ -74,6 +74,14 @@ export function AccountRegistryClient({
     "AWS account registry only - real AWS inventory scanning is not enabled yet."
   );
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setAccounts(initialAccounts);
+  }, [initialAccounts]);
+
+  useEffect(() => {
+    setConnector(connectorStatus);
+  }, [connectorStatus]);
 
   const activeAccount = useMemo(
     () => accounts.find((account) => account.id === form.id),
@@ -348,7 +356,7 @@ export function AccountRegistryClient({
             </label>
             <div className="flex gap-2">
               <button
-                className="inline-flex items-center gap-2 rounded-md bg-signal px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="cs-action-signal inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold"
                 type="button"
                 disabled={isSaving}
                 onClick={submitAccount}

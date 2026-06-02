@@ -1,7 +1,8 @@
-import { DashboardPage } from "../shared";
-import { EmptyState, fetchCloudShield, SampleDataNotice } from "../../../lib/api";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { DashboardPage } from "../shared";
+import { EmptyState, SampleDataNotice } from "../../../lib/ui";
+import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
 
 type RecommendationResponse = {
   items: Array<{
@@ -14,8 +15,32 @@ type RecommendationResponse = {
   }>;
 };
 
-export default async function RecommendationsPage() {
-  const data = await fetchCloudShield<RecommendationResponse>("/api/v1/recommendations");
+const InstantRecommendations: RecommendationResponse = {
+  items: [
+    {
+      id: "instant-recommendation-1",
+      title: "Review network exposure and document owner decision",
+      actionType: "MANUAL_REVIEW",
+      canExecute: false,
+      blockedReason: "Automatic remediation is disabled in CloudShield v1.",
+      riskReduction: "Creates an auditable owner review path without changing AWS."
+    },
+    {
+      id: "instant-recommendation-2",
+      title: "Prepare tagging cleanup plan for cost allocation",
+      actionType: "GOVERNANCE_WORKFLOW",
+      canExecute: false,
+      blockedReason: "Automatic remediation is disabled in CloudShield v1.",
+      riskReduction: "Improves FinOps accountability through manual workflow."
+    }
+  ]
+};
+
+export default function RecommendationsPage() {
+  const { data, error, isRefreshing } = useCloudShieldData<RecommendationResponse>(
+    "/api/v1/recommendations",
+    InstantRecommendations
+  );
 
   return (
     <DashboardPage
@@ -23,6 +48,7 @@ export default async function RecommendationsPage() {
       description="Advisory remediation planning for manual review. Recommendations are non-executable; CloudShield does not run automatic fixes or Terraform apply."
     >
       <SampleDataNotice />
+      <RefreshBadge error={error} isRefreshing={isRefreshing} />
       {!data?.items.length ? (
         <EmptyState label="No sample recommendations are available yet." />
       ) : (

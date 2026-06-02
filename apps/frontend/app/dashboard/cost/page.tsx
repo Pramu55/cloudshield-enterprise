@@ -1,7 +1,8 @@
-import { DashboardPage } from "../shared";
-import { EmptyState, fetchCloudShield, SampleDataNotice } from "../../../lib/api";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { DashboardPage } from "../shared";
+import { EmptyState, SampleDataNotice } from "../../../lib/ui";
+import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
 
 type CostResponse = {
   items: Array<{
@@ -16,8 +17,36 @@ type CostResponse = {
   }>;
 };
 
-export default async function CostPage() {
-  const data = await fetchCloudShield<CostResponse>("/api/v1/findings/cost");
+const InstantCost: CostResponse = {
+  items: [
+    {
+      id: "instant-cost-1",
+      title: "Idle compute review candidate",
+      severity: "MEDIUM",
+      status: "OPEN",
+      estimatedMonthlyWaste: "420.00",
+      estimatedAnnualWaste: "5040.00",
+      currency: "USD",
+      resource: { name: "sample-worker-fleet", resourceId: "sample-resource" }
+    },
+    {
+      id: "instant-cost-2",
+      title: "Missing ownership tags for allocation review",
+      severity: "LOW",
+      status: "OPEN",
+      estimatedMonthlyWaste: "180.00",
+      estimatedAnnualWaste: "2160.00",
+      currency: "USD",
+      resource: { name: "sample-shared-storage", resourceId: "sample-resource" }
+    }
+  ]
+};
+
+export default function CostPage() {
+  const { data, error, isRefreshing } = useCloudShieldData<CostResponse>(
+    "/api/v1/findings/cost",
+    InstantCost
+  );
 
   return (
     <DashboardPage
@@ -25,6 +54,7 @@ export default async function CostPage() {
       description="FinOps workspace for sample waste indicators, missing allocation tags, ownership gaps, idle-resource review, and estimated monthly waste."
     >
       <SampleDataNotice />
+      <RefreshBadge error={error} isRefreshing={isRefreshing} />
       {!data?.items.length ? (
         <EmptyState label="No sample cost findings are available yet." />
       ) : (

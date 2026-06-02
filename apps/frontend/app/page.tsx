@@ -36,8 +36,8 @@ export default function LandingPage() {
               <p className="text-sm text-slate-600">{PLATFORM_TITLE}</p>
             </div>
             <Link
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-4 text-sm font-semibold text-white"
-              href="/dashboard"
+              className="cs-action-primary inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold"
+              href="/login"
             >
               Open console <ArrowRight size={16} />
             </Link>

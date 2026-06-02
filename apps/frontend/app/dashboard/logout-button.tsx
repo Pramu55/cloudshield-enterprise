@@ -7,8 +7,9 @@ export function LogoutButton() {
 
   function logout() {
     localStorage.removeItem("cloudshield_access_token");
+    localStorage.removeItem("cloudshield_current_user");
     document.cookie = "cloudshield_access_token=; path=/; max-age=0; SameSite=Lax";
-    router.push("/login");
+    router.replace("/login");
     router.refresh();
   }
 

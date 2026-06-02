@@ -1,7 +1,8 @@
-import { DashboardPage } from "../shared";
-import { EmptyState, fetchCloudShield, SampleDataNotice } from "../../../lib/api";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { DashboardPage } from "../shared";
+import { EmptyState, SampleDataNotice } from "../../../lib/ui";
+import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
 
 type SecurityResponse = {
   items: Array<{
@@ -15,8 +16,34 @@ type SecurityResponse = {
   }>;
 };
 
-export default async function SecurityPage() {
-  const data = await fetchCloudShield<SecurityResponse>("/api/v1/findings/security");
+const InstantSecurity: SecurityResponse = {
+  items: [
+    {
+      id: "instant-security-1",
+      title: "Public exposure review required for sample internet-facing workload",
+      severity: "HIGH",
+      status: "OPEN",
+      ruleId: "CIS_INSPIRED_NETWORK_EXPOSURE",
+      resource: { name: "sample-web-edge", resourceId: "sample-resource" },
+      ownerTeam: { name: "Platform Engineering" }
+    },
+    {
+      id: "instant-security-2",
+      title: "Encryption posture evidence needs owner review",
+      severity: "MEDIUM",
+      status: "IN_REVIEW",
+      ruleId: "CIS_INSPIRED_ENCRYPTION_EVIDENCE",
+      resource: { name: "sample-data-store", resourceId: "sample-resource" },
+      ownerTeam: { name: "Security Operations" }
+    }
+  ]
+};
+
+export default function SecurityPage() {
+  const { data, error, isRefreshing } = useCloudShieldData<SecurityResponse>(
+    "/api/v1/findings/security",
+    InstantSecurity
+  );
 
   return (
     <DashboardPage
@@ -24,6 +51,7 @@ export default async function SecurityPage() {
       description="Security posture workspace for exposure, IAM risk, storage posture, encryption gaps, logging signals, ownership, and review workflow."
     >
       <SampleDataNotice />
+      <RefreshBadge error={error} isRefreshing={isRefreshing} />
       {!data?.items.length ? (
         <EmptyState label="No sample security findings are available yet." />
       ) : (

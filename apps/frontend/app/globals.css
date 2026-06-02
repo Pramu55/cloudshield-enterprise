@@ -29,3 +29,29 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+.cs-action-primary {
+  background: #111827;
+  color: #ffffff;
+}
+
+.cs-action-primary:hover {
+  background: #0b1220;
+  color: #ffffff;
+}
+
+.cs-action-signal {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.cs-action-signal:hover {
+  background: #0b5f59;
+  color: #ffffff;
+}
+
+.cs-action-primary:disabled,
+.cs-action-signal:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
