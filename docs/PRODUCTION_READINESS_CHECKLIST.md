@@ -164,3 +164,12 @@ This checklist describes what CloudShield should satisfy before production deplo
 - Confirm evidence evaluation does not trigger AWS scans or AWS changes.
 - Confirm sample/demo data labels are visible in demo environments.
 - Review data retention, access control, export approval, and audit logging before production deployment.
+
+## Reports And Exports Readiness
+
+- Confirm report responses include `generatedFromCloudShieldRecordsOnly=true`.
+- Confirm report responses include `officialAuditReportClaim=false`.
+- Confirm report responses include `officialCertificationClaim=false`.
+- Confirm report generation does not trigger AWS scans or AWS changes.
+- Confirm JSON preview records remain clearly labeled as sample/demo in local environments.
+- Confirm PDF/CSV/signed evidence pack workflows remain future scope until separately approved.

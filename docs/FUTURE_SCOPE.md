@@ -21,6 +21,7 @@ The platform direction is an AWS governance control plane for company IT, cloud 
 - Cloud risk graph
 - Review-only recommendations and remediation planning
 - Report exports for governance conversations
+- Reports and evidence export center
 - Enterprise RBAC
 - SIEM and ticketing integrations
 - Production deployment hardening
@@ -69,6 +70,7 @@ Future work must not silently expand CloudShield beyond read-only governance.
 - Risk workflow and ownership expansion
 - Risk acceptance approval workflow
 - Evidence export packages
+- PDF/CSV reports, signed evidence packs, and scheduled report workflows
 - RBAC and audit log hardening
 - Production observability and SLOs
 - Client-ready demo script and seeded scenarios

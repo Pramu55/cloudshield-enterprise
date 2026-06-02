@@ -261,7 +261,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_AWS_INVENTORY_READONLY_SCANNER_PLAN_GREEN",
   "CLOUDSHIELD_SECURITY_POSTURE_RULES_FOUNDATION_GREEN",
   "CLOUDSHIELD_RISK_WORKFLOW_AND_OWNERSHIP_GREEN",
-  "CLOUDSHIELD_COMPLIANCE_EVIDENCE_CENTER_GREEN"
+  "CLOUDSHIELD_COMPLIANCE_EVIDENCE_CENTER_GREEN",
+  "CLOUDSHIELD_REPORTS_AND_EXPORTS_FOUNDATION_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -908,4 +909,139 @@ export const ComplianceExportPreviewResponseSchema =
   });
 export type ComplianceExportPreviewResponse = z.infer<
   typeof ComplianceExportPreviewResponseSchema
+>;
+
+// Reports And Exports
+
+export const ReportTypeSchema = z.enum([
+  "EXECUTIVE_POSTURE_SUMMARY",
+  "SECURITY_FINDINGS_SUMMARY",
+  "COMPLIANCE_EVIDENCE_SUMMARY",
+  "RISK_WORKFLOW_SUMMARY",
+  "AWS_ACCOUNT_GOVERNANCE_SUMMARY",
+  "COST_GOVERNANCE_SUMMARY"
+]);
+export type ReportType = z.infer<typeof ReportTypeSchema>;
+
+export const ReportStatusSchema = z.enum([
+  "QUEUED",
+  "PROCESSING",
+  "COMPLETED",
+  "FAILED"
+]);
+export type ReportStatus = z.infer<typeof ReportStatusSchema>;
+
+export const ReportFormatSchema = z.enum(["json", "json-preview"]);
+export type ReportFormat = z.infer<typeof ReportFormatSchema>;
+
+const ReportSafetyFlagsSchema = z.object({
+  sampleData: z.literal(true),
+  sampleDataLabel: z.literal(
+    "Sample demo data - real AWS scanning is not enabled yet."
+  ),
+  generatedFromCloudShieldRecordsOnly: z.literal(true),
+  officialAuditReportClaim: z.literal(false),
+  officialCertificationClaim: z.literal(false),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false)
+});
+export type ReportSafetyFlags = z.infer<typeof ReportSafetyFlagsSchema>;
+
+export const ReportPreviewRequestSchema = z.object({
+  reportType: ReportTypeSchema,
+  scope: z.string().trim().min(1).max(80).optional(),
+  filters: z.record(z.string(), z.any()).optional()
+});
+export type ReportPreviewRequest = z.infer<typeof ReportPreviewRequestSchema>;
+
+export const ReportGenerateRequestSchema = ReportPreviewRequestSchema.extend({
+  title: z.string().trim().min(1).max(160).optional(),
+  format: ReportFormatSchema.default("json-preview")
+});
+export type ReportGenerateRequest = z.infer<typeof ReportGenerateRequestSchema>;
+
+export const ReportMetricSchema = z.object({
+  label: z.string(),
+  value: z.union([z.string(), z.number(), z.boolean()]),
+  tone: z.enum(["neutral", "good", "warning", "critical"]).default("neutral")
+});
+export type ReportMetric = z.infer<typeof ReportMetricSchema>;
+
+export const ReportSectionSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  metrics: z.array(ReportMetricSchema),
+  records: z.array(z.record(z.string(), z.any())).default([])
+});
+export type ReportSection = z.infer<typeof ReportSectionSchema>;
+
+export const ReportPreviewResponseSchema = ReportSafetyFlagsSchema.extend({
+  reportType: ReportTypeSchema,
+  title: z.string(),
+  generatedAt: z.string(),
+  scope: z.string(),
+  sections: z.array(ReportSectionSchema),
+  metrics: z.array(ReportMetricSchema),
+  safetyFlags: ReportSafetyFlagsSchema,
+  message: z.string()
+});
+export type ReportPreviewResponse = z.infer<
+  typeof ReportPreviewResponseSchema
+>;
+
+export const ReportExportDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  reportType: ReportTypeSchema,
+  reportScope: z.string(),
+  title: z.string(),
+  status: ReportStatusSchema,
+  format: ReportFormatSchema,
+  summaryJson: z.record(z.string(), z.any()),
+  filtersJson: z.record(z.string(), z.any()),
+  sampleData: z.boolean(),
+  officialAuditReportClaim: z.literal(false),
+  requestedByUserId: z.string().nullable(),
+  generatedByUserId: z.string().nullable(),
+  generatedAt: z.string().nullable(),
+  exportedFilePath: z.string().nullable(),
+  requestedBy: z.string().nullable(),
+  createdAt: z.string(),
+  completedAt: z.string().nullable(),
+  archivedAt: z.string().nullable()
+});
+export type ReportExportDto = z.infer<typeof ReportExportDtoSchema>;
+
+export const ReportGenerateResponseSchema = ReportSafetyFlagsSchema.extend({
+  reportExport: ReportExportDtoSchema,
+  preview: ReportPreviewResponseSchema,
+  message: z.literal(
+    "Report export record created from CloudShield records only."
+  )
+});
+export type ReportGenerateResponse = z.infer<
+  typeof ReportGenerateResponseSchema
+>;
+
+export const ReportListResponseSchema = ReportSafetyFlagsSchema.extend({
+  items: z.array(ReportExportDtoSchema)
+});
+export type ReportListResponse = z.infer<typeof ReportListResponseSchema>;
+
+export const ReportSummaryResponseSchema = ReportSafetyFlagsSchema.extend({
+  reportTypes: z.array(ReportTypeSchema),
+  counts: z.object({
+    reportExports: z.number().int(),
+    completed: z.number().int(),
+    previewsAvailable: z.number().int(),
+    latestGeneratedAt: z.string().nullable(),
+    complianceEvidenceCount: z.number().int(),
+    openRiskCount: z.number().int()
+  }),
+  recentReports: z.array(ReportExportDtoSchema),
+  message: z.string()
+});
+export type ReportSummaryResponse = z.infer<
+  typeof ReportSummaryResponseSchema
 >;

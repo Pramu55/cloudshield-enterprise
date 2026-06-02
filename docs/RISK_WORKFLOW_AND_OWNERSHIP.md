@@ -56,3 +56,7 @@ Audit event metadata is sanitized and must not contain secrets.
 Risk workflow records feed the Compliance Evidence Center. Security finding ownership, remediation planning, risk acceptance, and workflow audit events can be mapped into internal cloud governance evidence and SOC2-inspired evidence.
 
 This integration is evidence-only. It does not execute remediation, does not call AWS APIs, and does not claim official compliance certification.
+
+## Reports Integration
+
+Risk workflow records can be summarized in report previews for assigned findings, accepted risks, target dates, resolved findings, and audit trail activity. Report generation writes CloudShield report records only and does not execute remediation or mutate AWS.

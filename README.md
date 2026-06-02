@@ -42,6 +42,7 @@ CloudShield provides the foundation for that operating model without automatic r
 - Sample/demo inventory, findings, compliance evidence, and recommendations
 - Security finding risk workflow with ownership, priority, acceptance, and audit events
 - Compliance Evidence Center for CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence
+- Reports and Evidence Export Center with safe JSON preview records generated from CloudShield records only
 - Review-only recommendation model with execution blocked
 
 ## Safety Model
@@ -177,6 +178,12 @@ GET /api/v1/compliance/controls/:controlId
 POST /api/v1/compliance/evaluate
 GET /api/v1/compliance/evidence
 GET /api/v1/compliance/export/preview
+GET /api/v1/reports
+GET /api/v1/reports/summary
+POST /api/v1/reports/preview
+POST /api/v1/reports/generate
+GET /api/v1/reports/:reportId
+GET /api/v1/reports/:reportId/export-preview
 ```
 
 Protected routes require `Authorization: Bearer <token>` and must derive tenant scope from the authenticated organization context.
@@ -196,6 +203,7 @@ Implemented foundation:
 - Security posture rules foundation
 - Risk workflow and ownership foundation
 - Compliance evidence center foundation
+- Reports and exports foundation
 
 ## Future Roadmap
 

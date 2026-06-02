@@ -155,3 +155,16 @@ Planned:
 - JSON export preview foundation
 
 This milestone does not add AWS scanning, AWS mutation, automatic remediation, Terraform apply, official CIS/SOC2 certification claims, or real customer deployment claims.
+
+## Reports And Exports Foundation
+
+`CLOUDSHIELD_REPORTS_AND_EXPORTS_FOUNDATION_GREEN` adds safe report preview workflows:
+
+- Executive posture summary
+- Security findings summary
+- Compliance evidence summary
+- Risk workflow summary
+- AWS account governance summary
+- Cost governance summary
+
+Report generation creates JSON preview records from CloudShield database records only. PDF, CSV, signed evidence packs, scheduled reports, official audit reports, and external delivery are future scope.

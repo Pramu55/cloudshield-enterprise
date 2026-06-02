@@ -61,3 +61,7 @@ GET /api/v1/compliance/export/preview
 ## Future Scope
 
 Future phases can add richer evidence exports, approval workflow, evidence retention policies, RBAC-backed reviewer roles, SIEM/ticketing integrations, and client-ready onboarding workflows. Real AWS inventory evidence should only be introduced after an approved read-only scanner milestone with explicit API allowlists and safety validation.
+
+## Reports Integration
+
+The Reports and Evidence Export Center can summarize compliance controls and evidence for safe JSON previews. These previews are generated from CloudShield records only and are not official audit reports or official CIS/SOC2 certification packages.

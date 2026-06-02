@@ -481,14 +481,27 @@ model ReportExport {
   organizationId String
   organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   reportType     String
+  reportScope    String             @default("organization")
+  title          String?
   status         ReportExportStatus @default(QUEUED)
   format         String             @default("json")
+  summaryJson    Json               @default("{}")
+  filtersJson    Json               @default("{}")
   filters        Json               @default("{}")
+  sampleData     Boolean            @default(true)
+  officialAuditReportClaim Boolean   @default(false)
+  requestedByUserId String?
+  generatedByUserId String?
+  generatedAt    DateTime?
   exportUrl      String?
+  exportedFilePath String?
   requestedBy    String?
   createdAt      DateTime           @default(now())
   completedAt    DateTime?
+  archivedAt     DateTime?
 
   @@index([organizationId])
   @@index([organizationId, status])
+  @@index([organizationId, reportType])
+  @@index([organizationId, archivedAt])
 }

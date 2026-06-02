@@ -140,3 +140,17 @@ Safety guarantees:
 - No Terraform apply is executed.
 - No official CIS/SOC2 certification is claimed.
 - Sample/demo evidence remains labeled.
+
+## Reports And Exports Safety
+
+Report previews are generated from CloudShield records only. Creating a report record writes `summaryJson` to the CloudShield database and does not create an official audit report file.
+
+Safety guarantees:
+
+- No AWS scan is triggered by report generation.
+- No AWS inventory/list API is called.
+- No AWS mutation is executed.
+- No automatic remediation is executed.
+- No Terraform apply is executed.
+- No official audit report is claimed.
+- No official CIS/SOC2 certification is claimed.

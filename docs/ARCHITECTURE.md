@@ -30,6 +30,7 @@ The current product direction is an enterprise-client-ready AWS governance contr
 - AWS inventory routes expose the future scanner plan only. They do not enqueue scanner jobs or execute EC2, S3, IAM, Security Group, EBS, VPC, subnet, RDS, Lambda, CloudTrail, KMS, or billing inventory APIs.
 - Risk workflow routes turn security findings into organization-scoped ownership, SLA, risk acceptance, and audit records. They update CloudShield database records only.
 - Compliance evidence routes map CloudShield security findings, cost findings, risk acceptances, audit events, and recommendations into CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence. Evaluation uses CloudShield records only and returns `awsApiCallExecuted=false`, `mutationExecuted=false`, and `remediationExecuted=false`.
+- Report routes create executive, security, compliance, risk, account governance, and cost governance JSON previews from CloudShield records only. Report generation creates `ReportExport` database records only and does not generate official audit reports.
 
 ## Data Boundary
 
@@ -101,6 +102,19 @@ The current evidence center:
 - Does not claim official CIS/SOC2 certification.
 - Keeps sample/demo records clearly labeled.
 
+## Reports And Exports
+
+The backend module at `apps/backend/src/modules/reports` provides the first reports and exports foundation. It computes safe JSON previews from tenant-scoped CloudShield database records and can create `ReportExport` records with `summaryJson`.
+
+The current reports foundation:
+
+- Does not trigger AWS scans.
+- Does not call AWS inventory/list APIs.
+- Does not execute AWS mutation, automatic remediation, or Terraform apply.
+- Does not create official audit reports.
+- Does not claim official CIS/SOC2 certification.
+- Does not claim real client deployment.
+
 ## Enterprise Blueprint References
 
 - `docs/ENTERPRISE_CLIENT_BLUEPRINT.md`
@@ -110,6 +124,7 @@ The current evidence center:
 - `docs/RISK_WORKFLOW_MODEL.md`
 - `docs/COMPLIANCE_EVIDENCE_MODEL.md`
 - `docs/COMPLIANCE_EVIDENCE_CENTER.md`
+- `docs/REPORTS_AND_EXPORTS.md`
 - `docs/AWS_INVENTORY_SCANNER_PLAN.md`
 - `docs/RISK_WORKFLOW_AND_OWNERSHIP.md`
 

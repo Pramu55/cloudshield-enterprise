@@ -152,3 +152,9 @@ This path is a production deployment roadmap, not a claim that the current repos
 CloudShield's client-evaluation ready blueprint now includes a Compliance Evidence Center for enterprise cloud governance conversations. It presents CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence generated from CloudShield records.
 
 The blueprint remains a future-scope enterprise platform plan. It does not claim deployment to Accenture, does not claim Accenture is a customer, and does not claim any real client deployment.
+
+## Reports And Exports Direction
+
+CloudShield's client-evaluation ready blueprint includes a Reports and Evidence Export Center for executive, security, compliance, risk, AWS account governance, and cost governance previews.
+
+Current report exports are safe JSON preview records generated from CloudShield records only. They are not official audit reports and do not claim official CIS/SOC2 certification.

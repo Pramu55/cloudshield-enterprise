@@ -68,3 +68,7 @@ Allowed language remains:
 - internal cloud governance evidence
 
 CloudShield does not claim official CIS/SOC2 certification. Compliance evaluation generates evidence from CloudShield records only and does not trigger AWS scans or AWS changes.
+
+## Report Preview Usage
+
+Compliance evidence can be summarized in report previews for enterprise demo/evaluation workflows. Report previews do not create official audit reports, do not claim official certification, and do not trigger AWS scans or AWS changes.

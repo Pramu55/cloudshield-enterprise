@@ -20,7 +20,10 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       complianceEvidenceCount,
       complianceNeedsReviewCount,
       riskAcceptanceCount,
+      openRiskCount,
       recommendationCount,
+      reportExportCount,
+      latestReport,
       latestScan
     ] = await Promise.all([
       prisma.organization.count({ where: { id: auth.organizationId } }),
@@ -39,7 +42,35 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
         }
       }),
       prisma.riskAcceptance.count({ where: organizationScope }),
+      prisma.securityFinding.count({
+        where: {
+          ...organizationScope,
+          archivedAt: null,
+          status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
+        }
+      }),
       prisma.recommendation.count({ where: organizationScope }),
+      prisma.reportExport.count({
+        where: {
+          ...organizationScope,
+          archivedAt: null
+        }
+      }),
+      prisma.reportExport.findFirst({
+        where: {
+          ...organizationScope,
+          archivedAt: null
+        },
+        orderBy: [{ generatedAt: "desc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          reportType: true,
+          title: true,
+          status: true,
+          generatedAt: true,
+          createdAt: true
+        }
+      }),
       prisma.scanRun.findFirst({
         where: organizationScope,
         orderBy: { startedAt: "desc" },
@@ -72,7 +103,15 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
         complianceEvidence: complianceEvidenceCount,
         complianceNeedsReview: complianceNeedsReviewCount,
         riskAcceptances: riskAcceptanceCount,
+        openRisks: openRiskCount,
+        reportExports: reportExportCount,
         recommendations: recommendationCount
+      },
+      reportReadiness: {
+        complianceEvidenceReportReady: complianceEvidenceCount > 0,
+        latestReportGeneratedAt:
+          latestReport?.generatedAt?.toISOString() ?? latestReport?.createdAt.toISOString() ?? null,
+        latestReport
       },
       latestScanStatus: latestScan
     };
