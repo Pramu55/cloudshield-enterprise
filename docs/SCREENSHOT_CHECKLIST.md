@@ -1,23 +1,31 @@
-# Screenshot & Demo Checklist
+# Screenshot & Media Checklist
 
-When preparing screenshots or conducting a live demo of CloudShield, ensure the following elements are clearly visible or addressed:
+Capture the following screenshots to build out the portfolio case study, README, and demonstration materials.
 
-### 1. Safety and Context
-- [ ] **Sample Data Banner:** The "Sample/demo data" notice is visible at the top of the dashboard.
-- [ ] **No Execution Claim:** Wording indicating "No AWS changes are executed" or "Scanner disabled" is visible on the Dashboard and Settings pages.
-- [ ] **Certification Disclaimer:** It is clear that compliance is "CIS-inspired" or "SOC2-inspired", not officially certified.
+## Safety Rule
+**CRITICAL**: Do not show secrets, `.env` file contents, API tokens, AWS credentials, database URLs, or private customer/client data in ANY screenshots. Ensure the environment is strictly using the sample/demo evaluator mock data before capturing.
 
-### 2. Core Workflows
-- [ ] **Executive Dashboard:** Capture the primary metrics (Accounts, Inventory, Risks, Compliance).
-- [ ] **Security Evaluation:** Capture the before/after of clicking "Evaluate Security Rules".
-- [ ] **Compliance Mapping:** Capture the evidence center showing controls passing/failing based on finding data.
-- [ ] **Report Generation:** Capture a generated report preview showing the safety metadata (e.g., `generatedFromCloudShieldRecordsOnly: true`).
+## Required Screenshots
 
-### 3. Navigation and UX
-- [ ] **Sidebar:** The collapsible sidebar is open in at least one screenshot to show full navigation context.
-- [ ] **Fast Navigation:** During live demos, demonstrate the snappy client-side navigation between tabs.
+### 1. Landing & Auth
+- [ ] **Landing Page**: Showing the initial platform value proposition.
+- [ ] **Login Page**: Showing the tenant-scoped authentication boundary.
 
-### 4. What NOT to Show/Claim
-- [ ] **No Live AWS Metrics:** Do not mock up fake CloudWatch graphs or live AWS billing data that looks too real.
-- [ ] **No Real Client Logos:** Do not use Accenture or other real company logos in the demo tenant data.
-- [ ] **No Mutation Buttons:** Do not show "Remediate Now" buttons unless they are clearly marked as disabled or "Review Only".
+### 2. Dashboard
+- [ ] **Executive Dashboard**: Full page view showing the metrics grid, safety status, and demo-freeze header.
+
+### 3. Core Modules
+- [ ] **Accounts Page**: Showing the AWS account registry and read-only connector status.
+- [ ] **Inventory Page**: Demonstrating the CMDB resource table.
+- [ ] **Security Posture**: Showing the deterministic rules engine output and high-risk findings.
+- [ ] **Risk Workflow**: Displaying the risk ownership and acceptance workflow for a specific finding.
+- [ ] **Compliance Evidence Center**: Demonstrating the mapping of findings to CIS-inspired and SOC2-inspired controls.
+- [ ] **Reports Page**: Showing the report export preview foundation.
+- [ ] **Scans Page**: Showing the background scanning status (with disabled state visible).
+
+### 4. Configuration & Safety
+- [ ] **Settings / Safety Status**: Showing the disabled state of AWS mutation and automatic remediation.
+
+### 5. Technical Context
+- [ ] **GitHub Repo README**: Showing the clean project structure and architecture documentation.
+- [ ] **Runtime Status Terminal**: Showing the `pnpm cloudshield status` or `docker compose ps` output to prove deterministic local containerization.

@@ -31,7 +31,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/v1/platform/status", async () => {
-    const milestone = "CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN";
+    const milestone = "CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN";
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,
@@ -47,7 +47,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
       platformName: PLATFORM_NAME,
       platformCategory:
         "Enterprise AWS Security Posture, Cost Governance & Compliance Evidence Platform",
-      currentMilestone: "CLOUDSHIELD_EXECUTIVE_DASHBOARD_AND_DEMO_FREEZE_GREEN",
+      currentMilestone: "CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN",
       awsConnectorMode: "disabled",
       inventoryScanningEnabled: false,
       mutationEnabled: false,

@@ -1,243 +1,81 @@
 # CloudShield Enterprise
+**Future-Scope Enterprise AWS Governance, Security Posture, and Compliance Platform Foundation**
 
-CloudShield Enterprise is a future-scope enterprise AWS governance platform foundation for security posture, risk workflow, compliance evidence, and reports.
+CloudShield Enterprise is a company IT / client-evaluation-ready demonstration platform. It provides a real-world deployment architecture for managing AWS account governance, evaluating security posture against CIS/SOC2-inspired controls, maintaining a cloud asset inventory, and tracking compliance evidence. 
 
-Current implementation is a safe local/demo foundation designed with enterprise safety boundaries. It is not a toy dashboard, but a real architecture blueprint.
+## What CloudShield Solves
+Managing cloud infrastructure at scale requires visibility, deterministic security rule evaluation, and clear risk ownership workflows. CloudShield solves this by providing a unified, multi-module executive dashboard that aggregates AWS data and surfaces actionable insights without directly mutating your cloud environments.
 
-**Important Safety & Scope Limits:**
-* We do **not** claim real client deployment (e.g. to Accenture).
-* We do **not** claim official CIS or SOC2 certification.
-* We do **not** execute AWS changes or mutation.
-* The AWS scanner is **not** run by default.
-
-## Problem It Solves
-
-Enterprise cloud teams often need one place to answer:
-
-- Which AWS accounts exist, who owns them, and what environments do they represent?
-- Which resources and findings need security or cost governance review?
-- Which CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence are ready for audit conversations?
-- Which risks have owners, status, business impact, and acceptance context?
-- Which recommendations are safe to review without triggering cloud mutation?
-
-CloudShield provides the foundation for that operating model without automatic remediation or broad AWS scanning in the current milestone.
-
-## Users
-
-- Cloud security teams reviewing posture and exposure signals
-- DevOps and platform teams tracking account ownership and cloud governance work
-- SRE teams reviewing operational risk and service ownership
-- FinOps teams reviewing waste signals and allocation hygiene
-- Compliance teams collecting internal governance evidence
-- Consulting/demo evaluators reviewing enterprise cloud governance workflows
-
-## Current Capabilities
-
-- pnpm TypeScript monorepo with Turborepo
-- Next.js App Router frontend
-- Fastify 5 backend with Zod contracts
-- Prisma and PostgreSQL enterprise governance schema
-- Redis and BullMQ worker foundation
-- Authenticated demo user and organization-scoped tenant context
-- AWS account governance registry
-- Read-only AWS connector status
-- Disabled-by-default STS identity validation path
-- AWS inventory scanner read-only plan with execution blocked
-- Sample/demo inventory, findings, compliance evidence, and recommendations
-- Security finding risk workflow with ownership, priority, acceptance, and audit events
-- Compliance Evidence Center for CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence
-- Reports and Evidence Export Center with safe JSON preview records generated from CloudShield records only
-- Review-only recommendation model with execution blocked
-
-## Safety Model
-
-CloudShield v1 is read-only and advisory.
-
-Not included:
-
-- No AWS credentials committed
-- No long-lived AWS access keys stored
-- No AWS inventory scanner execution
-- No EC2, S3, IAM, Security Group, EBS, VPC, RDS, Lambda, CloudTrail, KMS, or billing listing calls in default mode
-- No AWS mutation
-- No automatic remediation
-- No Terraform apply
-- No official CIS/SOC2 certification claims
-- No fake real AWS data or customer deployment claims
-
-The read-only connector defaults to:
-
-```text
-AWS_CONNECTOR_MODE=disabled
-AWS_INVENTORY_SCANNER_MODE=disabled
-```
-
-When explicitly set to `readonly-validation` and configured, the only supported AWS API path is STS `GetCallerIdentity`. Real inventory scanning remains planned for a later milestone.
-
-The inventory scanner plan endpoint documents future read-only APIs but does not execute EC2, S3, IAM, Security Group, EBS, VPC, RDS, Lambda, CloudTrail, KMS, or billing listing calls.
-
-## Enterprise Deployment Direction
-
-CloudShield is designed as a future-scope enterprise AWS governance platform that can be evolved toward company/client deployment readiness. The current implementation is a safe local/demo foundation with read-only AWS validation architecture, sample data clearly labeled, and AWS inventory scanning disabled by default.
-
-Safe positioning language for this repository includes enterprise-company deployment ready direction, client-evaluation ready foundation, Accenture-style enterprise delivery readiness, consulting/client demo ready workflow, production deployment roadmap, company IT-level cloud governance platform, and real-world deployment architecture.
-
-CloudShield does not claim deployment to Accenture, does not claim Accenture is a customer, and does not claim any real client deployment.
+## Enterprise Platform Modules
+- **AWS Account Registry**: Tenant-scoped management of AWS environments.
+- **Resource Inventory (CMDB)**: Centralized view of cloud assets.
+- **Security Posture Engine**: Deterministic rules engine evaluating resources.
+- **Risk Workflow**: Ownership assignment and risk acceptance tracking.
+- **Compliance Evidence Center**: SOC2-inspired and CIS-inspired evidence mapping.
+- **Reports & Exports**: Future-scope generation of PDF/CSV audit reports.
+- **Cost Governance**: Foundational FinOps insights (planned).
 
 ## Architecture Overview
+CloudShield is built using a modern, scalable, and type-safe stack:
+- **Frontend**: Next.js 15 (App Router), Tailwind CSS, Lucide Icons
+- **Backend**: Fastify 5, Zod validation
+- **Database & State**: PostgreSQL 16 (via Prisma ORM), Redis 7
+- **Background Processing**: BullMQ for distributed task queues
+- **Containerization**: Docker Compose for deterministic local execution
+- **Monorepo**: Turborepo and pnpm workspaces
 
-```text
-apps/frontend      Next.js enterprise governance console
-apps/backend       Fastify REST API with /api/v1 routes
-apps/worker        BullMQ worker foundation for future jobs
-packages/contracts Shared Zod schemas and DTOs
-packages/database  Prisma schema, migrations, seed data
-packages/config    Runtime configuration parsing
-packages/security  Read-only safety and recommendation policy helpers
-packages/logger    Structured logging helper
-packages/utils     Shared runtime utilities
-```
+## Capabilities & Safety Model
 
-Runtime services:
+### ✅ Implemented Capabilities
+- Local Runtime Foundation (Dockerized)
+- Tenant & Auth Boundaries (Mocked auth for demo)
+- Security Posture Rules Engine
+- Risk Workflow & Ownership
+- Compliance Evidence Center
+- Reports & Exports Foundation
+- Executive Dashboard & Demo Flow
 
-- PostgreSQL stores organization-scoped governance records
-- Redis supports future queue workflows
-- Docker Compose runs frontend, backend, worker, Postgres, and Redis locally
+### 🚫 Intentionally Disabled Capabilities
+For safety and evaluation purposes, the following are strictly disabled:
+- Live AWS Mutation
+- Automatic Remediation
+- Terraform Apply
+- Live AWS API Calls / Scanners (Default disabled)
 
-## Local Setup
+### Safety Model
+- **Read-Only**: The platform operates in a strict read-only mode.
+- **No Secrets**: No real AWS credentials or customer data are committed or required to run the demo.
+- **Sample Data**: The evaluator demo mode is populated with safe, deterministic sample data.
 
-Install dependencies:
+## Local Quickstart
 
-```powershell
-pnpm install
-```
+### Prerequisites
+- Node.js 22+
+- Docker Desktop
+- pnpm 9+
 
-Start the full local stack:
+### Running the Platform
+1. Clone the repository.
+2. Install dependencies:
+   ```bash
+   pnpm install
+   ```
+3. Start the local runtime:
+   ```bash
+   pnpm cloudshield start
+   ```
+4. Access the platforms:
+   - Frontend: `http://localhost:3100`
+   - Backend API: `http://localhost:4100`
+   - Postgres: `localhost:55432`
+   - Redis: `localhost:6381`
 
-```powershell
-pnpm cloudshield start
-```
+### Demo Login
+Access the dashboard at `http://localhost:3100/login` with:
+- **Email**: `demo@cloudshield.local`
+- **Password**: `CloudShieldDemo123!`
 
-Check or stop the local stack:
-
-```powershell
-pnpm cloudshield status
-pnpm cloudshield stop
-```
-
-Apply migrations:
-
-```powershell
-$env:DATABASE_URL="postgresql://cloudshield:cloudshield_local_password@localhost:55432/cloudshield"
-pnpm --filter @cloudshield/database prisma:deploy
-```
-
-Seed sample/demo data:
-
-```powershell
-$env:DATABASE_URL="postgresql://cloudshield:cloudshield_local_password@localhost:55432/cloudshield"
-pnpm --filter @cloudshield/database seed
-```
-
-Demo login:
-
-```text
-Email: demo@cloudshield.local
-Password: CloudShieldDemo123!
-```
-
-The demo login and seeded records are local sample/demo data only.
-
-Service URLs:
-
-- Frontend: `http://localhost:3100`
-- Backend: `http://localhost:4100`
-- PostgreSQL: `localhost:55432`
-- Redis: `localhost:6381`
-
-## Key API Routes
-
-```text
-GET /health
-GET /ready
-GET /api/v1/platform/status
-POST /api/v1/auth/login
-GET /api/v1/auth/me
-GET /api/v1/dashboard/summary
-GET /api/v1/aws/accounts
-GET /api/v1/aws/connector/status
-GET /api/v1/aws/inventory/plan
-POST /api/v1/aws/accounts/:accountId/inventory/plan
-POST /api/v1/aws/accounts/:accountId/inventory/start
-POST /api/v1/aws/accounts/:accountId/validate-readonly-connection
-GET /api/v1/risk/findings
-GET /api/v1/risk/findings/:findingId
-POST /api/v1/risk/findings/:findingId/acknowledge
-POST /api/v1/risk/findings/:findingId/assign
-POST /api/v1/risk/findings/:findingId/plan-remediation
-POST /api/v1/risk/findings/:findingId/accept-risk
-GET /api/v1/compliance/evidence-center
-GET /api/v1/compliance/controls
-GET /api/v1/compliance/controls/:controlId
-POST /api/v1/compliance/evaluate
-GET /api/v1/compliance/evidence
-GET /api/v1/compliance/export/preview
-GET /api/v1/reports
-GET /api/v1/reports/summary
-POST /api/v1/reports/preview
-POST /api/v1/reports/generate
-GET /api/v1/reports/:reportId
-GET /api/v1/reports/:reportId/export-preview
-```
-
-Protected routes require `Authorization: Bearer <token>` and must derive tenant scope from the authenticated organization context.
-
-## Current Milestones
-
-Implemented foundation:
-
-- Enterprise monorepo and upgraded Fastify/Next.js architecture
-- Local runtime, database migrations, and sample/demo governance data
-- Auth and tenant foundation
-- AWS account registry foundation
-- Read-only AWS connector plan
-- AWS read-only identity validation foundation
-- Enterprise client platform blueprint
-- AWS inventory read-only scanner plan with disabled execution gate
-- Security posture rules foundation
-- Risk workflow and ownership foundation
-- Compliance evidence center foundation
-- Reports and exports foundation
-
-## Future Roadmap
-
-- Phase 1: Foundation, auth, database, AWS account registry, read-only validation
-- Phase 2: Read-only inventory scanner with allowlisted APIs
-- Phase 3: Security posture rules
-- Phase 4: Cost governance and FinOps signals
-- Phase 5: Compliance evidence center
-- Phase 6: Risk workflow and ownership
-- Phase 7: Reports and exports
-- Phase 8: Production deployment hardening
-- Phase 9: Enterprise RBAC, audit log, observability
-- Phase 10: Client-ready demo/release
-
-## Portfolio / Interview Explanation
-
-CloudShield demonstrates how to design an enterprise AWS governance product with tenant isolation, read-only cloud safety, typed contracts, database-backed workflows, sample/demo evidence, and production-style architecture. It is intentionally built as a control-plane foundation before enabling real AWS inventory scanning.
-
-The safest summary:
-
-> CloudShield is an enterprise-client-ready AWS governance platform foundation for security posture, cost governance, compliance evidence, and cloud risk workflow. It currently uses sample/demo data and a disabled-by-default read-only connector. It does not mutate AWS or claim official compliance certification.
-
-
----
-### Security Posture Rules Foundation Note
-* Security rules are strictly deterministic.
-* Rules evaluate stored CloudShield inventory records only.
-* No AWS scan is triggered by rule evaluation.
-* No AWS mutation is executed.
-* No automatic remediation is performed.
-* Findings contain evidence and business impact.
-* Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
-* Sample/demo data remains clearly labeled.
+## Important Disclaimers
+* **Not Deployed to Accenture**: CloudShield is a consulting/client demo ready platform, but is *not* deployed to Accenture, nor is Accenture a customer.
+* **No Official Certifications**: Mentions of CIS or SOC2 are "inspired by" for demonstration of evidence workflows. This platform does not claim official audit readiness or certification.
+* **Demo Data**: All data shown in the initial setup is sample data for evaluation.
