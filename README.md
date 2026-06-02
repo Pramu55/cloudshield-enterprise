@@ -6,7 +6,7 @@ Portfolio title: **CloudShield Enterprise - AWS Security Posture, Cost Governanc
 
 ## Current Milestone
 
-This repository currently implements `CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN` on top of the AWS account registry foundation.
+This repository currently implements `CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN` on top of the read-only AWS connector plan.
 
 Included:
 
@@ -20,6 +20,7 @@ Included:
 - Authenticated AWS account registry metadata API
 - Dashboard account registry UI for create, edit, validation placeholder, and safe archive
 - Read-only AWS connector status and STS validation skeleton
+- Disabled-by-default account read-only validation endpoint
 - Safety-first documentation
 
 Not included in this milestone:

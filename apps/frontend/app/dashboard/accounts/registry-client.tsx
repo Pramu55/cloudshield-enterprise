@@ -180,6 +180,9 @@ export function AccountRegistryClient({
           Only STS identity validation is planned or enabled. No inventory scan
           runs in this milestone, and no AWS resources are changed.
         </p>
+        <p className="mt-2 text-sm font-medium text-slate-700">
+          {connector.message}
+        </p>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">

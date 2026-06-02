@@ -58,6 +58,7 @@ Connector constraints:
 
 - Default mode is `disabled`.
 - `readonly-validation` mode requires configured role ARN and external ID placeholders.
+- Disabled or unconfigured validation returns without any AWS API call and reports `awsApiCallExecuted=false`.
 - No EC2, S3, IAM, Security Group, VPC, CloudTrail, KMS, billing, or inventory APIs are called.
 - No AWS mutation APIs are called.
 - No secrets are returned to clients.

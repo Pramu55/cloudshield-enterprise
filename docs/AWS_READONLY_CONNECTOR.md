@@ -1,6 +1,6 @@
 # AWS Read-Only Connector
 
-`CLOUDSHIELD_READONLY_AWS_CONNECTOR_PLAN_GREEN` prepares the connector foundation without enabling full AWS inventory scanning.
+`CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN` keeps the connector disabled by default and validates the safe STS-only identity validation path without enabling AWS inventory scanning.
 
 ## Configuration
 
@@ -30,6 +30,8 @@ sts:GetCallerIdentity
 ```
 
 This validates the identity available to the runtime. It does not enumerate EC2, S3, IAM, Security Groups, VPCs, CloudTrail, KMS, or billing data.
+
+The validation endpoint returns `awsApiCallExecuted=false` when the connector is disabled or not configured. It returns `awsApiCallExecuted=true` only after attempting STS `GetCallerIdentity` in explicitly enabled `readonly-validation` mode.
 
 ## Credential Model
 

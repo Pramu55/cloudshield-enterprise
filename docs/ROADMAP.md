@@ -58,6 +58,14 @@
 - Documentation for IAM role assumption, external ID, and no long-lived access keys
 - No AWS inventory scanning, mutation, remediation, or Terraform apply
 
+## Milestone 3.7: CLOUDSHIELD_AWS_READONLY_VALIDATION_GREEN
+
+- Keep `AWS_CONNECTOR_MODE=disabled` as the default.
+- Validate disabled-mode connector status and account validation behavior.
+- Preserve `awsApiCallExecuted=false` whenever the connector is disabled or not configured.
+- Allow only STS `GetCallerIdentity` when `readonly-validation` mode and required env values are configured.
+- Do not call AWS inventory APIs or mutate AWS resources.
+
 ## Milestone 4: Read-Only AWS Inventory
 
 - Read-only account validation

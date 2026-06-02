@@ -51,7 +51,7 @@ export class AwsConnectorService {
       inventoryScan: "not_enabled",
       mutationAccess: "not_enabled",
       message: configured
-        ? "Read-only validation is configured for STS identity validation only. No inventory scan will run."
+        ? "Read-only validation is configured for STS GetCallerIdentity only. No inventory scan will run."
         : NOT_CONFIGURED_MESSAGE
     });
   }
@@ -85,7 +85,7 @@ export class AwsConnectorService {
           userId: identity.UserId ?? null
         },
         message:
-          "STS GetCallerIdentity succeeded. No AWS inventory APIs were called and no AWS resources were changed."
+          "STS GetCallerIdentity succeeded. No AWS inventory APIs were called, no AWS role assumption was attempted, and no AWS resources were changed."
       };
     } catch (error) {
       const status = mapAwsErrorToStatus(error);
@@ -95,7 +95,7 @@ export class AwsConnectorService {
         awsApiCallExecuted: true,
         callerIdentity: null,
         message:
-          "STS GetCallerIdentity failed. No AWS inventory APIs were called and no AWS resources were changed."
+          "STS GetCallerIdentity failed. No AWS inventory APIs were called, no AWS role assumption was attempted, and no AWS resources were changed."
       };
     }
   }
