@@ -1,10 +1,10 @@
 "use client";
 
-import { DashboardPage } from "../shared";
+import { CommandCard, DetailBlade, InsightPanel, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 import { EmptyState } from "../../../lib/ui";
 import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
 import { useState, useEffect, useMemo } from "react";
-import { ChevronDown, ChevronUp, Search, Tag, Network, Layers, ShieldAlert, Cpu } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, Tag, Network, Layers, ShieldAlert, Cpu, Database, GitBranch, RadioTower } from "lucide-react";
 
 type ResourceResponse = {
   items: Array<{
@@ -89,6 +89,27 @@ export default function InventoryPage() {
       title="Cloud Asset Inventory Console"
       description="Database-backed asset management. Scans populate AWS resources automatically under safe governance rules."
     >
+      <WorkspaceHero
+        eyebrow="Resource inventory explorer"
+        title="Explore assets, relationships, linked findings, and scan provenance."
+        description="Inventory is arranged as an operator workspace: filter resources, inspect ownership and region coverage, open detailed metadata, and understand how assets relate to security and compliance evidence."
+        icon={<Database size={20} />}
+        badges={[
+          { label: `${data?.items.length ?? 0} assets loaded`, tone: "info" },
+          { label: hasRealResources ? "DB records active" : "Sample inventory", tone: hasRealResources ? "good" : "warning" },
+          { label: "No scan triggered", tone: "good" }
+        ]}
+      >
+        <StatusMatrix
+          items={[
+            { label: "Accounts", value: accountsList.length, tone: "info" },
+            { label: "Regions", value: regionsList.length, tone: "info" },
+            { label: "At risk", value: data?.items.filter((i) => (i.riskCount || 0) > 0).length || 0, tone: "warning" },
+            { label: "Source", value: hasRealResources ? "database" : "sample", tone: hasRealResources ? "good" : "warning" }
+          ]}
+        />
+      </WorkspaceHero>
+
       <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-200/50 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 shadow-sm">
         {hasRealResources ? (
           <>
@@ -105,7 +126,38 @@ export default function InventoryPage() {
 
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-4">
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <InsightPanel
+          title="Inventory topology"
+          description="A compact relationship map for accounts, assets, posture, and evidence records."
+        >
+          <div className="grid gap-3 md:grid-cols-4">
+            <CommandCard icon={<Database size={18} />} title="Account registry" description="Business ownership and environment context anchor each resource." />
+            <CommandCard icon={<GitBranch size={18} />} title="Relationships" description="Resource context expands to peers and dependency links from DB records." />
+            <CommandCard icon={<ShieldAlert size={18} />} title="Findings" description="Linked posture findings appear directly inside asset detail views." />
+            <CommandCard icon={<RadioTower size={18} />} title="Scan source" description="Every resource exposes source and last-seen metadata for evidence review." />
+          </div>
+        </InsightPanel>
+        <DetailBlade
+          title="Detail blade preview"
+          subtitle="Open any row to reveal metadata, tags, relationships, linked findings, scan source, and last seen time."
+        >
+          <div className="space-y-3 text-xs text-slate-600">
+            <div className="rounded-xl border border-line bg-slate-50 p-3">
+              <p className="font-bold text-ink">{filteredItems[0]?.name || "No selected resource"}</p>
+              <p className="mt-1 font-mono text-[11px] text-slate-500">{filteredItems[0]?.resourceId || "Filter resources to inspect details."}</p>
+            </div>
+            <StatusMatrix
+              items={[
+                { label: "Region", value: filteredItems[0]?.region || "global", tone: "info" },
+                { label: "Risks", value: filteredItems[0]?.riskCount || 0, tone: filteredItems[0]?.riskCount ? "warning" : "good" }
+              ]}
+            />
+          </div>
+        </DetailBlade>
+      </section>
+
+      <div className="sticky top-[72px] z-10 mb-6 grid gap-4 rounded-xl border border-line bg-white/95 p-3 shadow-sm backdrop-blur md:grid-cols-4">
         <div className="relative md:col-span-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
           <input 

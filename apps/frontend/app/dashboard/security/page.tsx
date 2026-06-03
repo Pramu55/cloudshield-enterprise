@@ -22,7 +22,7 @@ import {
   GitPullRequestDraft,
   Info
 } from "lucide-react";
-import { DashboardPage } from "../shared";
+import { CommandCard, DetailBlade, InsightPanel, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 import { SampleDataNotice } from "../../../lib/ui";
 import {
   RefreshBadge,
@@ -238,6 +238,57 @@ export default function SecurityPage() {
         error={rulesError || riskError}
         isRefreshing={rulesRefreshing || riskRefreshing}
       />
+
+      <WorkspaceHero
+        eyebrow="Security operations workspace"
+        title="Prioritize exposure, inspect evidence, and create governed remediation plans."
+        description="CloudShield organizes rule coverage, severity heat, resource evidence, business impact, and DB-only workflow actions into a security operations center."
+        icon={<ShieldAlert size={20} />}
+        badges={[
+          { label: `${findings.length} findings`, tone: "info" },
+          { label: `${rulesData.rules.length} rules active`, tone: "good" },
+          { label: "DB-only evaluation", tone: "warning" }
+        ]}
+      >
+        <StatusMatrix
+          items={[
+            { label: "Critical", value: activeCounts.CRITICAL ?? 0, tone: "danger" },
+            { label: "High", value: activeCounts.HIGH ?? 0, tone: "danger" },
+            { label: "Medium", value: activeCounts.MEDIUM ?? 0, tone: "warning" },
+            { label: "Low", value: activeCounts.LOW ?? 0, tone: "info" }
+          ]}
+        />
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <InsightPanel
+          title="SOC operator surface"
+          description="Findings are connected to rules, impact, recommendations, and approval-based remediation."
+        >
+          <div className="grid gap-3 md:grid-cols-3">
+            <CommandCard icon={<ClipboardCheck size={18} />} title="Rule catalog" description="Review deterministic checks that evaluate stored CloudShield inventory records." />
+            <CommandCard icon={<GitPullRequestDraft size={18} />} title="Governed plan" description="Create remediation plans that require approval and manual completion evidence." />
+            <CommandCard icon={<UserCheck size={18} />} title="Owner workflow" description="Acknowledge, assign, accept risk, resolve, or archive inside the audit trail." />
+          </div>
+        </InsightPanel>
+        <DetailBlade
+          title="Finding detail panel"
+          subtitle="The active queue exposes evidence, affected resource, business impact, linked recommendations, and plan creation actions."
+        >
+          <div className="space-y-3">
+            <div className="rounded-xl border border-line bg-slate-50 p-3">
+              <p className="text-xs font-bold text-ink">{filteredFindings[0]?.title || "No finding selected"}</p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-500">{filteredFindings[0]?.businessImpact || "Select a finding below to inspect operational impact."}</p>
+            </div>
+            <StatusMatrix
+              items={[
+                { label: "Severity", value: filteredFindings[0]?.severity || "none", tone: filteredFindings[0] ? "warning" : "info" },
+                { label: "Workflow", value: filteredFindings[0]?.workflowStatus || "empty", tone: "info" }
+              ]}
+            />
+          </div>
+        </DetailBlade>
+      </section>
 
       <section className="safety-banner border border-sky-200/50 bg-sky-50/70 p-4 rounded-xl flex gap-3 items-start mb-6">
         <Info className="h-5 w-5 shrink-0 text-sky-600 mt-0.5" />

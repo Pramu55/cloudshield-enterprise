@@ -21,7 +21,7 @@ import {
   AlertTriangle,
   Activity
 } from "lucide-react";
-import { DashboardPage } from "../shared";
+import { ActivityTimeline, InsightPanel, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 import { EmptyState, SampleDataNotice } from "../../../lib/ui";
 import {
   RefreshBadge,
@@ -239,6 +239,63 @@ export default function ReportsPage() {
     >
       <SampleDataNotice />
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+
+      <WorkspaceHero
+        eyebrow="Reporting center"
+        title="Create internal report records from posture, evidence, and governance data."
+        description="Reports are presented as a product workspace with type cards, preview panel, export records, safety flags, and evidence summaries."
+        icon={<FileBarChart size={20} />}
+        badges={[
+          { label: "Internal preview only", tone: "warning" },
+          { label: "CloudShield records only", tone: "good" },
+          { label: "No AWS scan triggered", tone: "good" }
+        ]}
+      >
+        <StatusMatrix
+          items={[
+            { label: "Report records", value: data.counts.reportExports, tone: "info" },
+            { label: "Preview types", value: data.counts.previewsAvailable, tone: "info" },
+            { label: "Evidence", value: data.counts.complianceEvidenceCount, tone: "good" },
+            { label: "Open risk", value: data.counts.openRiskCount, tone: "warning" }
+          ]}
+        />
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Evidence included summary"
+          description="Report previews pull together the platform records most useful for executive and audit review."
+        >
+          <StatusMatrix
+            items={[
+              { label: "Generated from DB", value: data.generatedFromCloudShieldRecordsOnly, tone: "good" },
+              { label: "Audit report claim", value: data.officialAuditReportClaim, tone: "good" },
+              { label: "Certification claim", value: data.officialCertificationClaim, tone: "good" },
+              { label: "Mutation executed", value: data.mutationExecuted, tone: "good" }
+            ]}
+          />
+        </InsightPanel>
+        <InsightPanel
+          title="Generated reports timeline"
+          description="Recent export records and preview events."
+        >
+          <ActivityTimeline
+            events={(data.recentReports.length ? data.recentReports.slice(0, 5).map((report) => ({
+              title: report.title,
+              description: `${report.reportType.replace(/_/g, " ")} / ${report.format} / ${report.status}`,
+              time: report.generatedAt ? new Date(report.generatedAt).toLocaleString() : new Date(report.createdAt).toLocaleString(),
+              tone: "info" as const
+            })) : [
+              {
+                title: "No report export records yet",
+                description: "Select a report type below to generate an internal preview record.",
+                time: "ready",
+                tone: "warning" as const
+              }
+            ])}
+          />
+        </InsightPanel>
+      </section>
 
       {/* ── Premium Metric Cards ──────────────────────────────────── */}
       <section className="mb-6 grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">

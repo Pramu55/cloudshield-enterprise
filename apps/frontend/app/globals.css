@@ -265,6 +265,258 @@ button:disabled {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
 }
 
+.workspace-hero {
+  overflow: hidden;
+  border: 1px solid #1e293b;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.96) 48%, rgba(15, 118, 110, 0.9) 100%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 48px);
+  box-shadow: 0 18px 40px -26px rgba(15, 23, 42, 0.8);
+}
+
+.workspace-hero-grid {
+  display: grid;
+  gap: 28px;
+  padding: 28px;
+}
+
+@media (min-width: 1024px) {
+  .workspace-hero-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  }
+}
+
+.workspace-hero-side {
+  min-height: 160px;
+  border: 1px solid rgba(226, 232, 240, 0.16);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.44);
+  padding: 18px;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.workspace-hero-icon,
+.workspace-icon-soft {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #4f46e5;
+  flex: 0 0 auto;
+}
+
+.workspace-hero-icon {
+  background: rgba(129, 140, 248, 0.18);
+  color: #c7d2fe;
+  border: 1px solid rgba(199, 210, 254, 0.24);
+}
+
+.workspace-eyebrow {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.36);
+  padding: 5px 10px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.progress-ring {
+  width: 96px;
+  height: 96px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: conic-gradient(#2dd4bf var(--progress), rgba(148, 163, 184, 0.22) 0deg);
+  display: grid;
+  place-items: center;
+}
+
+.progress-ring-core {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #0f172a;
+  border: 1px solid rgba(226, 232, 240, 0.14);
+}
+
+.progress-ring-core span {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.journey-step,
+.command-card,
+.insight-panel,
+.detail-blade,
+.status-matrix-cell,
+.evidence-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.journey-step {
+  min-height: 150px;
+  padding: 16px;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.journey-step:hover,
+.command-card:hover,
+.evidence-card:hover {
+  transform: translateY(-2px);
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 18px -14px rgba(15, 23, 42, 0.38);
+}
+
+.journey-step[data-status="done"] { border-left: 4px solid #16a34a; }
+.journey-step[data-status="active"] { border-left: 4px solid #4f46e5; }
+.journey-step[data-status="blocked"] { border-left: 4px solid #f59e0b; }
+.journey-step[data-status="planned"] { border-left: 4px solid #94a3b8; }
+
+.journey-index {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.command-card {
+  display: block;
+  min-height: 132px;
+  padding: 16px;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.insight-panel,
+.detail-blade {
+  overflow: hidden;
+}
+
+.detail-blade {
+  align-self: start;
+  padding: 18px;
+}
+
+.status-matrix {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.status-matrix-cell {
+  min-height: 86px;
+  padding: 14px;
+  border-top: 3px solid #4f46e5;
+}
+
+.status-matrix-cell[data-tone="good"] { border-top-color: #16a34a; }
+.status-matrix-cell[data-tone="warning"] { border-top-color: #f59e0b; }
+.status-matrix-cell[data-tone="danger"] { border-top-color: #dc2626; }
+
+.activity-timeline {
+  position: relative;
+  display: grid;
+  gap: 12px;
+}
+
+.activity-event {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.activity-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: #4f46e5;
+  box-shadow: 0 0 0 4px #eef2ff;
+}
+
+.activity-event[data-tone="good"] .activity-dot { background: #16a34a; box-shadow: 0 0 0 4px #dcfce7; }
+.activity-event[data-tone="warning"] .activity-dot { background: #f59e0b; box-shadow: 0 0 0 4px #fef3c7; }
+.activity-event[data-tone="danger"] .activity-dot { background: #dc2626; box-shadow: 0 0 0 4px #fee2e2; }
+
+.activity-card {
+  min-height: 56px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.premium-data-table {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.premium-data-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.evidence-card {
+  min-height: 142px;
+  padding: 16px;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.governance-step {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 10px;
+  border-left: 1px solid #e2e8f0;
+  padding: 0 0 18px 0;
+}
+
+.governance-step:last-child {
+  padding-bottom: 0;
+}
+
+.governance-step-dot {
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: 3px;
+  border-radius: 999px;
+  background: #94a3b8;
+  box-shadow: 0 0 0 4px #f1f5f9;
+}
+
+.governance-step[data-state="complete"] .governance-step-dot { background: #16a34a; box-shadow: 0 0 0 4px #dcfce7; }
+.governance-step[data-state="active"] .governance-step-dot { background: #4f46e5; box-shadow: 0 0 0 4px #e0e7ff; }
+.governance-step[data-state="blocked"] .governance-step-dot { background: #f59e0b; box-shadow: 0 0 0 4px #fef3c7; }
+
+.empty-workspace-state {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  padding: 32px;
+  text-align: center;
+}
+
 /* Backward compatibility overrides */
 .portal-blade,
 .portal-app section[class*="border"],

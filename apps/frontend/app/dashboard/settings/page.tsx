@@ -1,6 +1,6 @@
 "use client";
 
-import { DashboardPage } from "../shared";
+import { CommandCard, InsightPanel, ProgressBars, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 import { useCloudShieldData, RefreshBadge } from "../../../lib/client-api";
 import {
   Shield,
@@ -145,6 +145,52 @@ export default function SettingsPage() {
       description="Administration shell for governed operations, approval-based remediation planning, safety controls, and environment readiness."
     >
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+
+      <WorkspaceHero
+        eyebrow="Admin and safety control center"
+        title="Manage runtime guardrails, credential readiness, and production preparation."
+        description="Settings is organized as an operations control room for environment storage, safety gates, read-only scanner mode, governed workflows, and deployment readiness."
+        icon={<Settings size={20} />}
+        badges={[
+          { label: data.status.environmentMode, tone: "info" },
+          { label: "AWS mutation disabled", tone: "good" },
+          { label: "No secret fields", tone: "good" }
+        ]}
+      >
+        <ProgressBars
+          items={[
+            { label: "Credential readiness", value: crd.requiredEnvPresent ? 100 : 42, tone: crd.requiredEnvPresent ? "good" : "warning" },
+            { label: "Role-based setup", value: crd.roleBasedReadiness ? 100 : 34, tone: crd.roleBasedReadiness ? "good" : "warning" },
+            { label: "Production gates", value: 62, tone: "info" }
+          ]}
+        />
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Safety gates grid"
+          description="Dangerous execution remains blocked and cannot be enabled from the UI."
+        >
+          <StatusMatrix
+            items={[
+              { label: "AWS mutation", value: data.status.mutationEnabled, tone: data.status.mutationEnabled ? "danger" : "good" },
+              { label: "Terraform apply", value: data.status.terraformApplyEnabled, tone: data.status.terraformApplyEnabled ? "danger" : "good" },
+              { label: "Auto remediation", value: data.status.remediationExecutionEnabled, tone: data.status.remediationExecutionEnabled ? "danger" : "good" },
+              { label: "Scanner requires mode", value: data.status.awsScannerEnabled ? "enabled" : "explicit config", tone: data.status.awsScannerEnabled ? "warning" : "good" }
+            ]}
+          />
+        </InsightPanel>
+        <InsightPanel
+          title="Production readiness checklist"
+          description="Operational prerequisites before live read-only usage."
+        >
+          <div className="grid gap-3">
+            <CommandCard icon={<Key size={18} />} title="Role-based AWS setup" description="Use IAM role assumption and external ID. Avoid long-lived access keys." />
+            <CommandCard icon={<Lock size={18} />} title="Secret storage model" description="Use environment variables locally and secret manager in production." />
+            <CommandCard icon={<ShieldCheck size={18} />} title="Governed execution" description="Keep remediation approval, dry-run, rollback, and audit controls explicit." />
+          </div>
+        </InsightPanel>
+      </section>
 
       <section className="premium-card mb-6 p-5">
         <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">

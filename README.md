@@ -81,5 +81,6 @@ Access the dashboard at `http://localhost:3100/login` with:
 * **Original Platform Identity**: CloudShield has its own original visual identity (Indigo/Teal workspace console) and does not copy Microsoft Azure or other cloud provider interfaces.
 * **Evaluator Mode Limits**: Currently in local evaluator mode reading strictly from the CloudShield Postgres DB. The only remaining step to read real AWS data is adding safe credentials via container environment variables and enabling read-only scan mode.
 * **Operational Boundaries**: Governed operations are active inside CloudShield records. AWS mutations, Terraform apply, and automatic remediation remain disabled.
+* **Premium Product Workspaces**: Inner pages use command-center heroes, readiness journeys, timelines, detail blades, status matrices, and richer operator workflows beyond basic dashboard cards.
 * **No Somatic Client Deployments**: CloudShield is client-evaluation ready, but is *not* deployed to Accenture, and Accenture is not a customer.
 * **No Official Certifications**: Compliance rules are CIS-inspired and SOC2-inspired for demonstrating evidence workflows. No official CIS or SOC2 certification is claimed.

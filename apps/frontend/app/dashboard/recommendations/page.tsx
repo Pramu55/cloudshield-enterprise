@@ -1,6 +1,6 @@
 "use client";
 
-import { DashboardPage } from "../shared";
+import { CommandCard, InsightPanel, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 import { EmptyState, SampleDataNotice } from "../../../lib/ui";
 import {
   RefreshBadge,
@@ -152,6 +152,58 @@ export default function RecommendationsPage() {
     >
       <SampleDataNotice />
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+
+      <WorkspaceHero
+        eyebrow="Recommendation planning workspace"
+        title="Turn advisory findings into owner-reviewed, approval-based work."
+        description="Recommendations are grouped for planning: action mode, risk reduction, linked findings, execution boundaries, and remediation-plan creation are visible without automatic changes."
+        icon={<Lightbulb size={20} />}
+        badges={[
+          { label: `${totalCount} recommendations`, tone: "info" },
+          { label: `${blockedCount} execution blocked`, tone: "warning" },
+          { label: "No automatic remediation", tone: "good" }
+        ]}
+      >
+        <StatusMatrix
+          items={[
+            { label: "Manual review", value: manualCount, tone: "info" },
+            { label: "Governance workflow", value: govCount, tone: "good" },
+            { label: "Blocked execution", value: blockedCount, tone: "warning" },
+            { label: "Can execute", value: items.filter((r) => r.canExecute).length, tone: "danger" }
+          ]}
+        />
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Planning filters"
+          description="Category filters are visible as product controls for work triage."
+        >
+          <div className="flex flex-wrap gap-2">
+            {["All", "Manual review", "Governance workflow", "Linked findings", "Execution blocked"].map((label, index) => (
+              <span className={`filter-chip ${index === 0 ? "active" : ""}`} key={label}>{label}</span>
+            ))}
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <CommandCard icon={<ClipboardCheck size={18} />} title="Manual work" description="Human review, owner validation, and external change management." />
+            <CommandCard icon={<GitPullRequestDraft size={18} />} title="Create plan" description="Linked security recommendations can create governed remediation plans." />
+            <CommandCard icon={<ShieldOff size={18} />} title="Execution blocked" description="CloudShield shows actions, but does not perform fixes." />
+          </div>
+        </InsightPanel>
+        <InsightPanel
+          title="Action mode matrix"
+          description="Every recommendation states whether it is manual, review-only, or future governed action."
+        >
+          <StatusMatrix
+            items={[
+              { label: "Manual", value: manualCount, tone: "info" },
+              { label: "Review-only", value: govCount, tone: "good" },
+              { label: "Future", value: Math.max(0, totalCount - manualCount - govCount), tone: "warning" },
+              { label: "Automatic", value: 0, tone: "good" }
+            ]}
+          />
+        </InsightPanel>
+      </section>
       {message ? (
         <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs font-semibold text-indigo-700">
           {message}

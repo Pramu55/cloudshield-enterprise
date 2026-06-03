@@ -15,7 +15,7 @@ import {
   fetchCloudShieldClient,
   useCloudShieldData
 } from "../../../lib/client-api";
-import { DashboardPage } from "../shared";
+import { ActivityTimeline, CommandCard, GovernanceStep, InsightPanel, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 
 type RemediationPlan = {
   id: string;
@@ -133,6 +133,102 @@ export default function GovernancePage() {
         error={plansError || approvalsError || activityError}
         isRefreshing={plansRefreshing || approvalsRefreshing || activityRefreshing}
       />
+
+      <WorkspaceHero
+        eyebrow="Approval workflow center"
+        title="Govern remediation plans from draft to approval to manual completion."
+        description="This workspace turns findings into controlled operations records: approval requests, decision reasons, lifecycle state, audit events, and evidence guidance without executing cloud changes."
+        icon={<GitPullRequestDraft size={20} />}
+        badges={[
+          { label: `${pendingApprovals.length} pending approvals`, tone: pendingApprovals.length ? "warning" : "good" },
+          { label: `${plans.items.length} remediation plans`, tone: "info" },
+          { label: "AWS execution blocked", tone: "warning" }
+        ]}
+      >
+        <StatusMatrix
+          items={[
+            { label: "Plans", value: plans.items.length, tone: "info" },
+            { label: "Pending", value: pendingApprovals.length, tone: pendingApprovals.length ? "warning" : "good" },
+            { label: "Ready manual", value: readyPlans.length, tone: "good" },
+            { label: "Audit events", value: activity.items.length, tone: "info" }
+          ]}
+        />
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Pending approvals board"
+          description="High-signal queue for plans waiting on human decision."
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            {(pendingApprovals.length ? pendingApprovals : approvals.items.slice(0, 2)).map((approval) => (
+              <CommandCard
+                key={approval.id}
+                icon={approval.status === "APPROVED" ? <CheckCircle2 size={18} /> : <GitPullRequestDraft size={18} />}
+                title={approval.remediationPlanTitle || "Remediation plan"}
+                description={`Status ${approval.status}. Requested by ${approval.requestedByEmail || "workspace user"}.`}
+              />
+            ))}
+            {!approvals.items.length ? (
+              <CommandCard
+                icon={<ClipboardList size={18} />}
+                title="No approvals yet"
+                description="Create remediation plans from Security or Recommendations to populate this board."
+              />
+            ) : null}
+          </div>
+        </InsightPanel>
+        <InsightPanel
+          title="Approval lifecycle"
+          description="Each plan follows a controlled, auditable sequence."
+        >
+          <div className="space-y-1">
+            <GovernanceStep title="Draft plan" description="Analyst creates DB-only remediation guidance." state="complete" />
+            <GovernanceStep title="Request approval" description="Owner review is recorded before execution readiness." state={pendingApprovals.length ? "active" : "pending"} />
+            <GovernanceStep title="Approve or reject" description="Decision reason is captured for audit evidence." state={readyPlans.length ? "complete" : "pending"} />
+            <GovernanceStep title="Manual completion" description="Work happens outside CloudShield; completion evidence is recorded here." state="blocked" />
+          </div>
+        </InsightPanel>
+      </section>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Activity event stream"
+          description="Governance writes are visible as audit events."
+        >
+          <ActivityTimeline
+            events={(activity.items.length ? activity.items.slice(0, 5) : [
+              {
+                id: "empty",
+                action: "governance.workspace.ready",
+                targetType: "workspace",
+                targetId: null,
+                actorUserId: null,
+                metadata: {},
+                createdAt: new Date(0).toISOString()
+              }
+            ]).map((event) => ({
+              title: event.action,
+              description: `${event.targetType} ${event.targetId || "record"}`,
+              time: new Date(event.createdAt).toLocaleString(),
+              tone: event.action.includes("rejected") ? "danger" as const : "info" as const
+            }))}
+          />
+        </InsightPanel>
+        <InsightPanel
+          title="Audit evidence panel"
+          description="Every mutation-like workflow is DB-only and records safety flags."
+        >
+          <StatusMatrix
+            items={[
+              { label: "AWS API call", value: plans.awsApiCallExecuted, tone: "good" },
+              { label: "AWS mutation", value: plans.mutationExecuted, tone: "good" },
+              { label: "Terraform apply", value: plans.terraformApplyExecuted, tone: "good" },
+              { label: "Auto remediation", value: plans.automaticRemediationExecuted, tone: "good" }
+            ]}
+          />
+        </InsightPanel>
+      </section>
 
       <section className="safety-banner mb-6 flex items-start gap-3">
         <Lock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />

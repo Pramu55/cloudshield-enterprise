@@ -1,7 +1,7 @@
 "use client";
 
-import { BarChart3, FileCheck2, ShieldCheck, WalletCards, Info, Server, ShieldAlert, AlertTriangle, CheckCircle2, FileText, RefreshCw, Layers } from "lucide-react";
-import { DashboardPage } from "./shared";
+import { BarChart3, FileCheck2, ShieldCheck, WalletCards, Info, Server, ShieldAlert, AlertTriangle, CheckCircle2, FileText, RefreshCw, Layers, Gauge, GitPullRequestDraft, SearchCheck, ClipboardList } from "lucide-react";
+import { ActivityTimeline, CommandCard, InsightPanel, ProgressBars, ProgressRing, ReadinessJourney, StatusMatrix, WorkspaceHero, DashboardPage } from "./shared";
 import { SampleDataNotice } from "../../lib/ui";
 import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
 import Link from "next/link";
@@ -116,6 +116,64 @@ export default function DashboardHome() {
     setLastRefreshedAt(new Date().toLocaleTimeString());
   }, [summary, activityData, readiness]);
 
+  const readinessScore = Math.round(
+    [
+      readiness.awsAccountsCount > 0,
+      readiness.credentialReadiness.requiredEnvPresent,
+      readiness.credentialReadiness.stsValidationAvailable,
+      readiness.credentialReadiness.inventoryScanAvailable,
+      (summary?.counts?.securityFindings ?? 0) > 0,
+      (summary?.counts?.recommendations ?? 0) > 0
+    ].filter(Boolean).length / 6 * 100
+  );
+
+  const journeySteps: Array<{
+    label: string;
+    description: string;
+    status: "done" | "active" | "blocked" | "planned";
+  }> = [
+    {
+      label: "Account registry",
+      description: `${readiness.awsAccountsCount || summary?.counts?.awsAccounts || 0} accounts mapped with owners, environments, and regions.`,
+      status: readiness.awsAccountsCount > 0 ? "done" : "active"
+    },
+    {
+      label: "Credential readiness",
+      description: readiness.credentialReadiness.requiredEnvPresent
+        ? "Recommended environment keys are present for governed validation."
+        : `Missing ${readiness.credentialReadiness.missingEnvKeys.length} recommended env keys.`,
+      status: readiness.credentialReadiness.requiredEnvPresent ? "done" : "blocked"
+    },
+    {
+      label: "STS validation",
+      description: "Identity validation remains explicit and controlled by connector readiness.",
+      status: readiness.credentialReadiness.stsValidationAvailable ? "active" : "planned"
+    },
+    {
+      label: "EC2 read-only inventory",
+      description: "Read-only inventory ingestion is gated by scanner mode and account selection.",
+      status: readiness.credentialReadiness.inventoryScanAvailable ? "active" : "blocked"
+    },
+    {
+      label: "Findings and evidence",
+      description: `${summary?.counts?.securityFindings ?? 0} security findings and ${summary?.counts?.complianceControls ?? 0} evidence controls are visible.`,
+      status: "done" as const
+    },
+    {
+      label: "Governed remediation",
+      description: "Approval-based remediation planning creates audit evidence without AWS mutation.",
+      status: "active" as const
+    }
+  ];
+
+  const timelineEvents =
+    activityData?.activities?.slice(0, 5).map((activity) => ({
+      title: activity.title,
+      description: activity.description,
+      time: new Date(activity.timestamp).toLocaleTimeString(),
+      tone: activity.status === "failed" ? "danger" as const : "info" as const
+    })) || [];
+
   return (
     <DashboardPage
       title="CloudShield Governance Hub"
@@ -123,6 +181,92 @@ export default function DashboardHome() {
     >
       <SampleDataNotice />
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+
+      <WorkspaceHero
+        eyebrow="Executive cloud governance workspace"
+        title="CloudShield command center for posture, evidence, and governed operations."
+        description="Track readiness, account coverage, security exposure, compliance evidence, and approval-based remediation from one operations-grade workspace."
+        icon={<ShieldCheck size={20} />}
+        badges={[
+          { label: "AWS execution blocked", tone: "warning" },
+          { label: "DB-backed evidence", tone: "good" },
+          { label: "No external brand assets", tone: "info" }
+        ]}
+      >
+        <ProgressRing
+          value={readinessScore}
+          label="Platform Readiness Score"
+          caption="Computed from registry coverage, credential readiness, validation gates, scanner readiness, findings, and governed actions."
+        />
+        <div className="mt-5">
+          <ProgressBars
+            items={[
+              { label: "Security posture", value: Math.max(20, 100 - (summary?.counts?.highRiskFindings ?? 0) * 18), tone: "warning" },
+              { label: "Compliance coverage", value: Math.min(100, (summary?.counts?.complianceControls ?? 0) * 8), tone: "info" },
+              { label: "Governance workflow", value: summary?.counts?.recommendations ? 72 : 34, tone: "good" }
+            ]}
+          />
+        </div>
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_420px]">
+        <InsightPanel
+          title="AWS Integration Journey"
+          description="A production-style path from registry metadata to controlled, approval-based operations."
+        >
+          <ReadinessJourney steps={journeySteps} />
+        </InsightPanel>
+
+        <InsightPanel
+          title="Live Workspace Timeline"
+          description="Recent operational events surfaced as a console timeline."
+        >
+          {timelineEvents.length ? (
+            <ActivityTimeline events={timelineEvents} />
+          ) : (
+            <ActivityTimeline
+              events={[
+                {
+                  title: "Governance workspace ready",
+                  description: "No recent activity was returned by the API; sample modules are available for review.",
+                  time: lastRefreshedAt || "now",
+                  tone: "info"
+                }
+              ]}
+            />
+          )}
+        </InsightPanel>
+      </section>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Command Center"
+          description="Primary work actions are organized as operator launch points."
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <CommandCard href="/dashboard/accounts" icon={<SearchCheck size={18} />} title="Validate identity" description="Review account registry and safe connector readiness before any live validation." />
+            <CommandCard href="/dashboard/security" icon={<ShieldAlert size={18} />} title="Review findings" description="Open severity queues, evidence, affected resources, and governed workflow actions." />
+            <CommandCard href="/dashboard/governance" icon={<GitPullRequestDraft size={18} />} title="Open governance approvals" description="Manage remediation plan approvals, manual completion, and audit evidence." />
+            <CommandCard href="/dashboard/reports" icon={<ClipboardList size={18} />} title="Generate report" description="Create internal preview records from CloudShield evidence without scanner execution." />
+          </div>
+        </InsightPanel>
+
+        <InsightPanel
+          title="Risk and Compliance Posture"
+          description="Operational posture signals that help leadership scan the platform quickly."
+        >
+          <StatusMatrix
+            items={[
+              { label: "High risk findings", value: summary?.counts?.highRiskFindings ?? 0, tone: "danger" },
+              { label: "Accepted risks", value: summary?.counts?.acceptedRisks ?? 0, tone: "warning" },
+              { label: "Controls", value: summary?.counts?.complianceControls ?? 0, tone: "info" },
+              { label: "Reports ready", value: summary?.counts?.reportsReady ?? 0, tone: "good" },
+              { label: "Scanner mode", value: readiness.scannerMode, tone: "warning" },
+              { label: "AWS API executed", value: String(summary?.scannerStatus?.awsApiCallExecuted ?? false), tone: "good" }
+            ]}
+          />
+        </InsightPanel>
+      </section>
 
       {/* Safety Notice Banners and Refresh Indicator */}
       <section className="mb-6 grid gap-4 lg:grid-cols-3">

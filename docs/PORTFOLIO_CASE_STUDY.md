@@ -22,6 +22,7 @@ CloudShield uses a modern, enterprise-ready technology stack:
 - **Resource Inventory (CMDB)**: Centralized cloud asset database.
 - **Security Posture Rules Engine**: Deterministic rules that evaluate resources against best practices.
 - **Risk Workflow & Governed Operations**: Allows teams to assign ownership, create remediation plans, request approval, approve or reject plans, track manual completion, and preserve audit evidence.
+- **Premium Product Workspaces**: Reworks inner pages into executive, onboarding, inventory, security, governance, evidence, reporting, scanner, and safety-center workspaces with heroes, timelines, matrices, detail blades, and stronger CTAs.
 - **Compliance Evidence Center**: Maps security findings to internal governance frameworks (CIS-inspired and SOC2-inspired).
 - **Reports & Exports**: A foundation for generating and previewing PDF/CSV evidence reports.
 - **Executive Dashboard**: A high-level command center showing safety status, risks, and coverage.

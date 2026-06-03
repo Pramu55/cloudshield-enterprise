@@ -10,15 +10,6 @@ export default function LoginPage() {
       {/* Left side: Evaluation & Architecture Panel */}
       <section className="hidden lg:flex lg:w-[52%] flex-col justify-between relative overflow-hidden"
         style={{ background: "linear-gradient(145deg, #0c1222 0%, #111827 40%, #0f172a 100%)" }}>
-        {/* Animated background orbs */}
-        <div className="absolute top-[-80px] left-[-60px] w-[420px] h-[420px] rounded-full opacity-20"
-          style={{ background: "radial-gradient(circle, #4f46e5 0%, transparent 70%)", animation: "pulse 8s ease-in-out infinite" }} />
-        <div className="absolute bottom-[-100px] right-[-80px] w-[500px] h-[500px] rounded-full opacity-15"
-          style={{ background: "radial-gradient(circle, #0d9488 0%, transparent 70%)", animation: "pulse 10s ease-in-out infinite 2s" }} />
-        <div className="absolute top-1/2 left-1/3 w-[200px] h-[200px] rounded-full opacity-10"
-          style={{ background: "radial-gradient(circle, #6366f1 0%, transparent 70%)", animation: "pulse 6s ease-in-out infinite 4s" }} />
-
-        {/* Grid pattern overlay */}
         <div className="absolute inset-0 opacity-[0.03]"
           style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
 
@@ -53,6 +44,19 @@ export default function LoginPage() {
               </p>
             </div>
 
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                ["18", "tracked resources"],
+                ["12", "controls"],
+                ["0", "mutations"]
+              ].map(([value, label]) => (
+                <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4" key={label}>
+                  <p className="text-2xl font-bold text-white">{value}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-400">{label}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="space-y-5">
               {[
                 {
@@ -67,7 +71,7 @@ export default function LoginPage() {
                 },
                 {
                   icon: <Eye size={18} />,
-                  title: "CIS & SOC2-Inspired Posture",
+                  title: "Control Evidence Posture",
                   desc: "Interactive dashboards reference mapping frameworks for audit evidence tracking (internal governance context)."
                 }
               ].map((item) => (
@@ -148,7 +152,7 @@ export default function LoginPage() {
             <span className="text-slate-300">•</span>
             <span className="flex items-center gap-1">
               <Shield size={10} />
-              SOC2-Ready
+              Evidence Ready
             </span>
             <span className="text-slate-300">•</span>
             <span className="flex items-center gap-1">

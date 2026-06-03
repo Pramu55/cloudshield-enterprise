@@ -1,42 +1,24 @@
 # CloudShield Production-Like Platform Polish
 
-CloudShield is a modern, enterprise-ready cloud governance, posture analysis, and compliance evidence platform. This document highlights how CloudShield functions as an original, production-ready governance foundation and details its technical security boundaries, local evaluator modes, and credential enablement plan.
+This milestone upgrades the inner frontend pages from basic dashboards into premium product workspaces.
 
-## 1. Original Visual Identity
-Unlike typical sandbox tools that copy Microsoft Azure or AWS interfaces pixel-by-pixel, CloudShield features its own **original, enterprise-grade console design**:
-* **Theme**: Deep slate top header controls (`#0f172a`), clean slate canvas background (`#f8fafc`), and a modern white-panel layout with custom Indigo (`#4f46e5`) and Teal (`#0d9488`) signal colors.
-* **Layout**: Organized around left sidebar navigation groups, custom action command bars, collapsible detail blades, and clear safety status banners.
-* **Typography & Corners**: Styled with standard system font stacks (no external web CDNs/imports) and smooth, professional corner radii (6px/8px) to establish a distinct, modern identity.
+## What changed beyond colors
 
-## 2. Safe Local-Evaluator Sandbox
-CloudShield is designed to be consulting/client-evaluation ready from the moment it is launched. To ensure absolute safety during demonstrations and audits:
-* **Database-Backed**: All resources, findings, recommendations, and evidence items are read directly from the CloudShield PostgreSQL database.
-* **AWS Execution Gates**: All direct scanner requests and live AWS SDK calls are disabled. No live AWS APIs are reached, and no AWS mutations, remediations, or Terraform applies are executed.
-* **Visible Sample Labels**: Keep clear `sample/demo data` labels on interactive pages to alert evaluators that live scans remain inactive until configurations are enabled.
+- Executive dashboard now leads with a command-center hero, readiness score, integration journey, command cards, posture matrix, and activity timeline.
+- Account governance now behaves like an onboarding workspace with readiness progress, credential posture, next actions, and safety-state matrix.
+- Inventory now includes an explorer hero, sticky command bar, topology section, and detail blade preview before expandable resource rows.
+- Security now opens as an operations center with severity posture, rule/finding workflow context, detail panel, and governed remediation cues.
+- Governance now presents approvals as a workflow center with pending board, lifecycle timeline, audit event stream, and safety evidence.
+- Compliance now acts as an evidence center with framework tabs, coverage progress, evidence queue, and non-certification disclaimers.
+- Reports now has report-type workspace structure, preview panel, generated report timeline, evidence summary, and safety flags.
+- Recommendations now looks like work planning with filters, action modes, plan creation, and no-auto-remediation labels.
+- Scans now has a scanner operations console with lifecycle states, capability matrix, disabled reason panel, and confirmation flow.
+- Settings now functions as a safety control center with credential readiness, safety gates, production checklist, and setup guidance.
+- Login and register now use stronger split-screen product layouts without external assets, external fonts, or cloud-provider branding.
 
-## 3. Credential Enablement Path
-CloudShield is architected to transition to live read-only AWS operations with only two configuration steps:
-1. **Provision IAM Role**: Deploy a read-only AWS IAM Role in your target account with a Trust Policy matching the CloudShield External ID.
-2. **Configure Environment Variables**: Supply the IAM Role ARN and Region via secure environment variables (`AWS_ROLE_ARN`, `AWS_REGION`). Enable read-only scanning mode by setting `AWS_INVENTORY_SCANNER_MODE=readonly-scan` and `AWS_CONNECTOR_MODE=readonly-validation`.
+## Safety boundaries
 
-```
-                        +----------------------------+
-                        |  CloudShield Service Shell |
-                        +--------------+-------------+
-                                       | (1) Read config
-                                       v
-                        +--------------+-------------+
-                        | Environment variables only |
-                        | (No DB secret storage)     |
-                        +--------------+-------------+
-                                       | (2) Assume Role
-                                       v
-                        +--------------+-------------+
-                        |  AWS STS / Read-Only APIs  |
-                        +----------------------------+
-```
-
-## 4. Production Security Model
-* **Credential Safety**: CloudShield never requests or stores raw AWS access keys or secrets in the database. Credentials reside purely within the container runtime environment or secure cloud secret managers.
-* **Strict Read-Only Posture**: Operational boundaries prevent mutations. Write/delete calls on AWS resource families are blocked at the code engine level.
-* **Governance Framework**: All compliance metrics are labeled as "CIS-inspired" or "SOC2-inspired" internal evidence to avoid misleading certification claims.
+- No Google, Microsoft, or cloud-provider branding/assets were copied.
+- No external font CDN or import was added.
+- No AWS validation, scanner execution, mutation, Terraform apply, or automatic remediation was run.
+- The UI continues to state that dangerous execution remains blocked.

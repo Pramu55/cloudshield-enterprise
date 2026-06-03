@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AwsAccountDto, AwsInventoryPlanResponse } from "@cloudshield/contracts";
 import { ShieldAlert, RefreshCw, Layers, CheckCircle, XCircle, Play, ChevronRight, ShieldCheck, Lock, Zap, Ban, Clock, AlertTriangle, Server, Eye, ChevronDown, Info, CircleDot, Terminal } from "lucide-react";
-import { DashboardPage } from "../shared";
+import { ActivityTimeline, InsightPanel, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
 
@@ -182,6 +182,59 @@ export default function ScansPage() {
       title="AWS Inventory Scanner Console"
       description="Run read-only AWS asset inventory sync scans. Scan results write to PostgreSQL for security and compliance assessments. No mutations are performed."
     >
+      <WorkspaceHero
+        eyebrow="Scanner operations console"
+        title="Control read-only inventory ingestion with explicit execution gates."
+        description="Scanner operations are presented as a lifecycle console: account selection, mode status, capability matrix, blocked states, job history, and confirmation modal."
+        icon={<Terminal size={20} />}
+        badges={[
+          { label: plan?.scannerMode || "scanner loading", tone: plan?.scannerMode === "readonly-scan" ? "good" : "warning" },
+          { label: "No mutation APIs", tone: "good" },
+          { label: "Explicit start required", tone: "warning" }
+        ]}
+      >
+        <StatusMatrix
+          items={[
+            { label: "Accounts", value: accounts.length, tone: "info" },
+            { label: "History runs", value: scanRuns.length, tone: "info" },
+            { label: "Scanner enabled", value: String(Boolean(plan?.inventoryScanningEnabled)), tone: plan?.inventoryScanningEnabled ? "warning" : "good" },
+            { label: "AWS API executed", value: String(Boolean(plan?.awsApiCallExecuted)), tone: plan?.awsApiCallExecuted ? "warning" : "good" }
+          ]}
+        />
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Scanner lifecycle"
+          description="Read-only ingestion moves through explicit job states."
+        >
+          <ActivityTimeline
+            events={[
+              { title: "Queued", description: "Account selected and job accepted.", time: "QUEUED", tone: "info" },
+              { title: "Running", description: "Read-only describe operations collect inventory.", time: "RUNNING", tone: "warning" },
+              { title: "Succeeded", description: "Resources, tags, relationships, and findings update DB records.", time: "SUCCEEDED", tone: "good" },
+              { title: "Failed or blocked", description: "Disabled mode, missing readiness, or read-only failure stops execution.", time: "FAILED / BLOCKED", tone: "danger" }
+            ]}
+          />
+        </InsightPanel>
+        <InsightPanel
+          title="Capability matrix"
+          description="Scanner controls remain explicit and bounded."
+        >
+          <StatusMatrix
+            items={[
+              { label: "STS identity", value: "planned/read-only", tone: "info" },
+              { label: "EC2 inventory", value: plan?.inventoryScanningEnabled ? "available" : "blocked", tone: plan?.inventoryScanningEnabled ? "warning" : "good" },
+              { label: "Mutation access", value: String(Boolean(plan?.mutationEnabled)), tone: "good" },
+              { label: "Terraform apply", value: String(Boolean(plan?.terraformApplyEnabled)), tone: "good" }
+            ]}
+          />
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+            Disabled reason: scanner runs only when explicitly configured for read-only scanning. No AWS scan is executed unless that mode and the confirm action are both present.
+          </div>
+        </InsightPanel>
+      </section>
+
       {/* ─── Error Banner ─── */}
       {errorMessage && (
         <div className="mb-6 premium-card border-alert/40 p-0 overflow-hidden">

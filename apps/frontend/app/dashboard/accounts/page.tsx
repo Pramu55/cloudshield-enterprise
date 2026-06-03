@@ -9,9 +9,9 @@ import type {
 } from "@cloudshield/contracts";
 import { useEffect, useState } from "react";
 import { RefreshBadge, fetchCloudShieldClient } from "../../../lib/client-api";
-import { DashboardPage } from "../shared";
+import { CommandCard, ProgressBars, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 import { AccountRegistryClient } from "./registry-client";
-import { CheckCircle2, CircleDashed, ArrowRight, ShieldAlert, KeyRound } from "lucide-react";
+import { CheckCircle2, CircleDashed, ArrowRight, ShieldAlert, KeyRound, CloudCog, ClipboardCheck, ServerCog, Wrench } from "lucide-react";
 
 type ReadinessResponse = {
   awsAccounts: Array<{
@@ -264,6 +264,59 @@ export default function AccountsPage() {
       description="Organization-scoped AWS account control plane for ownership, environment context, read-only validation posture, and governance metadata."
     >
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+
+      <WorkspaceHero
+        eyebrow="AWS account onboarding workspace"
+        title="Govern cloud account registry, readiness, and safe connection gates."
+        description="Operate account onboarding as a guided workspace: ownership metadata, connector mode, credential posture, scanner readiness, and next configuration actions are visible before any live AWS activity."
+        icon={<CloudCog size={20} />}
+        badges={[
+          { label: `${accounts.length} registry records`, tone: "info" },
+          { label: connectorStatus.enabled ? "Connector enabled" : "Connector disabled", tone: connectorStatus.enabled ? "good" : "warning" },
+          { label: "No secret input fields", tone: "good" }
+        ]}
+      >
+        <ProgressBars
+          items={[
+            { label: "Registry coverage", value: Math.min(100, accounts.length * 34), tone: accounts.length ? "good" : "warning" },
+            { label: "Credential readiness", value: readiness?.credentialReadiness.requiredEnvPresent ? 100 : 38, tone: readiness?.credentialReadiness.requiredEnvPresent ? "good" : "warning" },
+            { label: "Scanner enablement", value: inventoryPlan.scannerMode === "disabled" ? 12 : 68, tone: "warning" }
+          ]}
+        />
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-3 md:grid-cols-3">
+          <CommandCard
+            icon={<ClipboardCheck size={18} />}
+            title="Register ownership"
+            description="Keep account name, environment, teams, and regions clean for governance workflows."
+          />
+          <CommandCard
+            icon={<ServerCog size={18} />}
+            title="Validate readiness"
+            description="Run DB-only posture checks and review explicit STS validation availability."
+          />
+          <CommandCard
+            icon={<Wrench size={18} />}
+            title="Prepare next actions"
+            description="Configure IAM role assumption and scanner mode outside the UI when production gates are approved."
+          />
+        </div>
+        <div className="premium-card p-5">
+          <p className="text-sm font-bold text-ink">Credential readiness snapshot</p>
+          <div className="mt-4">
+            <StatusMatrix
+              items={[
+                { label: "Connector", value: connectorStatus.status, tone: connectorStatus.enabled ? "good" : "warning" },
+                { label: "Inventory scan", value: inventoryPlan.inventoryScanningEnabled, tone: inventoryPlan.inventoryScanningEnabled ? "warning" : "good" },
+                { label: "Mutation", value: inventoryPlan.mutationEnabled, tone: inventoryPlan.mutationEnabled ? "danger" : "good" },
+                { label: "Terraform apply", value: inventoryPlan.terraformApplyEnabled, tone: inventoryPlan.terraformApplyEnabled ? "danger" : "good" }
+              ]}
+            />
+          </div>
+        </div>
+      </section>
       
       {readiness && (
         <div className="mb-6 space-y-6">

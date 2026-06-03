@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { BarChart3, CheckCircle2, FileJson, RefreshCw, ShieldCheck, TriangleAlert, ArrowRight, Sparkles, Info } from "lucide-react";
-import { DashboardPage } from "../shared";
+import { EvidenceCard, InsightPanel, ProgressBars, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 import Link from "next/link";
 import { EmptyState, SampleDataNotice } from "../../../lib/ui";
 import {
@@ -220,6 +220,56 @@ export default function CompliancePage() {
     >
       <SampleDataNotice />
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+
+      <WorkspaceHero
+        eyebrow="Evidence center"
+        title="Review control readiness, evidence coverage, and internal governance proof."
+        description="Compliance content is organized for evidence review: framework tabs, coverage progress, linked findings, export preview actions, and clear non-certification boundaries."
+        icon={<ShieldCheck size={20} />}
+        badges={[
+          { label: "CIS-inspired", tone: "info" },
+          { label: "SOC2-inspired", tone: "info" },
+          { label: "No certification claim", tone: "warning" }
+        ]}
+      >
+        <ProgressBars
+          items={[
+            { label: "Passing controls", value: Math.round((data.summary.pass / Math.max(1, data.summary.totalControls)) * 100), tone: "good" },
+            { label: "Needs attention", value: Math.round(((data.summary.fail + data.summary.warning + data.summary.needsReview) / Math.max(1, data.summary.totalControls)) * 100), tone: "warning" },
+            { label: "Evidence coverage", value: Math.min(100, data.summary.evidenceItems * 10), tone: "info" }
+          ]}
+        />
+      </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Compliance coverage"
+          description="A quick read of current controls, linked risks, and evidence generation status."
+        >
+          <StatusMatrix
+            items={[
+              { label: "Total controls", value: data.summary.totalControls, tone: "info" },
+              { label: "Pass", value: data.summary.pass, tone: "good" },
+              { label: "Fail", value: data.summary.fail, tone: "danger" },
+              { label: "Warning", value: data.summary.warning, tone: "warning" },
+              { label: "Evidence items", value: data.summary.evidenceItems, tone: "info" },
+              { label: "Linked findings", value: data.summary.linkedFindings, tone: "warning" }
+            ]}
+          />
+        </InsightPanel>
+        <InsightPanel
+          title="Evidence queue"
+          description="Recent evidence records mapped to internal control views."
+        >
+          <div className="space-y-3">
+            {data.evidence.slice(0, 3).map((item) => (
+              <EvidenceCard key={item.id} title={item.summary} meta={`${item.source} / ${item.confidence}`} status={item.status}>
+                {item.controlCode} / {item.evidenceType}
+              </EvidenceCard>
+            ))}
+          </div>
+        </InsightPanel>
+      </section>
 
       {/* ── Metric Cards ── */}
       <section className="mb-6 grid gap-4 md:grid-cols-5">

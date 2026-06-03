@@ -38,6 +38,10 @@ This script is designed for walking an evaluator, interviewer, or client through
 **Action**: Navigate to "Governance".
 **Script**: "This is where CloudShield becomes an operations platform. An analyst can create a remediation plan from a finding, request approval, approve or reject the plan, and mark manual completion. The platform records every step in the audit trail, but it does not execute AWS mutation or Terraform apply."
 
+## 8.6 Premium Workspace Experience
+**Action**: Move through Dashboard, Accounts, Inventory, Security, Governance, Compliance, Reports, Recommendations, Scans, and Settings.
+**Script**: "The inner console is now structured like a real enterprise product. Each workspace has a command-center hero, status visuals, workflow panels, timelines, detail areas, and action surfaces. This is not just a color refresh; the dashboard content has been redesigned around operator tasks."
+
 ## 9. Scans & Real AWS Validation
 **Action**: Navigate to "Scans" or "Accounts". Show the confirmation modals and validation banners.
 **Script**: "A core architectural principle of CloudShield is safety. We have implemented a live read-only connection validation path using STS GetCallerIdentity and an EC2 describing scanner. When you trigger validation or scan, a confirmation modal warns you first. In the default disabled mode, the button is safely blocked and reports `awsApiCallExecuted=false`. When configured via environment settings, it performs live, secure, non-mutating checks."
