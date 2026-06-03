@@ -107,6 +107,10 @@ async function main() {
         description: "Sample demo registry metadata only. Real AWS scanning is not enabled yet.",
         roleArnPlaceholder: "arn:aws:iam::111111111111:role/CloudShieldReadOnlyRoleSample",
         externalIdPlaceholder: "sample-external-id-placeholder",
+        businessUnit: "Engineering",
+        costCenter: "ENG-PROD-900",
+        criticality: "MISSION_CRITICAL",
+        organizationalUnit: "ou-1111-prod",
         archivedAt: null
       },
       create: {
@@ -124,7 +128,11 @@ async function main() {
         complianceScore: 68,
         description: "Sample demo registry metadata only. Real AWS scanning is not enabled yet.",
         roleArnPlaceholder: "arn:aws:iam::111111111111:role/CloudShieldReadOnlyRoleSample",
-        externalIdPlaceholder: "sample-external-id-placeholder"
+        externalIdPlaceholder: "sample-external-id-placeholder",
+        businessUnit: "Engineering",
+        costCenter: "ENG-PROD-900",
+        criticality: "MISSION_CRITICAL",
+        organizationalUnit: "ou-1111-prod"
       }
     }),
     prisma.awsAccount.upsert({
@@ -142,6 +150,10 @@ async function main() {
         description: "Sample demo registry metadata only. Real AWS scanning is not enabled yet.",
         roleArnPlaceholder: "arn:aws:iam::222222222222:role/CloudShieldReadOnlyRoleSample",
         externalIdPlaceholder: "sample-external-id-placeholder",
+        businessUnit: "Engineering",
+        costCenter: "ENG-DEV-901",
+        criticality: "LOW",
+        organizationalUnit: "ou-2222-dev",
         archivedAt: null
       },
       create: {
@@ -159,7 +171,11 @@ async function main() {
         complianceScore: 74,
         description: "Sample demo registry metadata only. Real AWS scanning is not enabled yet.",
         roleArnPlaceholder: "arn:aws:iam::222222222222:role/CloudShieldReadOnlyRoleSample",
-        externalIdPlaceholder: "sample-external-id-placeholder"
+        externalIdPlaceholder: "sample-external-id-placeholder",
+        businessUnit: "Engineering",
+        costCenter: "ENG-DEV-901",
+        criticality: "LOW",
+        organizationalUnit: "ou-2222-dev"
       }
     })
   ]);

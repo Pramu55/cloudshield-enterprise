@@ -306,6 +306,73 @@ export async function registerAwsAccountRoutes(
     }
   );
 
+
+  app.get("/api/v1/accounts/grouped", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    const query = request.query as any;
+    const groupBy = query.groupBy === "organizationalUnit" ? "organizationalUnit" : "businessUnit";
+    
+    const accounts = await prisma.awsAccount.findMany({
+      where: {
+        organizationId: auth.organizationId,
+        archivedAt: null
+      },
+      orderBy: [{ name: "asc" }],
+      include: { ownerTeam: { select: { name: true } } }
+    });
+
+    const groupsMap = new Map<string, any>();
+    for (const acc of accounts) {
+      const key = acc[groupBy] || "Unassigned";
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, { id: key, name: key, accounts: [] });
+      }
+      groupsMap.get(key).accounts.push(toAwsAccountDto(acc));
+    }
+
+    return {
+      groupBy,
+      groups: Array.from(groupsMap.values()),
+      awsApiCallExecuted: false,
+      mutationExecuted: false,
+      scannerRun: false
+    };
+  });
+
+  app.get("/api/v1/accounts/topology", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    
+    const accounts = await prisma.awsAccount.findMany({
+      where: {
+        organizationId: auth.organizationId,
+        archivedAt: null
+      },
+      orderBy: [{ name: "asc" }],
+      include: { ownerTeam: { select: { name: true } } }
+    });
+
+    const orgTree = { name: "Root", children: [] as any[] };
+    const ouMap = new Map<string, any>();
+
+    for (const acc of accounts) {
+      const ouName = acc.organizationalUnit || "Unassigned";
+      if (!ouMap.has(ouName)) {
+        const ouNode = { name: ouName, children: [] as any[] };
+        ouMap.set(ouName, ouNode);
+        orgTree.children.push(ouNode);
+      }
+      ouMap.get(ouName).children.push(toAwsAccountDto(acc));
+    }
+
+    return {
+      name: "Root",
+      children: orgTree.children,
+      awsApiCallExecuted: false,
+      mutationExecuted: false,
+      scannerRun: false
+    };
+  });
+
   app.get("/api/v1/aws/setup-guide", { preHandler: requireAuth }, async () => {
     return AwsSetupGuideResponseSchema.parse({
       title: "AWS read-only connection plan",
@@ -392,6 +459,10 @@ export function toAwsAccountDto(account: NonNullable<AccountWithOwnerTeam>) {
     description: account.description,
     roleArnPlaceholder: account.roleArnPlaceholder,
     externalIdPlaceholder: account.externalIdPlaceholder,
+    businessUnit: account.businessUnit,
+    costCenter: account.costCenter,
+    criticality: account.criticality,
+    organizationalUnit: account.organizationalUnit,
     setupInstructionsViewedAt:
       account.setupInstructionsViewedAt?.toISOString() ?? null,
     archivedAt: account.archivedAt?.toISOString() ?? null,

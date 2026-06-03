@@ -11,7 +11,8 @@ import { useEffect, useState } from "react";
 import { RefreshBadge, fetchCloudShieldClient } from "../../../lib/client-api";
 import { CommandCard, ProgressBars, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
 import { AccountRegistryClient } from "./registry-client";
-import { CheckCircle2, CircleDashed, ArrowRight, ShieldAlert, KeyRound, CloudCog, ClipboardCheck, ServerCog, Wrench } from "lucide-react";
+import { CheckCircle2, CircleDashed, ArrowRight, ShieldAlert, KeyRound, CloudCog, ClipboardCheck, ServerCog, Wrench, Network, Boxes, Building2 } from "lucide-react";
+import { useMemo } from "react";
 
 type ReadinessResponse = {
   awsAccounts: Array<{
@@ -258,9 +259,22 @@ export default function AccountsPage() {
     };
   }, []);
 
+  const topologyData = useMemo(() => {
+    const map = new Map<string, Map<string, AwsAccountDto[]>>();
+    accounts.forEach(acc => {
+      const bu = acc.environment === "PRODUCTION" ? "Retail Cloud" : "Enterprise Core";
+      const ou = acc.environment === "SECURITY" ? "Security Operations" : "Platform Engineering";
+      
+      if (!map.has(bu)) map.set(bu, new Map());
+      if (!map.get(bu)!.has(ou)) map.get(bu)!.set(ou, []);
+      map.get(bu)!.get(ou)!.push(acc);
+    });
+    return map;
+  }, [accounts]);
+
   return (
     <DashboardPage
-      title="AWS Account Governance"
+      title="Enterprise Account Topology Workspace"
       description="Organization-scoped AWS account control plane for ownership, environment context, read-only validation posture, and governance metadata."
     >
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
@@ -380,6 +394,65 @@ export default function AccountsPage() {
         </div>
       )}
 
+      <section className="mb-8">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 text-white shadow-sm">
+            <Network size={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-ink">Account Topology</h2>
+            <p className="text-xs text-slate-500">Business Unit and Organizational Unit mapping for governance scaling</p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {Array.from(topologyData.entries()).map(([bu, ouMap]) => (
+            <div key={bu} className="gradient-card p-1 rounded-2xl bg-gradient-to-br from-indigo-500/10 via-slate-100 to-teal-500/10">
+              <div className="h-full bg-panel rounded-xl p-5 shadow-sm border border-white/50 backdrop-blur-sm relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all duration-500">
+                  <Building2 size={100} />
+                </div>
+                
+                <div className="flex items-center gap-2 mb-6 relative z-10">
+                  <span className="status-pill border-indigo-200 bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 text-[10px] tracking-wider uppercase">
+                    Business Unit
+                  </span>
+                  <h3 className="text-base font-bold text-ink">{bu}</h3>
+                </div>
+
+                <div className="space-y-5 relative z-10">
+                  {Array.from(ouMap.entries()).map(([ou, accs]) => (
+                    <div key={ou} className="border-l-2 border-teal-200/60 pl-4 py-1">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                          <Boxes size={16} className="text-teal-600" />
+                          {ou}
+                        </h4>
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{accs.length} accounts</span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {accs.map(acc => (
+                          <div key={acc.accountId} className="flex items-center justify-between bg-white/80 border border-slate-100 p-3 rounded-lg shadow-sm hover:border-teal-300 hover:shadow-md transition-all">
+                            <div>
+                              <div className="text-[12px] font-bold text-ink">{acc.name}</div>
+                              <div className="text-[11px] text-slate-400 font-mono mt-0.5">{acc.accountId}</div>
+                            </div>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 px-2 py-1 rounded">
+                              {acc.environment}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <AccountRegistryClient
         initialAccounts={accounts}
         setupGuide={setupGuide}
@@ -433,13 +506,16 @@ function CredentialReadinessPanel({
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
-        <div className="border border-line rounded-xl p-4 bg-slate-50/50">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3">Environment checklist</p>
-          <div className="grid gap-2 sm:grid-cols-2">
+        <div className="border border-line rounded-xl p-5 bg-gradient-to-br from-slate-50 to-white shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Environment checklist</p>
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
+          <div className="grid gap-2.5 sm:grid-cols-2">
             {envChecks.map(([label, configured]) => (
-              <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm" key={label}>
+              <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2.5 shadow-sm hover:border-indigo-100 transition-colors" key={label}>
                 <span className="text-[11px] font-mono text-slate-600 font-semibold">{label}</span>
-                <span className={`status-pill py-0.5 text-[10px] ${configured ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                <span className={`status-pill py-0.5 text-[10px] ${configured ? "border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
                   {configured ? "configured" : "missing"}
                 </span>
               </div>
@@ -447,7 +523,7 @@ function CredentialReadinessPanel({
           </div>
         </div>
 
-        <div className="border border-line rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
+        <div className="border border-line rounded-xl p-5 bg-gradient-to-br from-slate-50 to-white shadow-sm flex flex-col justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3">Safety boundaries</p>
             <ul className="space-y-2 text-xs text-slate-600">
@@ -481,9 +557,9 @@ function CredentialReadinessPanel({
 
 function ReadinessTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-line bg-slate-50/50 p-4 rounded-xl shadow-sm">
+    <div className="border border-slate-200/60 bg-gradient-to-b from-white to-slate-50 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-indigo-200 transition-all">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-bold text-ink capitalize">{value}</p>
+      <p className="mt-1.5 text-sm font-bold text-ink capitalize">{value}</p>
     </div>
   );
 }

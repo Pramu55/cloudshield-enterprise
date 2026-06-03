@@ -9,7 +9,10 @@ import {
   ShieldCheck,
   XCircle,
   AlertTriangle,
-  Info
+  Info,
+  Building2,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -86,6 +89,14 @@ const EmptyActivity = {
   automaticRemediationExecuted: false,
   message: "Governance activity will appear here."
 };
+
+const BUSINESS_UNITS = [
+  { name: "Retail Banking", securityScore: 92, complianceScore: 98, highRiskFindings: 3, trend: 2 },
+  { name: "Investment Banking", securityScore: 88, complianceScore: 95, highRiskFindings: 7, trend: -1 },
+  { name: "Wealth Management", securityScore: 95, complianceScore: 99, highRiskFindings: 0, trend: 5 },
+  { name: "Corporate Services", securityScore: 82, complianceScore: 91, highRiskFindings: 12, trend: -3 },
+];
+
 
 export default function GovernancePage() {
   const {
@@ -217,6 +228,75 @@ export default function GovernancePage() {
           value={completedPlans.length} 
           accent="emerald" 
         />
+      </section>
+
+      {/* Business Unit Governance */}
+      <section className="mb-8">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 size={20} className="text-indigo-600" />
+            <h2 className="text-lg font-bold text-ink">Business Unit Governance</h2>
+          </div>
+          <span className="status-pill border-indigo-200 bg-indigo-50 text-indigo-700">
+            <span className="status-dot-pulse bg-indigo-500"></span>
+            Live Organization View
+          </span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {BUSINESS_UNITS.map((bu) => (
+            <div key={bu.name} className="premium-card p-5 group hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
+              <div className="flex justify-between items-start mb-5">
+                <div>
+                  <h3 className="font-bold text-ink text-sm group-hover:text-indigo-600 transition-colors">{bu.name}</h3>
+                  <div className="flex items-center gap-1 mt-1">
+                    {bu.trend > 0 ? (
+                      <TrendingUp size={12} className="text-emerald-500" />
+                    ) : (
+                      <TrendingDown size={12} className="text-amber-500" />
+                    )}
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      {Math.abs(bu.trend)}% {bu.trend > 0 ? "improvement" : "decline"}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`status-pill ${bu.highRiskFindings > 5 ? 'border-red-200 bg-red-50 text-red-700' : bu.highRiskFindings > 0 ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                    {bu.highRiskFindings > 0 && <AlertTriangle size={10} className="mr-1 opacity-70" />}
+                    {bu.highRiskFindings} High Risk
+                  </span>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between text-xs mb-1.5 font-medium">
+                    <span className="text-slate-500">Security Score</span>
+                    <span className="text-ink font-bold">{bu.securityScore}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${bu.securityScore >= 90 ? 'bg-emerald-500' : bu.securityScore >= 85 ? 'bg-amber-500' : 'bg-red-500'}`} 
+                      style={{ width: `${bu.securityScore}%` }}
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex justify-between text-xs mb-1.5 font-medium">
+                    <span className="text-slate-500">Compliance Score</span>
+                    <span className="text-ink font-bold">{bu.complianceScore}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${bu.complianceScore >= 90 ? 'bg-emerald-500' : bu.complianceScore >= 85 ? 'bg-amber-500' : 'bg-red-500'}`} 
+                      style={{ width: `${bu.complianceScore}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">

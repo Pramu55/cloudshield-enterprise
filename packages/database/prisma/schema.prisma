@@ -76,6 +76,13 @@ enum ComplianceStatus {
   NOT_EVALUATED
 }
 
+enum AccountCriticality {
+  LOW
+  MEDIUM
+  HIGH
+  MISSION_CRITICAL
+}
+
 enum ScanRunStatus {
   QUEUED
   RUNNING
@@ -231,6 +238,10 @@ model AwsAccount {
   description    String?
   roleArnPlaceholder String?
   externalIdPlaceholder String?
+  businessUnit   String?
+  costCenter     String?
+  criticality    AccountCriticality @default(MEDIUM)
+  organizationalUnit String?
   setupInstructionsViewedAt DateTime?
   archivedAt     DateTime?
   createdAt      DateTime         @default(now())

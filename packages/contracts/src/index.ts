@@ -28,6 +28,14 @@ export const AwsAccountEnvironmentSchema = z.enum([
 ]);
 export type AwsAccountEnvironment = z.infer<typeof AwsAccountEnvironmentSchema>;
 
+export const AccountCriticalitySchema = z.enum([
+  "LOW",
+  "MEDIUM",
+  "HIGH",
+  "MISSION_CRITICAL"
+]);
+export type AccountCriticality = z.infer<typeof AccountCriticalitySchema>;
+
 export const AwsAccountStatusSchema = z.enum([
   "NOT_CONFIGURED",
   "CONNECTED",
@@ -1393,3 +1401,54 @@ export const ResourceDetailResponseSchema = z.object({
 export type ResourceDetailResponse = z.infer<typeof ResourceDetailResponseSchema>;
 
 
+
+
+// ── Multi-Account Organization Foundation ───────────────────────────────────
+
+export const OrganizationOverviewResponseSchema = z.object({
+  organizationalUnitsCount: z.number(),
+  businessUnitsCount: z.number(),
+  accountsCount: z.number(),
+  environmentsCount: z.number(),
+  accountsByEnvironment: z.record(z.string(), z.number()),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  scannerRun: z.literal(false)
+});
+export type OrganizationOverviewResponse = z.infer<typeof OrganizationOverviewResponseSchema>;
+
+export const AccountGroupedResponseSchema = z.object({
+  groupBy: z.enum(["businessUnit", "organizationalUnit"]),
+  groups: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    accounts: z.array(AwsAccountDtoSchema)
+  })),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  scannerRun: z.literal(false)
+});
+export type AccountGroupedResponse = z.infer<typeof AccountGroupedResponseSchema>;
+
+export const AccountTopologyResponseSchema = z.object({
+  name: z.string(),
+  children: z.array(z.any()), // recursive tree structure
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  scannerRun: z.literal(false)
+});
+export type AccountTopologyResponse = z.infer<typeof AccountTopologyResponseSchema>;
+
+export const GovernanceBusinessUnitResponseSchema = z.object({
+  businessUnits: z.array(z.object({
+    name: z.string(),
+    accountCount: z.number(),
+    averageSecurityScore: z.number().nullable(),
+    averageComplianceScore: z.number().nullable(),
+    openHighRiskFindings: z.number()
+  })),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  scannerRun: z.literal(false)
+});
+export type GovernanceBusinessUnitResponse = z.infer<typeof GovernanceBusinessUnitResponseSchema>;

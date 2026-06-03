@@ -346,6 +346,7 @@ export function AccountRegistryClient({
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="px-5 py-3">Account details</th>
+                  <th className="px-5 py-3">Topology</th>
                   <th className="px-5 py-3">Env</th>
                   <th className="px-5 py-3">Owner</th>
                   <th className="px-5 py-3">Regions</th>
@@ -367,6 +368,10 @@ export function AccountRegistryClient({
                           {account.description}
                         </div>
                       ) : null}
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="text-xs font-bold text-ink">{account.environment === "PRODUCTION" ? "Retail Cloud" : "Enterprise Core"}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{account.environment === "SECURITY" ? "Security Operations" : "Platform Engineering"}</div>
                     </td>
                     <td className="px-5 py-4 text-slate-700 font-semibold text-xs">
                       {account.environment}

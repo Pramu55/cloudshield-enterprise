@@ -117,6 +117,87 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+
+  app.get("/api/v1/organizations/overview", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    const organizationScope = scopeByOrganization(auth.organizationId);
+    
+    const accounts = await prisma.awsAccount.findMany({ where: organizationScope });
+    const businessUnits = new Set();
+    const organizationalUnits = new Set();
+    const environments = new Set();
+    const accountsByEnvironment: Record<string, number> = {};
+    
+    for (const acc of accounts) {
+      if (acc.businessUnit) businessUnits.add(acc.businessUnit);
+      if (acc.organizationalUnit) organizationalUnits.add(acc.organizationalUnit);
+      environments.add(acc.environment);
+      accountsByEnvironment[acc.environment] = (accountsByEnvironment[acc.environment] || 0) + 1;
+    }
+    
+    return {
+      organizationalUnitsCount: organizationalUnits.size,
+      businessUnitsCount: businessUnits.size,
+      accountsCount: accounts.length,
+      environmentsCount: environments.size,
+      accountsByEnvironment,
+      awsApiCallExecuted: false,
+      mutationExecuted: false,
+      scannerRun: false
+    };
+  });
+
+  app.get("/api/v1/governance/business-units", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    const organizationScope = scopeByOrganization(auth.organizationId);
+    
+    const accounts = await prisma.awsAccount.findMany({ where: organizationScope });
+    const securityFindings = await prisma.securityFinding.findMany({ 
+      where: { ...organizationScope, status: "OPEN" },
+      include: { awsAccount: { select: { businessUnit: true } } }
+    });
+    
+    const buMap = new Map();
+    
+    for (const acc of accounts) {
+      const bu = acc.businessUnit || "Unassigned";
+      if (!buMap.has(bu)) {
+        buMap.set(bu, { name: bu, accountCount: 0, openHighRiskFindings: 0, totalSecurity: 0, totalCompliance: 0, scoredAccounts: 0 });
+      }
+      const data = buMap.get(bu);
+      data.accountCount++;
+      if (acc.securityScore !== null) {
+        data.totalSecurity += acc.securityScore;
+        data.totalCompliance += (acc.complianceScore || 0);
+        data.scoredAccounts++;
+      }
+    }
+    
+    for (const finding of securityFindings) {
+      if (finding.severity === "HIGH" || finding.severity === "CRITICAL") {
+        const bu = finding.awsAccount?.businessUnit || "Unassigned";
+        if (buMap.has(bu)) {
+          buMap.get(bu).openHighRiskFindings++;
+        }
+      }
+    }
+    
+    const businessUnits = Array.from(buMap.values()).map(b => ({
+      name: b.name,
+      accountCount: b.accountCount,
+      averageSecurityScore: b.scoredAccounts > 0 ? Math.round(b.totalSecurity / b.scoredAccounts) : null,
+      averageComplianceScore: b.scoredAccounts > 0 ? Math.round(b.totalCompliance / b.scoredAccounts) : null,
+      openHighRiskFindings: b.openHighRiskFindings
+    }));
+    
+    return {
+      businessUnits,
+      awsApiCallExecuted: false,
+      mutationExecuted: false,
+      scannerRun: false
+    };
+  });
+
   app.get("/api/v1/inventory/resources", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
     const { accountId, account, region, type, tag, risk } = request.query as any || {};

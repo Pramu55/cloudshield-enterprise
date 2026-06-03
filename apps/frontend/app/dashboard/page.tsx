@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, FileCheck2, ShieldCheck, WalletCards, Info, Server, ShieldAlert, AlertTriangle, CheckCircle2, FileText, RefreshCw, Layers, Gauge, GitPullRequestDraft, SearchCheck, ClipboardList } from "lucide-react";
+import { BarChart3, FileCheck2, ShieldCheck, WalletCards, Info, Server, ShieldAlert, AlertTriangle, CheckCircle2, FileText, RefreshCw, Layers, Gauge, GitPullRequestDraft, SearchCheck, ClipboardList, Building2, Network } from "lucide-react";
 import { ActivityTimeline, CommandCard, InsightPanel, ProgressBars, ProgressRing, ReadinessJourney, StatusMatrix, WorkspaceHero, DashboardPage } from "./shared";
 import { SampleDataNotice } from "../../lib/ui";
 import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
@@ -93,6 +93,13 @@ type Activity = {
   timestamp: string;
   status: string;
 };
+
+// Mock data for Business Units Topology
+const BusinessUnitsMock = [
+  { name: "Retail Operations", center: "CC-1042", accounts: 4, resources: 842, risk: "A", status: "good" as const },
+  { name: "Digital Platform", center: "CC-2911", accounts: 12, resources: 3420, risk: "B-", status: "warning" as const },
+  { name: "Corporate IT", center: "CC-8830", accounts: 2, resources: 156, risk: "A+", status: "good" as const }
+];
 
 export default function DashboardHome() {
   const { data: summary, error, isRefreshing } = useCloudShieldData<DashboardSummary>(
@@ -209,65 +216,6 @@ export default function DashboardHome() {
         </div>
       </WorkspaceHero>
 
-      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_420px]">
-        <InsightPanel
-          title="AWS Integration Journey"
-          description="A production-style path from registry metadata to controlled, approval-based operations."
-        >
-          <ReadinessJourney steps={journeySteps} />
-        </InsightPanel>
-
-        <InsightPanel
-          title="Live Workspace Timeline"
-          description="Recent operational events surfaced as a console timeline."
-        >
-          {timelineEvents.length ? (
-            <ActivityTimeline events={timelineEvents} />
-          ) : (
-            <ActivityTimeline
-              events={[
-                {
-                  title: "Governance workspace ready",
-                  description: "No recent activity was returned by the API; sample modules are available for review.",
-                  time: lastRefreshedAt || "now",
-                  tone: "info"
-                }
-              ]}
-            />
-          )}
-        </InsightPanel>
-      </section>
-
-      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <InsightPanel
-          title="Command Center"
-          description="Primary work actions are organized as operator launch points."
-        >
-          <div className="grid gap-3 md:grid-cols-2">
-            <CommandCard href="/dashboard/accounts" icon={<SearchCheck size={18} />} title="Validate identity" description="Review account registry and safe connector readiness before any live validation." />
-            <CommandCard href="/dashboard/security" icon={<ShieldAlert size={18} />} title="Review findings" description="Open severity queues, evidence, affected resources, and governed workflow actions." />
-            <CommandCard href="/dashboard/governance" icon={<GitPullRequestDraft size={18} />} title="Open governance approvals" description="Manage remediation plan approvals, manual completion, and audit evidence." />
-            <CommandCard href="/dashboard/reports" icon={<ClipboardList size={18} />} title="Generate report" description="Create internal preview records from CloudShield evidence without scanner execution." />
-          </div>
-        </InsightPanel>
-
-        <InsightPanel
-          title="Risk and Compliance Posture"
-          description="Operational posture signals that help leadership scan the platform quickly."
-        >
-          <StatusMatrix
-            items={[
-              { label: "High risk findings", value: summary?.counts?.highRiskFindings ?? 0, tone: "danger" },
-              { label: "Accepted risks", value: summary?.counts?.acceptedRisks ?? 0, tone: "warning" },
-              { label: "Controls", value: summary?.counts?.complianceControls ?? 0, tone: "info" },
-              { label: "Reports ready", value: summary?.counts?.reportsReady ?? 0, tone: "good" },
-              { label: "Scanner mode", value: readiness.scannerMode, tone: "warning" },
-              { label: "AWS API executed", value: String(summary?.scannerStatus?.awsApiCallExecuted ?? false), tone: "good" }
-            ]}
-          />
-        </InsightPanel>
-      </section>
-
       {/* Safety Notice Banners and Refresh Indicator */}
       <section className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 flex items-start gap-4 safety-banner bg-amber-50/70 border border-amber-200/50 p-4 rounded-xl">
@@ -289,7 +237,7 @@ export default function DashboardHome() {
           </div>
           <button 
             type="button" 
-            className="flex items-center justify-center gap-2 w-full rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition-all active:scale-95"
+            className="flex items-center justify-center gap-2 w-full rounded-lg border border-line bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-100 transition-all active:scale-95"
             onClick={() => window.location.reload()}
           >
             <RefreshCw size={14} className={isRefreshing ? "animate-spin text-indigo-600" : "text-slate-500"} />
@@ -313,7 +261,7 @@ export default function DashboardHome() {
         
         <Link href="/dashboard/inventory" className="premium-card p-5 group">
           <div className="flex justify-between items-start">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-all">
               <BarChart3 size={20} />
             </div>
             <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full text-slate-600 font-bold uppercase tracking-wider">Assets</span>
@@ -347,74 +295,145 @@ export default function DashboardHome() {
         </Link>
       </div>
 
-      {/* Production Readiness Center */}
-      <section className="mb-6 premium-card p-6">
-        <h3 className="text-sm font-bold text-ink flex items-center gap-2 mb-4">
-          <Layers className="text-indigo-600" size={16} />
-          AWS Connection & Enterprise Deployment Checklist
-        </h3>
-        
-        <div className="grid gap-5 md:grid-cols-3">
-          <div className="border border-line rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">1. Accounts Registry</span>
-                {readiness.awsAccountsCount > 0 ? (
-                  <span className="status-pill border-emerald-200 bg-emerald-50 text-emerald-700 py-0.5">Configured</span>
-                ) : (
-                  <span className="status-pill border-amber-200 bg-amber-50 text-amber-700 py-0.5">Action Needed</span>
-                )}
+      {/* Business Unit Topology & Posture Section */}
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_1fr]">
+        <InsightPanel
+          title="Business Unit Topology"
+          description="Enterprise coverage mapped across logical boundaries and cost centers."
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {BusinessUnitsMock.map((bu, idx) => (
+              <div key={idx} className="border border-line rounded-xl p-4 bg-white hover:border-indigo-200 hover:shadow-md transition-all group">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <Building2 size={16} />
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                    bu.status === 'good' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>{bu.risk} Risk</span>
+                </div>
+                <h4 className="text-sm font-bold text-ink mt-2">{bu.name}</h4>
+                <div className="flex items-center justify-between mt-3 text-[11px] font-medium text-slate-500">
+                  <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">{bu.center}</span>
+                  <span className="flex items-center gap-1"><Network size={12} className="text-slate-400"/> {bu.accounts} Accts</span>
+                </div>
+                <div className="mt-3 pt-3 border-t border-line flex justify-between items-center text-xs text-slate-500">
+                  <span>Resources</span>
+                  <span className="font-bold text-slate-700">{bu.resources.toLocaleString()}</span>
+                </div>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                AWS registry records stored in CloudShield database. Accounts are mapped to business units and owner teams.
-              </p>
-            </div>
-            <Link href="/dashboard/accounts" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 mt-4 block">
-              Manage accounts &rarr;
-            </Link>
+            ))}
           </div>
+        </InsightPanel>
 
-          <div className="border border-line rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">2. Credential Environment</span>
-                {readiness.credentialReadiness.requiredEnvPresent ? (
-                  <span className="status-pill border-emerald-200 bg-emerald-50 text-emerald-700 py-0.5">Ready</span>
-                ) : (
-                  <span className="status-pill border-amber-200 bg-amber-50 text-amber-700 py-0.5">Pending Setup</span>
-                )}
-              </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Inspects local environment presence of credentials. Missing env keys: 
-                <span className="font-mono bg-white border border-line px-1.5 ml-1 rounded text-slate-700">
-                  {readiness.credentialReadiness.missingEnvKeys.join(", ") || "None"}
-                </span>
-              </p>
-            </div>
-            <Link href="/dashboard/settings" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 mt-4 block">
-              Verify env config &rarr;
-            </Link>
-          </div>
+        <InsightPanel
+          title="Risk and Compliance Posture"
+          description="Operational posture signals that help leadership scan the platform quickly."
+        >
+          <StatusMatrix
+            items={[
+              { label: "High risk findings", value: summary?.counts?.highRiskFindings ?? 0, tone: "danger" },
+              { label: "Accepted risks", value: summary?.counts?.acceptedRisks ?? 0, tone: "warning" },
+              { label: "Controls", value: summary?.counts?.complianceControls ?? 0, tone: "info" },
+              { label: "Reports ready", value: summary?.counts?.reportsReady ?? 0, tone: "good" },
+              { label: "Scanner mode", value: readiness.scannerMode, tone: "warning" },
+              { label: "AWS API executed", value: String(summary?.scannerStatus?.awsApiCallExecuted ?? false), tone: "good" }
+            ]}
+          />
+        </InsightPanel>
+      </section>
 
-          <div className="border border-line rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">3. Read-Only Scan Status</span>
-                {readiness.isReadyForReadOnlyScans ? (
-                  <span className="status-pill border-emerald-200 bg-emerald-50 text-emerald-700 py-0.5">Ready</span>
-                ) : (
-                  <span className="status-pill border-slate-200 bg-slate-100 text-slate-600 py-0.5">Scanner Blocked</span>
-                )}
-              </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                CloudShield inventory scanning triggers only when AWS credentials are safe and readonly-scan mode is active.
-              </p>
-            </div>
-            <Link href="/dashboard/scans" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 mt-4 block">
-              Check scan timeline &rarr;
-            </Link>
+      {/* Integration Journey & Live Timeline */}
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <InsightPanel
+          title="AWS Integration Journey"
+          description="A production-style path from registry metadata to controlled, approval-based operations."
+        >
+          <ReadinessJourney steps={journeySteps} />
+        </InsightPanel>
+
+        <InsightPanel
+          title="Live Workspace Timeline"
+          description="Recent operational events surfaced as a console timeline."
+        >
+          {timelineEvents.length ? (
+            <ActivityTimeline events={timelineEvents} />
+          ) : (
+            <ActivityTimeline
+              events={[
+                {
+                  title: "Governance workspace ready",
+                  description: "No recent activity was returned by the API; sample modules are available for review.",
+                  time: lastRefreshedAt || "now",
+                  tone: "info"
+                }
+              ]}
+            />
+          )}
+        </InsightPanel>
+      </section>
+
+      {/* Command Center & Production Readiness Center */}
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+        <InsightPanel
+          title="Command Center"
+          description="Primary work actions are organized as operator launch points."
+        >
+          <div className="grid gap-3 md:grid-cols-2 h-full content-start">
+            <CommandCard href="/dashboard/accounts" icon={<SearchCheck size={18} />} title="Validate identity" description="Review account registry and safe connector readiness before any live validation." />
+            <CommandCard href="/dashboard/security" icon={<ShieldAlert size={18} />} title="Review findings" description="Open severity queues, evidence, affected resources, and governed workflow actions." />
+            <CommandCard href="/dashboard/governance" icon={<GitPullRequestDraft size={18} />} title="Open governance approvals" description="Manage remediation plan approvals, manual completion, and audit evidence." />
+            <CommandCard href="/dashboard/reports" icon={<ClipboardList size={18} />} title="Generate report" description="Create internal preview records from CloudShield evidence without scanner execution." />
           </div>
-        </div>
+        </InsightPanel>
+
+        <InsightPanel
+          title="Enterprise Deployment Checklist"
+          description="AWS Connection & System Architecture Requirements"
+        >
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="border border-line rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">1. Accounts Registry</span>
+                  {readiness.awsAccountsCount > 0 ? (
+                    <span className="status-pill border-emerald-200 bg-emerald-50 text-emerald-700 py-0.5">Configured</span>
+                  ) : (
+                    <span className="status-pill border-amber-200 bg-amber-50 text-amber-700 py-0.5">Action Needed</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  AWS registry records stored in CloudShield database. Accounts are mapped to business units and owner teams.
+                </p>
+              </div>
+              <Link href="/dashboard/accounts" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 mt-4 block">
+                Manage accounts &rarr;
+              </Link>
+            </div>
+
+            <div className="border border-line rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">2. Credential Environment</span>
+                  {readiness.credentialReadiness.requiredEnvPresent ? (
+                    <span className="status-pill border-emerald-200 bg-emerald-50 text-emerald-700 py-0.5">Ready</span>
+                  ) : (
+                    <span className="status-pill border-amber-200 bg-amber-50 text-amber-700 py-0.5">Pending Setup</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Inspects local environment presence of credentials. Missing env keys: 
+                  <span className="font-mono bg-white border border-line px-1.5 ml-1 rounded text-slate-700">
+                    {readiness.credentialReadiness.missingEnvKeys.join(", ") || "None"}
+                  </span>
+                </p>
+              </div>
+              <Link href="/dashboard/settings" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 mt-4 block">
+                Verify env config &rarr;
+              </Link>
+            </div>
+          </div>
+        </InsightPanel>
       </section>
 
       {/* Secondary Metrics */}
@@ -491,31 +510,6 @@ export default function DashboardHome() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Recent Activity Timeline */}
-      <div className="premium-card p-5">
-        <p className="text-sm font-bold text-ink mb-4 border-b border-line pb-3">Governance Activity Log</p>
-        {activityData?.activities?.length ? (
-          <div className="space-y-4">
-            {activityData.activities.map((activity, idx) => (
-              <div key={activity.id || idx} className="flex gap-4 items-start">
-                <div className="mt-1 flex items-center justify-center w-5 h-5 rounded-full bg-indigo-50 text-indigo-600 shrink-0 border border-indigo-200">
-                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-600"></span>
-                </div>
-                <div className="flex-1 border border-line bg-slate-50/50 p-3 rounded-xl shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-ink">{activity.title}</span>
-                    <span className="text-[10px] text-slate-400 font-mono mt-0.5 sm:mt-0">{new Date(activity.timestamp).toLocaleString()}</span>
-                  </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">{activity.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500 py-4 text-center">No recent activity.</p>
-        )}
       </div>
     </DashboardPage>
   );
