@@ -78,6 +78,7 @@ enum ComplianceStatus {
 
 enum ScanRunStatus {
   QUEUED
+  RUNNING
   STARTED
   SUCCEEDED
   COMPLETED

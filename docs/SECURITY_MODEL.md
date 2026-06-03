@@ -309,13 +309,13 @@ Safety guarantees:
 
 
 ---
-### Production Readiness & Original Theme Polish Note
-CloudShield is in the CLOUDSHIELD_PRODUCTION_READINESS_AND_ORIGINAL_PLATFORM_POLISH_GREEN milestone.
-* **Original UI**: Features a custom Indigo/Teal layout console and does not clone Azure or other cloud provider interfaces.
-* **Production Foundation**: The platform is client-evaluation and enterprise-company deployment ready.
-* **AWS Readiness**: The only remaining step to integrate real AWS data is adding safe credentials via environment variables and enabling read-only scan mode.
-* **Safety Boundaries**: AWS scanner execution, mutations, Terraform applies, and automatic remediations remain strictly disabled by default.
-* **Disclaimers**: Compliance evidence maps CIS-inspired and SOC2-inspired controls for internal tracking (no official certification is claimed). We do not claim any real client deployment (such as Accenture).
+### Real AWS Integration and Company Deployment Note
+CloudShield is in the CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FOUNDATION_GREEN milestone.
+* **Non-Mutating STS Identity Gates**: Connection validation checks execute live `sts:GetCallerIdentity` calls to fetch caller identity context safely without any mutations.
+* **Read-Only AWS Inventory**: Inventory scan loops execute read-only Describe instances, security groups, volumes, VPCs, and subnets. Automatic remediation and Terraform write operations are strictly blocked.
+* **Secure Environment Credentials**: AWS credentials are never committed, logged, or saved in the database. Role assumption with an external ID is preferred.
+* **Deterministic Local Posture Rules**: Posture evaluations are executed against local PostgreSQL records only; no live AWS API calls occur during posture analyses.
+* **Clear Safety Banners**: Interactive modals require explicit warnings and confirmation checks prior to all STS connection tests or EC2 describe scans.
 ## AWS Credential Readiness Safety
 
 CloudShield credential readiness is metadata-only. It inspects whether expected environment variables are present and reports booleans such as `awsRoleArnConfigured`, `roleBasedReadiness`, and `localAccessKeyFallbackDetected`.

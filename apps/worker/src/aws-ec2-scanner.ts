@@ -1,6 +1,6 @@
 import { EC2Client, DescribeInstancesCommand, DescribeSecurityGroupsCommand, DescribeVolumesCommand, DescribeVpcsCommand, DescribeSubnetsCommand } from "@aws-sdk/client-ec2";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
-import { prisma } from "@cloudshield/database";
+import { prisma, evaluateSecurityRules } from "@cloudshield/database";
 import { createLogger } from "@cloudshield/logger";
 
 const logger = createLogger("aws-ec2-scanner");
@@ -18,12 +18,14 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
   logger.info({ organizationId, awsAccountId, scanRunId }, "Starting EC2 read-only inventory scan...");
 
   try {
-    await updateScanStatus(scanRunId, "STARTED", "Running real AWS API queries...", "scanning");
+    await updateScanStatus(scanRunId, "RUNNING", "Running real AWS API queries...", "scanning");
 
     const sts = new STSClient({ region: process.env.AWS_REGION_DEFAULT || "us-east-1" });
-    const identity = await sts.send(new GetCallerIdentityCommand({}));
+    await sts.send(new GetCallerIdentityCommand({}));
     
     const ec2 = new EC2Client({ region: process.env.AWS_REGION_DEFAULT || "us-east-1" });
+
+    const resourceIdToDbId = new Map<string, string>();
 
     // Describe instances
     const instancesRes = await ec2.send(new DescribeInstancesCommand({}));
@@ -31,7 +33,8 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     
     for (const instance of instances) {
       if (!instance.InstanceId) continue;
-      await saveResource(organizationId, awsAccountId, "EC2_INSTANCE", instance.InstanceId, getTag(instance.Tags, "Name"), instance);
+      const res = await saveResource(organizationId, awsAccountId, "EC2_INSTANCE", instance.InstanceId, getTag(instance.Tags, "Name"), instance);
+      resourceIdToDbId.set(instance.InstanceId, res.id);
     }
 
     // Describe Security Groups
@@ -39,7 +42,8 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     const securityGroups = sgRes.SecurityGroups || [];
     for (const sg of securityGroups) {
       if (!sg.GroupId) continue;
-      await saveResource(organizationId, awsAccountId, "SECURITY_GROUP", sg.GroupId, sg.GroupName, sg);
+      const res = await saveResource(organizationId, awsAccountId, "SECURITY_GROUP", sg.GroupId, sg.GroupName, sg);
+      resourceIdToDbId.set(sg.GroupId, res.id);
     }
 
     // Describe Volumes
@@ -47,7 +51,8 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     const volumes = volRes.Volumes || [];
     for (const vol of volumes) {
       if (!vol.VolumeId) continue;
-      await saveResource(organizationId, awsAccountId, "EBS_VOLUME", vol.VolumeId, getTag(vol.Tags, "Name"), vol);
+      const res = await saveResource(organizationId, awsAccountId, "EBS_VOLUME", vol.VolumeId, getTag(vol.Tags, "Name"), vol);
+      resourceIdToDbId.set(vol.VolumeId, res.id);
     }
 
     // Describe VPCs
@@ -55,7 +60,8 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     const vpcs = vpcRes.Vpcs || [];
     for (const vpc of vpcs) {
       if (!vpc.VpcId) continue;
-      await saveResource(organizationId, awsAccountId, "VPC", vpc.VpcId, getTag(vpc.Tags, "Name"), vpc);
+      const res = await saveResource(organizationId, awsAccountId, "VPC", vpc.VpcId, getTag(vpc.Tags, "Name"), vpc);
+      resourceIdToDbId.set(vpc.VpcId, res.id);
     }
 
     // Describe Subnets
@@ -63,10 +69,86 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     const subnets = subnetRes.Subnets || [];
     for (const subnet of subnets) {
       if (!subnet.SubnetId) continue;
-      await saveResource(organizationId, awsAccountId, "SUBNET", subnet.SubnetId, getTag(subnet.Tags, "Name"), subnet);
+      const res = await saveResource(organizationId, awsAccountId, "SUBNET", subnet.SubnetId, getTag(subnet.Tags, "Name"), subnet);
+      resourceIdToDbId.set(subnet.SubnetId, res.id);
+    }
+
+    // Ingest relationships
+    // 1. Instance relationships
+    for (const instance of instances) {
+      const instanceDbId = resourceIdToDbId.get(instance.InstanceId!);
+      if (!instanceDbId) continue;
+
+      // Instance to Subnet
+      if (instance.SubnetId) {
+        const subnetDbId = resourceIdToDbId.get(instance.SubnetId);
+        if (subnetDbId) {
+          await saveRelationship(organizationId, instanceDbId, subnetDbId, "RESIDES_IN");
+        }
+      }
+
+      // Instance to VPC
+      if (instance.VpcId) {
+        const vpcDbId = resourceIdToDbId.get(instance.VpcId);
+        if (vpcDbId) {
+          await saveRelationship(organizationId, instanceDbId, vpcDbId, "RESIDES_IN");
+        }
+      }
+
+      // Instance to Security Groups
+      if (instance.SecurityGroups) {
+        for (const sg of instance.SecurityGroups) {
+          if (sg.GroupId) {
+            const sgDbId = resourceIdToDbId.get(sg.GroupId);
+            if (sgDbId) {
+              await saveRelationship(organizationId, instanceDbId, sgDbId, "ASSOCIATED_WITH");
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Subnet relationships
+    for (const subnet of subnets) {
+      const subnetDbId = resourceIdToDbId.get(subnet.SubnetId!);
+      if (!subnetDbId) continue;
+
+      // Subnet to VPC
+      if (subnet.VpcId) {
+        const vpcDbId = resourceIdToDbId.get(subnet.VpcId);
+        if (vpcDbId) {
+          await saveRelationship(organizationId, subnetDbId, vpcDbId, "RESIDES_IN");
+        }
+      }
+    }
+
+    // 3. Volume relationships
+    for (const vol of volumes) {
+      const volumeDbId = resourceIdToDbId.get(vol.VolumeId!);
+      if (!volumeDbId) continue;
+
+      if (vol.Attachments) {
+        for (const attachment of vol.Attachments) {
+          if (attachment.InstanceId) {
+            const instanceDbId = resourceIdToDbId.get(attachment.InstanceId);
+            if (instanceDbId) {
+              await saveRelationship(organizationId, volumeDbId, instanceDbId, "ATTACHED_TO");
+            }
+          }
+        }
+      }
     }
 
     await updateScanStatus(scanRunId, "SUCCEEDED", "Scan completed successfully", "completed");
+    
+    // Update the lastScanAt on the AWS account
+    await prisma.awsAccount.update({
+      where: { id: awsAccountId },
+      data: { lastScanAt: new Date() }
+    });
+
+    // Run security posture rules evaluation
+    await evaluateSecurityRules(organizationId);
     
     return { status: "SUCCEEDED", awsApiCallExecuted: true };
 
@@ -95,7 +177,7 @@ function getTag(tags: any[] | undefined, key: string): string | undefined {
 }
 
 async function saveResource(organizationId: string, awsAccountId: string, resourceType: string, resourceId: string, name: string | undefined, metadata: any) {
-  await prisma.cloudResource.upsert({
+  return await prisma.cloudResource.upsert({
     where: {
       organizationId_awsAccountId_resourceType_resourceId: {
         organizationId,
@@ -119,4 +201,25 @@ async function saveResource(organizationId: string, awsAccountId: string, resour
       lastSeenAt: new Date()
     }
   });
+}
+
+async function saveRelationship(organizationId: string, sourceId: string, targetId: string, relationshipType: string) {
+  const existing = await prisma.resourceRelationship.findFirst({
+    where: {
+      organizationId,
+      sourceResourceId: sourceId,
+      targetResourceId: targetId,
+      relationshipType
+    }
+  });
+  if (!existing) {
+    await prisma.resourceRelationship.create({
+      data: {
+        organizationId,
+        sourceResourceId: sourceId,
+        targetResourceId: targetId,
+        relationshipType
+      }
+    });
+  }
 }

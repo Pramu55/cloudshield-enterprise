@@ -1,7 +1,5 @@
 import type { SecurityRuleDto, SecurityEvaluationResponse, SecurityFindingDto } from "@cloudshield/contracts";
-import { prisma, scopeByOrganization } from "@cloudshield/database";
-import { SECURITY_RULE_CATALOG } from "./security-rule.catalog.js";
-import { evaluateSecurityRules } from "./security-rule.engine.js";
+import { prisma, scopeByOrganization, SECURITY_RULE_CATALOG, evaluateSecurityRules } from "@cloudshield/database";
 
 export function getRuleCatalog(): SecurityRuleDto[] {
   return SECURITY_RULE_CATALOG.map((rule) => ({

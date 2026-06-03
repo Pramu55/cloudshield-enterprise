@@ -44,11 +44,9 @@ STS validation is the only future validation call and is allowed only when `AWS_
 The inventory scanner remains separate and disabled until explicitly enabled by a future approved milestone. CloudShield does not add AWS mutation, Terraform apply, or automatic remediation.
 
 ---
-### Production Readiness & Original Theme Polish Note
-CloudShield is in the CLOUDSHIELD_PRODUCTION_READINESS_AND_ORIGINAL_PLATFORM_POLISH_GREEN milestone.
-* **Original UI**: Features a custom Indigo/Teal layout console and does not clone Azure or other cloud provider interfaces.
-* **Production Foundation**: The platform is client-evaluation and enterprise-company deployment ready.
-* **AWS Readiness**: The only remaining step to integrate real AWS data is adding safe credentials via environment variables and enabling read-only scan mode.
-* **Safety Boundaries**: AWS scanner execution, mutations, Terraform applies, and automatic remediations remain strictly disabled by default.
-* **Disclaimers**: Compliance evidence maps CIS-inspired and SOC2-inspired controls for internal tracking (no official certification is claimed). We do not claim any real client deployment (such as Accenture).
+### Real AWS Integration and Company Deployment Note
+CloudShield is in the CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FOUNDATION_GREEN milestone.
+* **Credential Protection**: The platform runs STS connection validations and EC2 describe scans without storing access keys or secret key parameters.
+* **Environment-Based Config**: Deployment setups assume cross-account roles defined in runtime environment values.
+* **Least-Privilege Roles**: Read-only policies limit the connector context to describing basic inventory resources, keeping the credentials safe from mutation risks.
 

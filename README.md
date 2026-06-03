@@ -40,14 +40,13 @@ For safety and evaluation purposes, the following are strictly disabled:
 - Live AWS Mutation
 - Automatic Remediation
 - Terraform Apply
-- Live AWS API Calls / Scanners (Default disabled)
 
 ### Safety Model
-- **Read-Only**: The platform operates in a strict read-only mode.
-- **No Secrets**: No real AWS credentials or customer data are committed or required to run the demo.
-- **Sample Data**: The evaluator demo mode is populated with safe, deterministic sample data.
-- **Credential Readiness**: CloudShield prefers role-based AWS readiness using `AWS_REGION`, `AWS_ROLE_ARN`, `AWS_CONNECTOR_MODE`, and `AWS_INVENTORY_SCANNER_MODE`. Access keys are optional local-development fallback indicators only.
-- **No Secret Exposure**: `/api/v1/aws/readiness` returns safe booleans only, never raw secret values, and does not call AWS.
+- **Read-Only**: The platform operates in a strict read-only mode. Live connections only permit read/identity actions.
+- **Dynamic AWS Connector**: When `AWS_CONNECTOR_MODE=readonly-validation` and `AWS_INVENTORY_SCANNER_MODE=readonly-scan` are set, the platform executes live `sts:GetCallerIdentity` connection validation and `ec2:Describe*` resource scans.
+- **No Secrets Stored**: No real AWS credentials or keys are committed, logged, or saved in the database.
+- **No Secret Exposure**: All API responses hide sensitive strings, returning safe booleans and execution logs.
+- **Deterministic Evaluation**: Scanned assets are evaluated locally inside the Postgres database using security rules, generating linked recommendations dynamically.
 
 ## Local Quickstart
 

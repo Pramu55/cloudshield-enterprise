@@ -45,10 +45,10 @@ Instead of being a simple CRUD dashboard, CloudShield integrates complex backend
 ---
 
 ## Resume Bullets
-* Built CloudShield Enterprise, a multi-module AWS governance platform foundation using Next.js, Fastify, TypeScript, PostgreSQL, Prisma, Redis, BullMQ, and Docker.
-* Implemented tenant-scoped auth, AWS account registry, read-only connector foundation, security posture rules, risk workflow, compliance evidence center, and report previews.
-* Designed strict safety boundaries preventing AWS mutation, automatic remediation, Terraform apply, and false compliance/client claims.
-* Added enterprise demo/evaluator documentation and production-readiness roadmap.
+* Built CloudShield Enterprise, a multi-module AWS governance platform using Next.js, Fastify, TypeScript, PostgreSQL, Prisma, Redis, BullMQ, and Docker.
+* Integrated live non-mutating credential check gates via AWS STS `GetCallerIdentity` and background scan loops executing read-only `Describe` APIs to ingest EC2, security groups, volumes, VPCs, and subnets.
+* Programmed relational resource mappings (`ResourceRelationship`) and automated local database-backed security posture rules evaluations upon successful scan completions.
+* Authored operational runbooks and blueprint documents detailing IAM role assumption, backups, queues, and logging configurations.
 
 ## Interview Explanation
 **30-Second Version:**

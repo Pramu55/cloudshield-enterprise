@@ -32,10 +32,10 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
       accountId: a.accountId,
       name: a.name,
       environment: a.environment,
-      regionCoverage: ["us-east-1", "eu-west-1"],
-      connectorStatus: "disabled",
-      scannerStatus: "disabled",
-      onboardingComplete: false
+      regionCoverage: a.regions,
+      connectorStatus: a.connectionStatus,
+      scannerStatus: a.lastScanAt ? "scanned" : "never_scanned",
+      onboardingComplete: a.connectionStatus === "VALIDATION_SUCCEEDED"
     }));
     return {
       awsAccounts,
@@ -71,7 +71,40 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
       include: { awsAccount: true }
     });
     if (!resource) return reply.code(404).send({ message: "Resource not found" });
-    const findingsCount = await prisma.securityFinding.count({ where: { ...scopeByOrganization(auth.organizationId), resourceId: resource.id } });
+    
+    const [findingsCount, dbRelationships] = await Promise.all([
+      prisma.securityFinding.count({ where: { ...scopeByOrganization(auth.organizationId), resourceId: resource.id } }),
+      prisma.resourceRelationship.findMany({
+        where: {
+          organizationId: auth.organizationId,
+          OR: [
+            { sourceResourceId: resource.id },
+            { targetResourceId: resource.id }
+          ]
+        },
+        include: {
+          sourceResource: true,
+          targetResource: true
+        }
+      })
+    ]);
+
+    const relationships = dbRelationships.map(r => ({
+      id: r.id,
+      relationshipType: r.relationshipType,
+      source: {
+        id: r.sourceResource.id,
+        resourceId: r.sourceResource.resourceId,
+        resourceType: r.sourceResource.resourceType,
+        name: r.sourceResource.name
+      },
+      target: {
+        id: r.targetResource.id,
+        resourceId: r.targetResource.resourceId,
+        resourceType: r.targetResource.resourceType,
+        name: r.targetResource.name
+      }
+    }));
     
     return {
       resource: {
@@ -82,8 +115,8 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
         findingsCount,
         complianceControlsCount: 0
       },
-      relationships: [],
-      sampleData: true
+      relationships,
+      sampleData: resource.id.startsWith("instant-resource")
     };
   });
 
@@ -150,15 +183,51 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
     });
     if (!resource) return reply.code(404).send({ message: "Resource not found" });
 
-    const findings = await prisma.securityFinding.findMany({
-      where: { ...orgScope, resourceId: resource.id }
-    });
+    const [findings, dbRelationships] = await Promise.all([
+      prisma.securityFinding.findMany({
+        where: { ...orgScope, resourceId: resource.id }
+      }),
+      prisma.resourceRelationship.findMany({
+        where: {
+          organizationId: auth.organizationId,
+          OR: [
+            { sourceResourceId: resource.id },
+            { targetResourceId: resource.id }
+          ]
+        },
+        include: {
+          sourceResource: true,
+          targetResource: true
+        }
+      })
+    ]);
+
+    const relationships = dbRelationships.map(r => ({
+      id: r.id,
+      relationshipType: r.relationshipType,
+      source: {
+        id: r.sourceResource.id,
+        resourceId: r.sourceResource.resourceId,
+        resourceType: r.sourceResource.resourceType,
+        name: r.sourceResource.name
+      },
+      target: {
+        id: r.targetResource.id,
+        resourceId: r.targetResource.resourceId,
+        resourceType: r.targetResource.resourceType,
+        name: r.targetResource.name
+      }
+    }));
 
     return {
       resourceId: resource.id,
       name: resource.name || resource.resourceId,
       type: resource.resourceType,
       region: resource.region,
+      lastSeenAt: resource.lastSeenAt?.toISOString() ?? null,
+      tags: resource.tags,
+      metadata: resource.metadata,
+      scanSource: resource.provider === "aws" ? "AWS Read-Only Scan" : "Sample/Demo Data",
       awsAccount: {
         name: resource.awsAccount.name,
         accountId: resource.awsAccount.accountId
@@ -171,11 +240,12 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
         status: f.status,
         ruleId: f.ruleId
       })),
+      relationships,
       complianceContext: {
         framework: "CIS-inspired / SOC2-inspired governance",
         controlsChecked: ["CIS-NETWORK-001", "SOC2-ACCESS-001"]
       },
-      sampleData: true,
+      sampleData: resource.id.startsWith("instant-resource"),
       awsApiCallExecuted: false
     };
   });

@@ -34,20 +34,10 @@ This script is designed for walking an evaluator, interviewer, or client through
 **Action**: Navigate to "Reports".
 **Script**: "For executive reporting and audit preparation, we have the Reports Foundation. This allows teams to preview and eventually export PDF or CSV snapshots of their compliance and posture evidence."
 
-## 9. Scans & Safety Boundaries
-**Action**: Navigate to "Scans" or "Settings".
-**Script**: "A core architectural principle of CloudShield is safety. The AWS scanner is completely disabled by default in this release. There is zero code included for mutating AWS state or applying Terraform. This makes it a perfectly safe platform for enterprise evaluation."
+## 9. Scans & Real AWS Validation
+**Action**: Navigate to "Scans" or "Accounts". Show the confirmation modals and validation banners.
+**Script**: "A core architectural principle of CloudShield is safety. We have implemented a live read-only connection validation path using STS GetCallerIdentity and an EC2 describing scanner. When you trigger validation or scan, a confirmation modal warns you first. In the default disabled mode, the button is safely blocked and reports `awsApiCallExecuted=false`. When configured via environment settings, it performs live, secure, non-mutating checks."
 
 ## 10. Enterprise Production Roadmap
 **Action**: Conclude the demo.
 **Script**: "While this is a robust foundation, our future roadmap includes FinOps cost governance integrations, real-time EventBridge listeners for live inventory updates, and enterprise SSO integrations like Okta. This architecture proves out the difficult parts of tenant isolation, deterministic rule evaluation, and safe cloud governance."
-## AWS Credential Readiness Demo Step
-
-Show the AWS Account Governance and Settings pages. Point out:
-
-- Role-based setup is preferred.
-- Access keys are optional local-development fallback indicators only.
-- No secret input fields are shown.
-- No credentials are stored in CloudShield DB.
-- Scanner execution remains disabled by default.
-- No AWS mutation, Terraform apply, or automatic remediation is available.

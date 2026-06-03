@@ -142,11 +142,11 @@ The current reports foundation:
 
 
 ---
-### Production Readiness & Original Theme Polish Note
-CloudShield is in the CLOUDSHIELD_PRODUCTION_READINESS_AND_ORIGINAL_PLATFORM_POLISH_GREEN milestone.
-* **Original UI**: Features a custom Indigo/Teal layout console and does not clone Azure or other cloud provider interfaces.
-* **Production Foundation**: The platform is client-evaluation and enterprise-company deployment ready.
-* **AWS Readiness**: The only remaining step to integrate real AWS data is adding safe credentials via environment variables and enabling read-only scan mode.
-* **Safety Boundaries**: AWS scanner execution, mutations, Terraform applies, and automatic remediations remain strictly disabled by default.
+### Real AWS Integration and Company Deployment Note
+CloudShield is in the CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FOUNDATION_GREEN milestone.
+* **STS Connection Validation**: Connects dynamically to AWS using `GetCallerIdentity` to validate IAM configurations in a non-mutating manner.
+* **EC2 Inventory Scanning**: Implements real `Describe` queries for EC2 instances, security groups, EBS volumes, VPCs, and subnets. It maps resource relationships and automatically triggers local security rules evaluations.
+* **Governance Database**: Dynamic data is ingested and backed in PostgreSQL, providing live inventory filtering, security findings, and report previews.
+* **Operational Readlines**: All active credentials are environment-driven. Operational runbooks specify production topologies, multi-account roles, and backup plans.
 * **Disclaimers**: Compliance evidence maps CIS-inspired and SOC2-inspired controls for internal tracking (no official certification is claimed). We do not claim any real client deployment (such as Accenture).
 

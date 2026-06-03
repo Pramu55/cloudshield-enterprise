@@ -119,8 +119,37 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/v1/inventory/resources", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    const { accountId, account, region, type, tag, risk } = request.query as any || {};
+
+    const whereClause: any = {
+      ...scopeByOrganization(auth.organizationId)
+    };
+
+    if (accountId || account) {
+      whereClause.OR = [
+        { awsAccountId: accountId || account },
+        { awsAccount: { accountId: accountId || account } }
+      ];
+    }
+    if (region) {
+      whereClause.region = region;
+    }
+    if (type) {
+      whereClause.resourceType = type;
+    }
+    if (tag) {
+      whereClause.OR = [
+        ...(whereClause.OR || []),
+        { name: { contains: tag, mode: "insensitive" } },
+        { resourceId: { contains: tag, mode: "insensitive" } }
+      ];
+    }
+    if (risk === "at_risk" || risk === "high" || risk === "true") {
+      whereClause.riskCount = { gt: 0 };
+    }
+
     const resources = await prisma.cloudResource.findMany({
-      where: scopeByOrganization(auth.organizationId),
+      where: whereClause,
       take: DEFAULT_LIMIT,
       orderBy: [{ resourceType: "asc" }, { name: "asc" }],
       include: {
@@ -139,9 +168,13 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
+    const hasRealResources = resources.some(r => !r.id.startsWith("instant-resource"));
+
     return {
-      sampleData: true,
-      sampleDataLabel: "Sample demo data - real AWS scanning is not enabled yet.",
+      sampleData: !hasRealResources,
+      sampleDataLabel: hasRealResources
+        ? "Dynamic data evaluated from CloudShield database."
+        : "Sample demo data - real AWS scanning is not enabled yet.",
       limit: DEFAULT_LIMIT,
       items: resources
     };

@@ -23,3 +23,8 @@ export function assertOrganizationScope(scope: OrganizationScope): void {
     throw new Error("organizationId is required for tenant-owned resource access.");
   }
 }
+
+export * from "./security-posture/security-rule.types.js";
+export * from "./security-posture/security-rule.catalog.js";
+export * from "./security-posture/security-rule.engine.js";
+
