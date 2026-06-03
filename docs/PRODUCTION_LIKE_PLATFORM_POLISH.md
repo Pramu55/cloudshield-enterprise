@@ -22,3 +22,6 @@ This milestone upgrades the inner frontend pages from basic dashboards into prem
 - No external font CDN or import was added.
 - No AWS validation, scanner execution, mutation, Terraform apply, or automatic remediation was run.
 - The UI continues to state that dangerous execution remains blocked.
+
+
+**Note**: A premium public landing page is now available at / which guides users into the console login flow (/login), highlighting platform capabilities and safety constraints without claiming official compliance or real client deployments.

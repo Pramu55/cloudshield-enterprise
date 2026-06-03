@@ -62,3 +62,6 @@ Instead of being a simple CRUD dashboard, CloudShield integrates complex backend
 CloudShield demonstrates enterprise-grade AWS readiness by preferring role-based setup and secret-manager guidance. Access keys are treated as optional local-development fallback indicators, not production readiness requirements.
 
 The platform reports readiness through booleans only and does not expose, store, or log secret values.
+
+
+**Note**: A premium public landing page is now available at / which guides users into the console login flow (/login), highlighting platform capabilities and safety constraints without claiming official compliance or real client deployments.

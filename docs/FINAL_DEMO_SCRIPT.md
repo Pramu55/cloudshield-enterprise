@@ -49,3 +49,6 @@ This script is designed for walking an evaluator, interviewer, or client through
 ## 10. Enterprise Production Roadmap
 **Action**: Conclude the demo.
 **Script**: "While this is a robust foundation, our future roadmap includes FinOps cost governance integrations, real-time EventBridge listeners for live inventory updates, and enterprise SSO integrations like Okta. This architecture proves out the difficult parts of tenant isolation, deterministic rule evaluation, and safe cloud governance."
+
+
+**Note**: A premium public landing page is now available at / which guides users into the console login flow (/login), highlighting platform capabilities and safety constraints without claiming official compliance or real client deployments.
