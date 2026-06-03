@@ -184,7 +184,9 @@ async function getReportContext(organizationId: string) {
     complianceEvidenceCount,
     riskAcceptances,
     auditEvents,
-    recommendations
+    recommendations,
+    remediationPlans,
+    approvalRequests
   ] = await Promise.all([
     prisma.awsAccount.findMany({
       where: organizationScope,
@@ -227,6 +229,24 @@ async function getReportContext(organizationId: string) {
     prisma.recommendation.findMany({
       where: organizationScope,
       take: 100
+    }),
+    prisma.remediationPlan.findMany({
+      where: organizationScope,
+      include: {
+        finding: { select: { title: true, severity: true } },
+        createdBy: { select: { email: true } },
+        approvedBy: { select: { email: true } }
+      },
+      take: 100
+    }),
+    prisma.approvalRequest.findMany({
+      where: organizationScope,
+      include: {
+        remediationPlan: { select: { title: true } },
+        requestedBy: { select: { email: true } },
+        approvedBy: { select: { email: true } }
+      },
+      take: 100
     })
   ]);
 
@@ -239,7 +259,9 @@ async function getReportContext(organizationId: string) {
     complianceEvidenceCount,
     riskAcceptances,
     auditEvents,
-    recommendations
+    recommendations,
+    remediationPlans,
+    approvalRequests
   };
 }
 
@@ -274,7 +296,9 @@ function executiveSummary(context: ReportContext) {
       metric("High severity findings", highSeverity.length, highSeverity.length ? "critical" : "good"),
       metric("Accepted risks", context.riskAcceptances.length),
       metric("Compliance evidence", context.complianceEvidenceCount),
-      metric("Recommendations", context.recommendations.length)
+      metric("Recommendations", context.recommendations.length),
+      metric("Remediation plans", context.remediationPlans.length),
+      metric("Approval requests", context.approvalRequests.length)
     ],
     sections: [
       section("Enterprise posture", "Company IT-level cloud governance snapshot.", [
@@ -338,6 +362,8 @@ function riskSummary(context: ReportContext) {
   const overdue = context.securityFindings.filter(
     (item) => item.targetResolutionDate && item.targetResolutionDate < new Date()
   );
+  const plansByApprovalStatus = countBy(context.remediationPlans, "approvalStatus");
+  const approvalsByStatus = countBy(context.approvalRequests, "status");
 
   return {
     metrics: [
@@ -345,7 +371,9 @@ function riskSummary(context: ReportContext) {
       metric("Accepted risks", context.riskAcceptances.length),
       metric("Resolved findings", resolved.length, "good"),
       metric("Overdue target dates", overdue.length, overdue.length ? "critical" : "good"),
-      metric("Audit events", context.auditEvents.length)
+      metric("Audit events", context.auditEvents.length),
+      metric("Remediation plans", context.remediationPlans.length),
+      metric("Pending approvals", Number(approvalsByStatus.PENDING ?? 0), Number(approvalsByStatus.PENDING ?? 0) ? "warning" : "good")
     ],
     sections: [
       section("Risk workflow", "Ownership and acceptance summary from CloudShield workflow records.", [
@@ -353,6 +381,16 @@ function riskSummary(context: ReportContext) {
         metric("Accepted", context.riskAcceptances.length),
         metric("Resolved", resolved.length)
       ]),
+      section("Remediation governance", "Approval-backed remediation plan evidence for manual execution workflows.", [
+        ...objectMetrics(plansByApprovalStatus),
+        ...objectMetrics(approvalsByStatus)
+      ], context.remediationPlans.slice(0, 8).map((plan) => ({
+        title: plan.title,
+        approvalStatus: plan.approvalStatus,
+        executionStatus: plan.executionStatus,
+        implementationMode: plan.implementationMode,
+        finding: plan.finding?.title
+      }))),
       section("Audit trail", "Latest workflow audit activity.", [
         metric("Audit events captured", context.auditEvents.length)
       ], context.auditEvents.slice(0, 5).map((event) => ({

@@ -152,7 +152,7 @@ Safety guarantees:
 - No AWS mutation is executed.
 # Security Model
 
-CloudShield Enterprise v1 is a read-only governance platform.
+CloudShield Enterprise v1 is a governed cloud operations platform with strict mutation blocking.
 
 The upgraded architecture uses a Fastify 5 backend, Zod 4 contracts, a Next.js frontend, Prisma, PostgreSQL, Redis, and BullMQ. These changes do not expand CloudShield beyond read-only governance behavior.
 
@@ -167,6 +167,8 @@ CloudShield is enterprise-client-ready for consulting demos, but it must not be 
 - Generate CIS-inspired controls and SOC2-inspired evidence.
 - Generate safe remediation recommendations.
 - Track risk ownership, acceptance, and audit events.
+- Create remediation plans and approval requests.
+- Track manual completion evidence.
 
 ## Not Allowed
 
@@ -266,7 +268,13 @@ mutationExecuted=false
 remediationExecuted=false
 ```
 
-Risk acceptance requires business justification and an expiration date. Remediation plans are review-only records for human approval outside CloudShield.
+Risk acceptance requires business justification and an expiration date. Remediation plans are governed records for human approval and manual execution outside CloudShield.
+
+## Governed Remediation Operations Safety
+
+CloudShield can create remediation plans, approval requests, approval decisions, manual completion records, and governance audit events. These workflows are real CloudShield database operations.
+
+They do not execute AWS mutation, Terraform apply, or automatic remediation. Generated AWS CLI and Terraform content is review guidance only and must be executed manually outside CloudShield under the user's production change process.
 
 
 ---

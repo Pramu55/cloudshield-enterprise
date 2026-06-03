@@ -21,7 +21,7 @@ CloudShield uses a modern, enterprise-ready technology stack:
 - **AWS Account Registry**: Manages multiple tenant-scoped AWS accounts.
 - **Resource Inventory (CMDB)**: Centralized cloud asset database.
 - **Security Posture Rules Engine**: Deterministic rules that evaluate resources against best practices.
-- **Risk Workflow**: Allows teams to assign ownership, review findings, and track accepted risks.
+- **Risk Workflow & Governed Operations**: Allows teams to assign ownership, create remediation plans, request approval, approve or reject plans, track manual completion, and preserve audit evidence.
 - **Compliance Evidence Center**: Maps security findings to internal governance frameworks (CIS-inspired and SOC2-inspired).
 - **Reports & Exports**: A foundation for generating and previewing PDF/CSV evidence reports.
 - **Executive Dashboard**: A high-level command center showing safety status, risks, and coverage.
@@ -48,14 +48,14 @@ Instead of being a simple CRUD dashboard, CloudShield integrates complex backend
 * Built CloudShield Enterprise, a multi-module AWS governance platform using Next.js, Fastify, TypeScript, PostgreSQL, Prisma, Redis, BullMQ, and Docker.
 * Integrated live non-mutating credential check gates via AWS STS `GetCallerIdentity` and background scan loops executing read-only `Describe` APIs to ingest EC2, security groups, volumes, VPCs, and subnets.
 * Programmed relational resource mappings (`ResourceRelationship`) and automated local database-backed security posture rules evaluations upon successful scan completions.
-* Authored operational runbooks and blueprint documents detailing IAM role assumption, backups, queues, and logging configurations.
+* Added governed remediation operations with DB-backed plans, approval requests, manual completion tracking, and audit evidence while keeping AWS mutations, Terraform apply, and automatic remediation disabled.
 
 ## Interview Explanation
 **30-Second Version:**
 "I built CloudShield, an enterprise-level AWS governance platform. It provides a dashboard for security posture, asset inventory, and compliance evidence. I architected it using Next.js, Fastify, and PostgreSQL, focusing on a strict read-only safety model that evaluates cloud risk without mutating infrastructure."
 
 **2-Minute Version:**
-"CloudShield is a comprehensive cloud governance foundation. I saw a need for a unified platform that not only lists AWS resources but actively evaluates them against CIS and SOC2-inspired rules, mapping those to compliance evidence. I built the backend using Fastify and Prisma with PostgreSQL, leveraging BullMQ and Redis for background scanning tasks. The frontend is a Next.js App Router application. A key architectural decision was building a 'safety-first' engine: the platform strictly disables AWS mutations, automated remediations, and Terraform applies. This makes it an ideal evaluation and demonstration platform for enterprise IT environments, showcasing how to manage risk workflows safely."
+"CloudShield is a comprehensive cloud governance foundation. I saw a need for a unified platform that not only lists AWS resources but actively evaluates them against CIS and SOC2-inspired rules, maps them to evidence, and coordinates remediation through approval-based workflows. I built the backend using Fastify and Prisma with PostgreSQL, leveraging BullMQ and Redis for background scanning tasks. The frontend is a Next.js App Router application. A key architectural decision was building a safety-first operations model: remediation plans, approval requests, manual completion records, and audit events are real database workflows, while AWS mutations, automated remediations, and Terraform applies remain disabled."
 ## Credential Readiness Design Note
 
 CloudShield demonstrates enterprise-grade AWS readiness by preferring role-based setup and secret-manager guidance. Access keys are treated as optional local-development fallback indicators, not production readiness requirements.

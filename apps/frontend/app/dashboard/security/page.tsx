@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import type {
   RiskFindingDto,
   RiskFindingsResponse,
+  RemediationPlanMutationResponse,
   RiskWorkflowActionDto,
   SecurityEvaluationResponse,
   SecurityRulesResponse
@@ -18,9 +19,7 @@ import {
   RotateCcw,
   ShieldAlert,
   UserCheck,
-  Server,
-  Layers,
-  HelpCircle,
+  GitPullRequestDraft,
   Info
 } from "lucide-react";
 import { DashboardPage } from "../shared";
@@ -204,10 +203,35 @@ export default function SecurityPage() {
     setActiveFindingId(null);
   }
 
+  async function createGovernedPlan(finding: RiskFindingDto) {
+    setActiveFindingId(finding.id);
+    setActionMessage("Creating governed remediation plan in CloudShield records.");
+
+    try {
+      const result = await fetchCloudShieldClient<RemediationPlanMutationResponse>(
+        `/api/v1/findings/${finding.id}/remediation-plans`,
+        {
+          method: "POST",
+          body: {
+            implementationMode: "AWS_CLI_REVIEW",
+            summary:
+              finding.recommendation ||
+              "Prepare owner-approved remediation steps, rollback notes, and manual execution evidence."
+          }
+        }
+      );
+      setActionMessage(`${result.message} Plan: ${result.item.title}`);
+    } catch {
+      setActionMessage("Unable to create remediation plan for this finding.");
+    } finally {
+      setActiveFindingId(null);
+    }
+  }
+
   return (
     <DashboardPage
       title="Security Posture Workflow"
-      description="Enterprise security finding ownership, risk acceptance, audit trail, and review-only remediation planning."
+      description="Enterprise security finding ownership, approval-based remediation planning, audit trail, and evidence-backed risk closure."
     >
       <SampleDataNotice />
       <RefreshBadge
@@ -220,7 +244,7 @@ export default function SecurityPage() {
         <div className="text-xs">
           <p className="font-bold text-sky-950 uppercase tracking-wider">Operational Console Message</p>
           <p className="mt-1 leading-relaxed text-sky-800">
-            Workflow actions update CloudShield records only. No AWS changes are executed. Remediation plans are review-only. Risk acceptance requires business justification.
+            Workflow actions update CloudShield records only. Create remediation plans, request approval, and capture manual completion evidence. AWS mutation execution remains disabled.
           </p>
         </div>
       </section>
@@ -389,9 +413,10 @@ export default function SecurityPage() {
                 </div>
 
                 <div className="border border-line rounded-xl bg-white p-4 shadow-sm h-fit">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-line pb-2 mb-3">Execute Workflow Transition</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-line pb-2 mb-3">Governed Workflow Actions</p>
                   <div className="grid grid-cols-2 gap-2">
                     <ActionButton icon={<ClipboardCheck size={14} />} label="Ack" onClick={() => runAction(finding, "acknowledge")} busy={activeFindingId === finding.id} />
+                    <ActionButton icon={<GitPullRequestDraft size={14} />} label="Create Plan" onClick={() => createGovernedPlan(finding)} busy={activeFindingId === finding.id} />
                     <ActionButton icon={<UserCheck size={14} />} label="Assign" onClick={() => runAction(finding, "assign")} busy={activeFindingId === finding.id} />
                     <ActionButton icon={<Flag size={14} />} label="Plan" onClick={() => runAction(finding, "plan-remediation")} busy={activeFindingId === finding.id} />
                     <ActionButton icon={<CheckCircle2 size={14} />} label="Accept" onClick={() => runAction(finding, "accept-risk")} busy={activeFindingId === finding.id} />

@@ -10,6 +10,7 @@ import { registerSecurityPostureRoutes } from "./routes/security-posture.routes.
 import { registerRiskWorkflowRoutes } from "./routes/risk-workflow.routes.js";
 import { registerComplianceEvidenceRoutes } from "./routes/compliance-evidence.routes.js";
 import { registerReportRoutes } from "./routes/report.routes.js";
+import { registerRemediationGovernanceRoutes } from "./routes/remediation-governance.routes.js";
 import { registerDataRoutes } from "./routes/data.routes.js";
 import { registerAuthRoutes } from "./routes/auth.routes.js";
 import { registerPlatformRoutes } from "./routes/platform.routes.js";
@@ -38,6 +39,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   await registerRiskWorkflowRoutes(app);
   await registerComplianceEvidenceRoutes(app);
   await registerReportRoutes(app);
+  await registerRemediationGovernanceRoutes(app);
   await registerDataRoutes(app);
   await registerPlatformDynamicRoutes(app);
 

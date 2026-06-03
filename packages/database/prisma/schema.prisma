@@ -98,6 +98,52 @@ enum ReportExportStatus {
   FAILED
 }
 
+enum RemediationRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RemediationActionType {
+  NETWORK_EXPOSURE_REVIEW
+  STORAGE_REVIEW
+  IAM_REVIEW
+  TAGGING_GOVERNANCE
+  COMPLIANCE_EVIDENCE
+  COST_GOVERNANCE
+  MANUAL_REVIEW
+}
+
+enum RemediationImplementationMode {
+  MANUAL
+  AWS_CLI_REVIEW
+  TERRAFORM_REVIEW
+  FUTURE_GOVERNED_EXECUTION
+}
+
+enum RemediationApprovalStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  READY_FOR_EXECUTION
+}
+
+enum RemediationExecutionStatus {
+  DRAFT
+  EXECUTION_BLOCKED
+  READY_FOR_EXECUTION
+  COMPLETED_MANUALLY
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 model User {
   id             String       @id @default(cuid())
   organizationId String
@@ -111,6 +157,10 @@ model User {
 
   assignedSecurityFindings     SecurityFinding[] @relation("SecurityFindingAssignee")
   riskAcceptedSecurityFindings SecurityFinding[] @relation("SecurityFindingRiskAccepter")
+  createdRemediationPlans      RemediationPlan[] @relation("RemediationPlanCreator")
+  approvedRemediationPlans     RemediationPlan[] @relation("RemediationPlanApprover")
+  requestedApprovalRequests    ApprovalRequest[] @relation("ApprovalRequestRequester")
+  approvalDecisions            ApprovalRequest[] @relation("ApprovalRequestApprover")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -137,6 +187,8 @@ model Organization {
   scanRuns           ScanRun[]
   auditEvents        AuditEvent[]
   reportExports      ReportExport[]
+  remediationPlans   RemediationPlan[]
+  approvalRequests   ApprovalRequest[]
 }
 
 model Team {
@@ -225,6 +277,7 @@ model CloudResource {
   securityFindings    SecurityFinding[]
   costFindings        CostFinding[]
   complianceEvidence  ComplianceEvidence[]
+  remediationPlans    RemediationPlan[]
 
   @@unique([organizationId, awsAccountId, resourceType, resourceId])
   @@index([organizationId])
@@ -290,6 +343,7 @@ model SecurityFinding {
 
   recommendations Recommendation[]
   riskAcceptances RiskAcceptance[]
+  remediationPlans RemediationPlan[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -475,6 +529,62 @@ model AuditEvent {
 
   @@index([organizationId])
   @@index([organizationId, targetType, targetId])
+}
+
+model RemediationPlan {
+  id                 String                         @id @default(cuid())
+  organizationId     String
+  organization       Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  findingId          String
+  finding            SecurityFinding                @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  resourceId         String?
+  resource           CloudResource?                 @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  title              String
+  summary            String
+  riskLevel          RemediationRiskLevel
+  actionType         RemediationActionType
+  implementationMode RemediationImplementationMode
+  recommendedSteps   Json                           @default("[]")
+  rollbackPlan       Json                           @default("[]")
+  approvalChecklist  Json                           @default("[]")
+  riskImpactSummary  String?
+  awsCliReview       String?
+  terraformPatch     String?
+  approvalStatus     RemediationApprovalStatus      @default(DRAFT)
+  executionStatus    RemediationExecutionStatus     @default(EXECUTION_BLOCKED)
+  createdById        String
+  createdBy          User                           @relation("RemediationPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById       String?
+  approvedBy         User?                          @relation("RemediationPlanApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+
+  approvalRequests ApprovalRequest[]
+
+  @@index([organizationId])
+  @@index([organizationId, findingId])
+  @@index([organizationId, approvalStatus])
+  @@index([organizationId, executionStatus])
+}
+
+model ApprovalRequest {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  remediationPlanId String
+  remediationPlan   RemediationPlan       @relation(fields: [remediationPlanId], references: [id], onDelete: Cascade)
+  requestedById     String
+  requestedBy       User                  @relation("ApprovalRequestRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedById      String?
+  approvedBy        User?                 @relation("ApprovalRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  status            ApprovalRequestStatus @default(PENDING)
+  decisionReason    String?
+  createdAt         DateTime              @default(now())
+  decidedAt         DateTime?
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, remediationPlanId])
 }
 
 model ReportExport {

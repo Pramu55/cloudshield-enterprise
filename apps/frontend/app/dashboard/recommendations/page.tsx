@@ -2,7 +2,11 @@
 
 import { DashboardPage } from "../shared";
 import { EmptyState, SampleDataNotice } from "../../../lib/ui";
-import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
+import {
+  RefreshBadge,
+  fetchCloudShieldClient,
+  useCloudShieldData
+} from "../../../lib/client-api";
 import {
   ShieldAlert,
   Lock,
@@ -13,6 +17,7 @@ import {
   ShieldOff,
   Layers,
 } from "lucide-react";
+import { useState } from "react";
 
 type RecommendationResponse = {
   items: Array<{
@@ -22,6 +27,8 @@ type RecommendationResponse = {
     canExecute: boolean;
     blockedReason: string;
     riskReduction?: string | null;
+    securityFindingId?: string | null;
+    costFindingId?: string | null;
   }>;
 };
 
@@ -100,6 +107,8 @@ export default function RecommendationsPage() {
     "/api/v1/recommendations",
     InstantRecommendations
   );
+  const [message, setMessage] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   /* ── Derived metrics ── */
   const items = data?.items ?? [];
@@ -108,13 +117,46 @@ export default function RecommendationsPage() {
   const govCount = items.filter((r) => r.actionType === "GOVERNANCE_WORKFLOW").length;
   const blockedCount = items.filter((r) => !r.canExecute).length;
 
+  async function createPlan(recommendation: RecommendationResponse["items"][0]) {
+    if (!recommendation.securityFindingId) {
+      setMessage("This recommendation is not linked to a security finding yet.");
+      return;
+    }
+
+    setBusyId(recommendation.id);
+    setMessage("Creating governed remediation plan from recommendation.");
+    try {
+      const result = await fetchCloudShieldClient<{ message: string; item: { title: string } }>(
+        `/api/v1/findings/${recommendation.securityFindingId}/remediation-plans`,
+        {
+          method: "POST",
+          body: {
+            title: recommendation.title,
+            summary: recommendation.riskReduction || recommendation.blockedReason,
+            implementationMode: "AWS_CLI_REVIEW"
+          }
+        }
+      );
+      setMessage(`${result.message} Plan: ${result.item.title}`);
+    } catch {
+      setMessage("Unable to create remediation plan from this recommendation.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <DashboardPage
       title="Review-Only Remediation Recommendations"
-      description="Advisory remediation planning for manual review. Recommendations are non-executable; CloudShield does not run automatic fixes or Terraform apply."
+      description="Approval-based remediation planning for manual execution workflows. CloudShield creates plans and audit evidence without automatic fixes or Terraform apply."
     >
       <SampleDataNotice />
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+      {message ? (
+        <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs font-semibold text-indigo-700">
+          {message}
+        </div>
+      ) : null}
 
       {/* ── Safety Banner ── */}
       <div className="premium-card mb-6 flex items-stretch overflow-hidden">
@@ -128,9 +170,9 @@ export default function RecommendationsPage() {
           </div>
 
           <div className="flex-1">
-            <p className="text-sm font-bold text-ink">No automatic remediation</p>
+            <p className="text-sm font-bold text-ink">Governed remediation planning</p>
             <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-              All recommendations are advisory-only. CloudShield v1 does not execute changes against your AWS environment.
+              Recommendations can become remediation plans with approvals and audit evidence. CloudShield does not execute changes against your AWS environment.
             </p>
           </div>
 
@@ -245,6 +287,20 @@ export default function RecommendationsPage() {
                         </p>
                       </div>
                     )}
+
+                    <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3">
+                      <button
+                        className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                        disabled={busyId === recommendation.id || !recommendation.securityFindingId}
+                        onClick={() => createPlan(recommendation)}
+                        type="button"
+                      >
+                        Create remediation plan
+                      </button>
+                      <span className="status-pill border-amber-200 bg-amber-50 text-amber-700 py-1 text-[10px]">
+                        Approval required / manual execution only
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -259,10 +315,10 @@ export default function RecommendationsPage() {
           <Info className="h-4 w-4 text-signal" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-ink">Advisory-only mode</p>
+          <p className="text-sm font-semibold text-ink">Approval-based operations mode</p>
           <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-            CloudShield v1 operates in a read-only advisory capacity. No automatic remediation, Terraform apply,
-            or AWS mutations are performed. All recommendations require manual review and human-initiated action
+            CloudShield coordinates remediation planning, approvals, and manual completion evidence. No automatic remediation, Terraform apply,
+            or AWS mutations are performed. All recommendations require governed review and human-initiated action
             through your existing change-management workflow.
           </p>
         </div>

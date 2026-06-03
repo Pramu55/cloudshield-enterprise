@@ -142,9 +142,44 @@ export default function SettingsPage() {
   return (
     <DashboardPage
       title="Settings & Safety Controls"
-      description="Administration shell for accounts, teams, required tags, severity policy, scan schedule, regions, and read-only connection status."
+      description="Administration shell for governed operations, approval-based remediation planning, safety controls, and environment readiness."
     >
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
+
+      <section className="premium-card mb-6 p-5">
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <ShieldCheck size={18} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-ink">Governed operations foundation</h3>
+                <p className="text-xs text-slate-500">
+                  Active workflow controls for remediation plans, approvals, manual completion, and audit evidence.
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              CloudShield can now coordinate real operations work inside the platform: analysts can create remediation plans,
+              request approval, approve or reject plans, and record manual execution completion. Dangerous cloud execution
+              remains blocked until production policy, RBAC, dry-run, rollback, and tenant controls are added.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              "Remediation planning enabled",
+              "Approval workflow enabled",
+              "Audit events enabled",
+              "Manual completion tracking enabled"
+            ].map((item) => (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3" key={item}>
+                <p className="text-xs font-bold text-emerald-700">{item}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ─── Platform Safety Guardrails ─── */}
       <section className="premium-card mb-6">
@@ -472,12 +507,11 @@ export default function SettingsPage() {
           <Info size={15} className="text-signal" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-ink">Read-Only Display</p>
+          <p className="text-sm font-semibold text-ink">Governed controls display</p>
           <p className="text-sm text-slate-500 leading-relaxed mt-1">
-            All settings shown on this page are read-only and reflect the current runtime
-            configuration. To change safety controls, update the corresponding environment
-            variables and restart the platform services. No configuration changes can be made
-            through this interface.
+            Settings reflect the current runtime configuration. Governance workflows are active
+            for CloudShield DB records. AWS mutation execution, Terraform apply, and automatic
+            remediation cannot be enabled from this interface.
           </p>
         </div>
       </div>

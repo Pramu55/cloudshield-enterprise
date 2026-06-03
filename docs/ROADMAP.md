@@ -82,6 +82,10 @@ Implemented foundation:
 - SLA and due dates
 - Risk acceptance with approver and expiration
 - Audit events for workflow changes
+- Remediation plan creation
+- Approval request lifecycle
+- Manual completion tracking
+- Governance audit activity
 
 Future expansion:
 
@@ -89,6 +93,24 @@ Future expansion:
 - Risk acceptance approval queues
 - SLA breach notifications
 - Report exports for workflow evidence
+
+## Phase 6.5: Governed Remediation Operations
+
+Implemented foundation:
+
+- DB-backed remediation plans
+- Approval requests and decisions
+- Manual execution status tracking
+- AWS CLI and Terraform review guidance as text only
+- Rollback notes and approval checklist
+- Governance activity API
+
+Safety boundary:
+
+- No AWS mutation execution
+- No Terraform apply
+- No automatic remediation
+- No destructive scripts
 
 ## Phase 7: Reports And Exports
 

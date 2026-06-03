@@ -8,7 +8,7 @@ This script is designed for walking an evaluator, interviewer, or client through
 
 ## 2. Executive Dashboard
 **Action**: Land on `http://localhost:3100/dashboard`
-**Script**: "This is the Executive Dashboard. It provides a high-level view of our cloud posture, including AWS account coverage, resource inventory, high-risk findings, and compliance readiness. Notice the safety banner at the top—CloudShield is designed with a strict read-only model. Mutations and automated remediations are intentionally disabled."
+**Script**: "This is the Executive Dashboard. It provides a high-level view of our cloud posture, including AWS account coverage, resource inventory, high-risk findings, compliance readiness, and governed operations. CloudShield can coordinate remediation planning and approvals while AWS mutations and automated remediations remain intentionally disabled."
 
 ## 3. AWS Accounts Registry
 **Action**: Navigate to "AWS Accounts" in the sidebar.
@@ -32,7 +32,11 @@ This script is designed for walking an evaluator, interviewer, or client through
 
 ## 8. Reports & Exports
 **Action**: Navigate to "Reports".
-**Script**: "For executive reporting and audit preparation, we have the Reports Foundation. This allows teams to preview and eventually export PDF or CSV snapshots of their compliance and posture evidence."
+**Script**: "For executive reporting and audit preparation, we have the Reports Foundation. Reports include posture evidence, risk workflow state, remediation plans, approvals, and audit activity. Current exports are internal JSON previews, not official audit reports."
+
+## 8.5 Governed Operations
+**Action**: Navigate to "Governance".
+**Script**: "This is where CloudShield becomes an operations platform. An analyst can create a remediation plan from a finding, request approval, approve or reject the plan, and mark manual completion. The platform records every step in the audit trail, but it does not execute AWS mutation or Terraform apply."
 
 ## 9. Scans & Real AWS Validation
 **Action**: Navigate to "Scans" or "Accounts". Show the confirmation modals and validation banners.

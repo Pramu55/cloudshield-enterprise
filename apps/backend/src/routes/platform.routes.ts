@@ -32,7 +32,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/v1/platform/status", async () => {
-    const milestone = "CLOUDSHIELD_PREMIUM_CLOUD_CONSOLE_VISUAL_EXPERIENCE_GREEN";
+    const milestone = "CLOUDSHIELD_GOVERNED_REAL_WORLD_OPERATIONS_FOUNDATION_GREEN";
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,
@@ -73,7 +73,10 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
         "Compliance Evidence Center",
         "Reports & Exports Foundation",
         "Executive Dashboard & Demo Flow",
-        "AWS credential readiness metadata foundation"
+        "AWS credential readiness metadata foundation",
+        "Governed remediation planning",
+        "Approval-based manual execution workflow",
+        "Governance audit activity"
       ],
       disabledCapabilities: [
         "Live AWS Mutation",
@@ -83,10 +86,10 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
       ],
       enterpriseReadinessNotes: [
         "CloudShield is an enterprise AWS governance platform for security, compliance, and cost.",
-        "Currently in client-evaluation/demo freeze milestone.",
-        "All AWS scans, API calls, and mutation logic are strictly disabled by default.",
+        "Governed operations workflows create remediation plans, approval requests, audit evidence, and manual execution records.",
+        "AWS mutation execution, Terraform apply, and automatic remediation remain disabled.",
         "Compliance references are CIS-inspired and SOC2-inspired; no official certification is claimed.",
-        "Sample/demo data is returned for evaluation purposes."
+        "CloudShield records all governed workflow actions in tenant-scoped audit events."
       ]
     });
   });

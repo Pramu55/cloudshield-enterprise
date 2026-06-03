@@ -1,7 +1,7 @@
 # CloudShield Enterprise
 **Future-Scope Enterprise AWS Governance, Security Posture, and Compliance Platform Foundation**
 
-CloudShield Enterprise is a company IT / client-evaluation-ready demonstration platform. It provides a real-world deployment architecture for managing AWS account governance, evaluating security posture against CIS/SOC2-inspired controls, maintaining a cloud asset inventory, and tracking compliance evidence. 
+CloudShield Enterprise is a company IT / client-evaluation-ready governance platform foundation. It provides a real-world deployment architecture for managing AWS account governance, evaluating security posture against CIS/SOC2-inspired controls, maintaining a cloud asset inventory, tracking compliance evidence, and coordinating approval-based remediation planning.
 
 ## What CloudShield Solves
 Managing cloud infrastructure at scale requires visibility, deterministic security rule evaluation, and clear risk ownership workflows. CloudShield solves this by providing a unified, multi-module executive dashboard that aggregates AWS data and surfaces actionable insights without directly mutating your cloud environments.
@@ -10,9 +10,9 @@ Managing cloud infrastructure at scale requires visibility, deterministic securi
 - **AWS Account Registry**: Tenant-scoped management of AWS environments.
 - **Resource Inventory (CMDB)**: Centralized view of cloud assets.
 - **Security Posture Engine**: Deterministic rules engine evaluating resources.
-- **Risk Workflow**: Ownership assignment and risk acceptance tracking.
+- **Risk Workflow**: Ownership assignment, risk acceptance tracking, remediation planning, approvals, and audit events.
 - **Compliance Evidence Center**: SOC2-inspired and CIS-inspired evidence mapping.
-- **Reports & Exports**: Future-scope generation of PDF/CSV audit reports.
+- **Reports & Exports**: JSON preview reports with posture, evidence, risk workflow, remediation, and approval context.
 - **Cost Governance**: Foundational FinOps insights (planned).
 
 ## Architecture Overview
@@ -34,6 +34,7 @@ CloudShield is built using a modern, scalable, and type-safe stack:
 - Compliance Evidence Center
 - Reports & Exports Foundation
 - Executive Dashboard & Demo Flow
+- Governed Remediation Operations Foundation
 
 ### 🚫 Intentionally Disabled Capabilities
 For safety and evaluation purposes, the following are strictly disabled:
@@ -79,7 +80,6 @@ Access the dashboard at `http://localhost:3100/login` with:
 ## Important Disclaimers & Design Identity
 * **Original Platform Identity**: CloudShield has its own original visual identity (Indigo/Teal workspace console) and does not copy Microsoft Azure or other cloud provider interfaces.
 * **Evaluator Mode Limits**: Currently in local evaluator mode reading strictly from the CloudShield Postgres DB. The only remaining step to read real AWS data is adding safe credentials via container environment variables and enabling read-only scan mode.
-* **Operational Boundaries**: Strictly read-only. No AWS mutations, no Terraform apply, and no automatic remediation exist on the platform.
+* **Operational Boundaries**: Governed operations are active inside CloudShield records. AWS mutations, Terraform apply, and automatic remediation remain disabled.
 * **No Somatic Client Deployments**: CloudShield is client-evaluation ready, but is *not* deployed to Accenture, and Accenture is not a customer.
 * **No Official Certifications**: Compliance rules are CIS-inspired and SOC2-inspired for demonstrating evidence workflows. No official CIS or SOC2 certification is claimed.
-

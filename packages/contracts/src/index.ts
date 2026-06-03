@@ -271,7 +271,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_PRODUCTION_READINESS_AND_ORIGINAL_PLATFORM_POLISH_GREEN",
   "CLOUDSHIELD_AUTH_EXPERIENCE_PRODUCTION_POLISH_GREEN",
   "CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FOUNDATION_GREEN",
-  "CLOUDSHIELD_PREMIUM_CLOUD_CONSOLE_VISUAL_EXPERIENCE_GREEN"
+  "CLOUDSHIELD_PREMIUM_CLOUD_CONSOLE_VISUAL_EXPERIENCE_GREEN",
+  "CLOUDSHIELD_GOVERNED_REAL_WORLD_OPERATIONS_FOUNDATION_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -842,6 +843,204 @@ export const RiskWorkflowActionDtoSchema = z.object({
 });
 export type RiskWorkflowActionDto = z.infer<
   typeof RiskWorkflowActionDtoSchema
+>;
+
+// Governed Remediation Operations
+
+export const RemediationRiskLevelSchema = z.enum([
+  "LOW",
+  "MEDIUM",
+  "HIGH",
+  "CRITICAL"
+]);
+export type RemediationRiskLevel = z.infer<
+  typeof RemediationRiskLevelSchema
+>;
+
+export const RemediationActionTypeSchema = z.enum([
+  "NETWORK_EXPOSURE_REVIEW",
+  "STORAGE_REVIEW",
+  "IAM_REVIEW",
+  "TAGGING_GOVERNANCE",
+  "COMPLIANCE_EVIDENCE",
+  "COST_GOVERNANCE",
+  "MANUAL_REVIEW"
+]);
+export type RemediationActionType = z.infer<
+  typeof RemediationActionTypeSchema
+>;
+
+export const RemediationImplementationModeSchema = z.enum([
+  "MANUAL",
+  "AWS_CLI_REVIEW",
+  "TERRAFORM_REVIEW",
+  "FUTURE_GOVERNED_EXECUTION"
+]);
+export type RemediationImplementationMode = z.infer<
+  typeof RemediationImplementationModeSchema
+>;
+
+export const RemediationApprovalStatusSchema = z.enum([
+  "DRAFT",
+  "PENDING_APPROVAL",
+  "APPROVED",
+  "REJECTED",
+  "READY_FOR_EXECUTION"
+]);
+export type RemediationApprovalStatus = z.infer<
+  typeof RemediationApprovalStatusSchema
+>;
+
+export const RemediationExecutionStatusSchema = z.enum([
+  "DRAFT",
+  "EXECUTION_BLOCKED",
+  "READY_FOR_EXECUTION",
+  "COMPLETED_MANUALLY"
+]);
+export type RemediationExecutionStatus = z.infer<
+  typeof RemediationExecutionStatusSchema
+>;
+
+export const ApprovalRequestStatusSchema = z.enum([
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "CANCELLED"
+]);
+export type ApprovalRequestStatus = z.infer<
+  typeof ApprovalRequestStatusSchema
+>;
+
+export const GovernanceSafetyFlagsSchema = z.object({
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false)
+});
+export type GovernanceSafetyFlags = z.infer<
+  typeof GovernanceSafetyFlagsSchema
+>;
+
+export const CreateRemediationPlanRequestSchema = z.object({
+  title: z.string().trim().min(3).max(180).optional(),
+  summary: z.string().trim().min(3).max(2000).optional(),
+  riskLevel: RemediationRiskLevelSchema.optional(),
+  actionType: RemediationActionTypeSchema.optional(),
+  implementationMode: RemediationImplementationModeSchema.default("MANUAL"),
+  recommendedSteps: z.array(z.string().trim().min(1).max(1000)).optional(),
+  rollbackPlan: z.array(z.string().trim().min(1).max(1000)).optional(),
+  approvalChecklist: z.array(z.string().trim().min(1).max(1000)).optional(),
+  riskImpactSummary: z.string().trim().max(2000).optional(),
+  awsCliReview: z.string().trim().max(4000).optional(),
+  terraformPatch: z.string().trim().max(4000).optional()
+});
+export type CreateRemediationPlanRequest = z.infer<
+  typeof CreateRemediationPlanRequestSchema
+>;
+
+export const GovernanceDecisionRequestSchema = z.object({
+  decisionReason: z.string().trim().min(3).max(2000).optional()
+});
+export type GovernanceDecisionRequest = z.infer<
+  typeof GovernanceDecisionRequestSchema
+>;
+
+export const RemediationPlanDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  findingId: z.string(),
+  resourceId: z.string().nullable(),
+  title: z.string(),
+  summary: z.string(),
+  riskLevel: RemediationRiskLevelSchema,
+  actionType: RemediationActionTypeSchema,
+  implementationMode: RemediationImplementationModeSchema,
+  recommendedSteps: z.array(z.string()),
+  rollbackPlan: z.array(z.string()),
+  approvalChecklist: z.array(z.string()),
+  riskImpactSummary: z.string().nullable(),
+  awsCliReview: z.string().nullable(),
+  terraformPatch: z.string().nullable(),
+  approvalStatus: RemediationApprovalStatusSchema,
+  executionStatus: RemediationExecutionStatusSchema,
+  createdById: z.string(),
+  createdByEmail: z.string().nullable(),
+  approvedById: z.string().nullable(),
+  approvedByEmail: z.string().nullable(),
+  findingTitle: z.string().nullable(),
+  findingSeverity: FindingSeveritySchema.nullable(),
+  resourceName: z.string().nullable(),
+  resourceType: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+export type RemediationPlanDto = z.infer<typeof RemediationPlanDtoSchema>;
+
+export const ApprovalRequestDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  remediationPlanId: z.string(),
+  remediationPlanTitle: z.string().nullable(),
+  requestedById: z.string(),
+  requestedByEmail: z.string().nullable(),
+  approvedById: z.string().nullable(),
+  approvedByEmail: z.string().nullable(),
+  status: ApprovalRequestStatusSchema,
+  decisionReason: z.string().nullable(),
+  createdAt: z.string(),
+  decidedAt: z.string().nullable()
+});
+export type ApprovalRequestDto = z.infer<typeof ApprovalRequestDtoSchema>;
+
+export const GovernanceActivityEventDtoSchema = z.object({
+  id: z.string(),
+  action: z.string(),
+  targetType: z.string(),
+  targetId: z.string().nullable(),
+  actorUserId: z.string().nullable(),
+  metadata: z.record(z.string(), z.any()),
+  createdAt: z.string()
+});
+export type GovernanceActivityEventDto = z.infer<
+  typeof GovernanceActivityEventDtoSchema
+>;
+
+export const RemediationPlanListResponseSchema =
+  GovernanceSafetyFlagsSchema.extend({
+    items: z.array(RemediationPlanDtoSchema),
+    message: z.string()
+  });
+export type RemediationPlanListResponse = z.infer<
+  typeof RemediationPlanListResponseSchema
+>;
+
+export const RemediationPlanMutationResponseSchema =
+  GovernanceSafetyFlagsSchema.extend({
+    item: RemediationPlanDtoSchema,
+    approvalRequest: ApprovalRequestDtoSchema.optional(),
+    auditEvent: GovernanceActivityEventDtoSchema,
+    message: z.string()
+  });
+export type RemediationPlanMutationResponse = z.infer<
+  typeof RemediationPlanMutationResponseSchema
+>;
+
+export const GovernanceApprovalsResponseSchema =
+  GovernanceSafetyFlagsSchema.extend({
+    items: z.array(ApprovalRequestDtoSchema),
+    message: z.string()
+  });
+export type GovernanceApprovalsResponse = z.infer<
+  typeof GovernanceApprovalsResponseSchema
+>;
+
+export const GovernanceActivityResponseSchema =
+  GovernanceSafetyFlagsSchema.extend({
+    items: z.array(GovernanceActivityEventDtoSchema),
+    message: z.string()
+  });
+export type GovernanceActivityResponse = z.infer<
+  typeof GovernanceActivityResponseSchema
 >;
 
 // Compliance Evidence Center
