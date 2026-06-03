@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   BarChart3,
   ClipboardList,
@@ -11,7 +11,15 @@ import {
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
-  Wallet
+  Wallet,
+  Eye,
+  Sparkles,
+  FileBarChart,
+  Inbox,
+  Shield,
+  CheckCircle2,
+  AlertTriangle,
+  Activity
 } from "lucide-react";
 import { DashboardPage } from "../shared";
 import { EmptyState, SampleDataNotice } from "../../../lib/ui";
@@ -158,6 +166,31 @@ const InstantSummary: ReportSummary = {
     "Reports are generated from CloudShield records only. No AWS scan is triggered by report generation."
 };
 
+/* ── Metric icon mapping ─────────────────────────────────────────────── */
+const metricIcons: Record<string, ReactNode> = {
+  "Report records": <FileBarChart size={20} />,
+  "Preview types": <Eye size={20} />,
+  "Evidence records": <ShieldCheck size={20} />,
+  "Open risks": <AlertTriangle size={20} />,
+  "Completed": <CheckCircle2 size={20} />
+};
+
+const metricAccents: Record<string, string> = {
+  "Report records": "from-signal to-indigo-400",
+  "Preview types": "from-teal to-emerald-400",
+  "Evidence records": "from-signal to-violet-500",
+  "Open risks": "from-warning to-orange-400",
+  "Completed": "from-success to-emerald-400"
+};
+
+const metricIconBg: Record<string, string> = {
+  "Report records": "bg-indigo-50 text-signal",
+  "Preview types": "bg-teal-50 text-teal",
+  "Evidence records": "bg-violet-50 text-violet-600",
+  "Open risks": "bg-amber-50 text-warning",
+  "Completed": "bg-emerald-50 text-success"
+};
+
 export default function ReportsPage() {
   const { data, error, isRefreshing } = useCloudShieldData<ReportSummary>(
     "/api/v1/reports/summary",
@@ -207,7 +240,8 @@ export default function ReportsPage() {
       <SampleDataNotice />
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
 
-      <section className="mb-5 grid gap-3 md:grid-cols-5">
+      {/* ── Premium Metric Cards ──────────────────────────────────── */}
+      <section className="mb-6 grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
         <MetricCard label="Report records" value={data.counts.reportExports} />
         <MetricCard label="Preview types" value={data.counts.previewsAvailable} />
         <MetricCard label="Evidence records" value={data.counts.complianceEvidenceCount} />
@@ -215,14 +249,18 @@ export default function ReportsPage() {
         <MetricCard label="Completed" value={data.counts.completed} />
       </section>
 
-      <section className="mb-5 rounded-md border border-line bg-white p-4">
-        <div className="flex items-start gap-3">
-          <FileJson className="mt-0.5 text-brand" size={20} />
+      {/* ── Safety Notice ─────────────────────────────────────────── */}
+      <section className="premium-card mb-6 flex overflow-hidden">
+        <div className="w-1 shrink-0 bg-gradient-to-b from-signal to-teal" />
+        <div className="flex items-start gap-4 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50">
+            <FileJson className="text-signal" size={20} />
+          </div>
           <div>
             <p className="text-sm font-semibold text-ink">
               Reports are generated from CloudShield records only.
             </p>
-            <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">
+            <p className="mt-1.5 max-w-4xl text-sm leading-6 text-slate-600">
               No AWS scan is triggered by report generation. No AWS changes are executed.
               No official CIS/SOC2 certification is claimed. Current export is a safe preview
               foundation, not an official audit report.
@@ -231,122 +269,301 @@ export default function ReportsPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-        <div className="grid gap-3 md:grid-cols-2">
-          {reportCards.map((card) => (
-            <article className="rounded-md border border-line bg-white p-4" key={card.type}>
-              <div className="flex items-center gap-2 text-brand">{card.icon}</div>
-              <p className="mt-3 text-sm font-semibold text-ink">{card.title}</p>
-              <p className="mt-2 min-h-12 text-sm leading-6 text-slate-600">{card.description}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-ink transition hover:border-signal hover:text-signal"
-                  disabled={isWorking}
-                  onClick={() => previewReport(card.type)}
-                  type="button"
-                >
-                  Preview
-                </button>
-                <button
-                  className="inline-flex items-center gap-2 rounded-md bg-ink px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                  disabled={isWorking}
-                  onClick={() => {
-                    setActiveType(card.type);
-                    void generateReport(card.type);
-                  }}
-                  type="button"
-                >
-                  <RefreshCw className={isWorking && activeType === card.type ? "animate-spin" : ""} size={14} />
-                  Create record
-                </button>
-              </div>
-            </article>
-          ))}
+      {/* ── Report Cards + Preview Panel ──────────────────────────── */}
+      <section className="grid gap-5 xl:grid-cols-[1fr_0.9fr]">
+
+        {/* Report type cards grid */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {reportCards.map((card) => {
+            const isActive = activeType === card.type;
+            const isCardWorking = isWorking && isActive;
+
+            return (
+              <article
+                className="premium-card group relative flex flex-col"
+                key={card.type}
+              >
+                {/* Gradient accent bar */}
+                <div className="h-[2px] w-full bg-gradient-to-r from-signal to-teal" />
+
+                {/* Active / loading indicator */}
+                {isCardWorking && (
+                  <div className="absolute inset-x-0 top-[2px] h-0.5 overflow-hidden">
+                    <div className="h-full w-full animate-pulse bg-gradient-to-r from-signal/60 via-teal/60 to-signal/60" />
+                  </div>
+                )}
+
+                <div className="flex flex-1 flex-col p-5">
+                  {/* Icon circle */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-signal transition-colors group-hover:bg-indigo-100">
+                      {card.icon}
+                    </div>
+                    {isActive && (
+                      <span className="status-pill text-signal" style={{ fontSize: 10, padding: "2px 8px", borderColor: "rgba(79,70,229,0.3)" }}>
+                        <span className="status-dot-pulse" />
+                        Active
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Title & description */}
+                  <p className="mt-3.5 text-sm font-semibold text-ink">{card.title}</p>
+                  <p className="mt-1.5 min-h-[3rem] flex-1 text-[13px] leading-[1.6] text-slate-600">
+                    {card.description}
+                  </p>
+
+                  {/* Action buttons */}
+                  <div className="mt-5 flex flex-wrap gap-2.5">
+                    <button
+                      className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3.5 py-2 text-xs font-semibold text-ink transition-all hover:border-signal hover:bg-indigo-50 hover:text-signal"
+                      disabled={isWorking}
+                      onClick={() => previewReport(card.type)}
+                      type="button"
+                    >
+                      <Eye size={13} />
+                      Preview
+                    </button>
+                    <button
+                      className="cs-action-primary inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-xs font-semibold"
+                      disabled={isWorking}
+                      onClick={() => {
+                        setActiveType(card.type);
+                        void generateReport(card.type);
+                      }}
+                      type="button"
+                    >
+                      <RefreshCw className={isCardWorking ? "animate-spin" : ""} size={13} />
+                      Create record
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
 
-        <aside className="rounded-md border border-line bg-white p-4">
-          <div className="flex items-center gap-2">
-            <FileText className="text-brand" size={18} />
+        {/* ── Preview Panel ──────────────────────────────────────── */}
+        <aside className="premium-card flex flex-col self-start" style={{ transform: "none" }}>
+          {/* Gradient header bar */}
+          <div className="flex items-center gap-3 bg-gradient-to-r from-slate-50 via-indigo-50/60 to-slate-50 px-5 py-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-signal/10">
+              <FileText className="text-signal" size={16} />
+            </div>
             <p className="text-sm font-semibold text-ink">Active report preview</p>
+            {isWorking && (
+              <Activity size={14} className="ml-auto animate-pulse text-signal" />
+            )}
           </div>
-          {preview ? (
-            <div className="mt-4">
-              <p className="text-xs font-semibold uppercase text-brand">{preview.reportType}</p>
-              <h3 className="mt-1 text-lg font-semibold text-ink">{preview.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{preview.message}</p>
-              <div className="mt-4 grid gap-2 md:grid-cols-2">
-                {preview.metrics.slice(0, 6).map((metric) => (
-                  <MetricChip metric={metric} key={metric.label} />
-                ))}
+
+          <div className="flex-1 p-5">
+            {preview ? (
+              <div className="animate-[fadeIn_0.35s_ease-out]">
+                {/* Type badge */}
+                <span
+                  className="status-pill text-signal"
+                  style={{ borderColor: "rgba(79,70,229,0.3)", fontSize: 10 }}
+                >
+                  {preview.reportType.replace(/_/g, " ")}
+                </span>
+
+                <h3 className="mt-3 text-lg font-semibold text-ink">{preview.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{preview.message}</p>
+
+                {/* Metric chips */}
+                <div className="mt-5 grid gap-2.5 md:grid-cols-2">
+                  {preview.metrics.slice(0, 6).map((metric) => (
+                    <MetricChip metric={metric} key={metric.label} />
+                  ))}
+                </div>
+
+                {/* Section cards */}
+                <div className="mt-5 space-y-3">
+                  {preview.sections.slice(0, 3).map((section) => (
+                    <div
+                      className="group/sec rounded-lg border border-line bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+                      key={section.title}
+                    >
+                      <p className="text-sm font-semibold text-ink">{section.title}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{section.description}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="mt-4 space-y-3">
-                {preview.sections.slice(0, 3).map((section) => (
-                  <div className="rounded-md border border-line p-3" key={section.title}>
-                    <p className="text-sm font-semibold text-ink">{section.title}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">{section.description}</p>
-                  </div>
-                ))}
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                  <Sparkles size={24} className="text-slate-400" />
+                </div>
+                <p className="text-sm font-medium text-slate-500">
+                  Choose a report type to generate a safe JSON preview.
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Select a card on the left and click Preview.
+                </p>
               </div>
-            </div>
-          ) : (
-            <EmptyState label="Choose a report type to generate a safe JSON preview." />
-          )}
-          {generated ? (
-            <div className="mt-4 rounded-md border border-emerald-500/30 bg-emerald-50 px-3 py-2 text-xs font-semibold text-slate-700">
-              Report record created: {generated.title}
-            </div>
-          ) : null}
+            )}
+
+            {/* Generated success notice */}
+            {generated ? (
+              <div className="mt-5 flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
+                <CheckCircle2 size={15} className="shrink-0 text-success" />
+                Report record created: {generated.title}
+              </div>
+            ) : null}
+          </div>
         </aside>
       </section>
 
-      <section className="mt-5 rounded-md border border-line bg-white p-4">
-        <p className="text-sm font-semibold text-ink">Recent report export records</p>
-        <p className="mt-1 text-sm text-slate-600">
-          JSON preview records only. Binary PDF/CSV exports and signed evidence packs are future scope.
-        </p>
-        {data.recentReports.length ? (
-          <div className="mt-4 overflow-x-auto rounded border border-line">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Report Title</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Format</th>
-                  <th className="px-4 py-3">Safety Mode</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {data.recentReports.map((report) => (
-                  <tr key={report.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-semibold text-ink">{report.title}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{report.reportType}</td>
-                    <td className="px-4 py-3 text-slate-600">{report.status}</td>
-                    <td className="px-4 py-3 text-slate-600">{report.format}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded bg-sky-100 text-sky-800 px-2 py-1 text-xs font-semibold whitespace-nowrap">
-                        Internal Preview Only
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* ── Recent Exports Table ──────────────────────────────────── */}
+      <section className="premium-card mt-6" style={{ transform: "none" }}>
+        <div className="border-b border-line px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100">
+              <FileBarChart size={16} className="text-slate-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-ink">Recent report export records</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                JSON preview records only. Binary PDF/CSV exports and signed evidence packs are future scope.
+              </p>
+            </div>
           </div>
-        ) : (
-          <EmptyState label="No report export records have been created yet." />
-        )}
+        </div>
+
+        <div className="p-5">
+          {data.recentReports.length ? (
+            <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-gradient-to-r from-slate-50 via-indigo-50/30 to-slate-50">
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Report Title
+                    </th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Type
+                    </th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Format
+                    </th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Safety Mode
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {data.recentReports.map((report) => (
+                    <tr
+                      key={report.id}
+                      className="group relative transition-colors hover:bg-slate-50/80"
+                    >
+                      {/* Left accent on hover */}
+                      <td className="relative px-4 py-3.5 font-semibold text-ink">
+                        <span className="absolute inset-y-0 left-0 w-[3px] rounded-r bg-signal opacity-0 transition-opacity group-hover:opacity-100" />
+                        {report.title}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
+                          {report.reportType.replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <StatusBadge status={report.status} />
+                      </td>
+                      <td className="px-4 py-3.5 text-slate-600">{report.format}</td>
+                      <td className="px-4 py-3.5">
+                        <span className="status-pill text-sky-700" style={{ borderColor: "rgba(14,165,233,0.3)", background: "rgba(14,165,233,0.08)" }}>
+                          <Shield size={11} />
+                          Internal Preview Only
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-14 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                <Inbox size={26} className="text-slate-300" />
+              </div>
+              <p className="text-sm font-medium text-slate-500">
+                No report export records have been created yet.
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Generate a report from the cards above to see records here.
+              </p>
+            </div>
+          )}
+        </div>
       </section>
     </DashboardPage>
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Sub-components
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function MetricCard({ label, value }: { label: string; value: number }) {
+  const accent = metricAccents[label] ?? "from-signal to-teal";
+  const iconBg = metricIconBg[label] ?? "bg-indigo-50 text-signal";
+  const icon = metricIcons[label] ?? <FileBarChart size={20} />;
+
   return (
-    <div className="rounded-md border border-line bg-white p-4">
-      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-ink">{value}</p>
+    <div className="premium-card group relative overflow-hidden" style={{ transform: "none" }}>
+      {/* Gradient top border */}
+      <div className={`h-[3px] w-full bg-gradient-to-r ${accent}`} />
+
+      <div className="flex items-center gap-3.5 p-4">
+        {/* Icon circle */}
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-transform group-hover:scale-110 ${iconBg}`}>
+          {icon}
+        </div>
+
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {label}
+          </p>
+          <AnimatedNumber value={value} />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function AnimatedNumber({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0);
+  const prevRef = useRef(0);
+
+  useEffect(() => {
+    const start = prevRef.current;
+    const end = value;
+    if (start === end) {
+      setDisplay(end);
+      return;
+    }
+    const duration = 500;
+    const startTime = performance.now();
+
+    function tick(now: number) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out quad
+      const eased = 1 - (1 - progress) * (1 - progress);
+      setDisplay(Math.round(start + (end - start) * eased));
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+    prevRef.current = end;
+  }, [value]);
+
+  return (
+    <p className="mt-0.5 text-2xl font-bold tracking-tight text-ink">{display}</p>
   );
 }
 
@@ -360,10 +577,53 @@ function MetricChip({ metric }: { metric: ReportMetric }) {
           ? "border-emerald-500/40 bg-emerald-50 text-emerald-700"
           : "border-line bg-panel text-slate-700";
 
+  const dotColor =
+    metric.tone === "critical"
+      ? "bg-alert"
+      : metric.tone === "warning"
+        ? "bg-warning"
+        : metric.tone === "good"
+          ? "bg-emerald-500"
+          : "bg-slate-400";
+
   return (
-    <div className={`rounded-md border px-3 py-2 ${tone}`}>
-      <p className="text-[11px] font-semibold uppercase">{metric.label}</p>
-      <p className="mt-1 text-sm font-semibold">{String(metric.value)}</p>
+    <div className={`rounded-lg border px-3.5 py-2.5 transition-shadow hover:shadow-sm ${tone}`}>
+      <div className="flex items-center gap-1.5">
+        <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotColor}`} />
+        <p className="text-[11px] font-semibold uppercase tracking-wide">{metric.label}</p>
+      </div>
+      <p className="mt-1 text-sm font-bold">{String(metric.value)}</p>
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const lower = status.toLowerCase();
+  const isCompleted = lower === "completed" || lower === "done" || lower === "success";
+  const isFailed = lower === "failed" || lower === "error";
+
+  const style = isCompleted
+    ? "text-success"
+    : isFailed
+      ? "text-alert"
+      : "text-signal";
+
+  const bg = isCompleted
+    ? "rgba(22,163,74,0.08)"
+    : isFailed
+      ? "rgba(220,38,38,0.08)"
+      : "rgba(79,70,229,0.08)";
+
+  const borderColor = isCompleted
+    ? "rgba(22,163,74,0.3)"
+    : isFailed
+      ? "rgba(220,38,38,0.3)"
+      : "rgba(79,70,229,0.3)";
+
+  return (
+    <span className={`status-pill ${style}`} style={{ background: bg, borderColor }}>
+      <span className="status-dot-pulse" />
+      {status}
+    </span>
   );
 }

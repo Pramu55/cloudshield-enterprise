@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AwsAccountDto, AwsInventoryPlanResponse } from "@cloudshield/contracts";
-import { ShieldAlert, RefreshCw, Layers, CheckCircle, XCircle, Play, ChevronRight } from "lucide-react";
+import { ShieldAlert, RefreshCw, Layers, CheckCircle, XCircle, Play, ChevronRight, ShieldCheck, Lock, Zap, Ban, Clock, AlertTriangle, Server, Eye, ChevronDown, Info, CircleDot, Terminal } from "lucide-react";
 import { DashboardPage } from "../shared";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
@@ -121,11 +121,57 @@ export default function ScansPage() {
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
 
+  /* ─── Loading skeleton ─── */
   if (loading) {
     return (
       <DashboardPage title="Governance Scanner Console" description="Loading accounts and scanner configurations...">
-        <div className="flex items-center justify-center min-h-[200px] text-slate-500 animate-pulse">
-          Loading governance console configuration...
+        <div className="space-y-6 animate-pulse">
+          {/* Safety Gate skeleton */}
+          <div className="premium-card p-0">
+            <div className="h-1.5 w-full rounded-t-xl" style={{ background: "linear-gradient(90deg, #f59e0b 0%, #ea580c 100%)" }} />
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-amber-100" />
+                <div className="h-4 w-64 rounded bg-slate-200" />
+              </div>
+              <div className="h-3 w-full max-w-xl rounded bg-slate-100" />
+              <div className="h-3 w-96 rounded bg-slate-100" />
+              <div className="grid grid-cols-4 gap-4 pt-2">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-20 rounded-lg bg-slate-100" />
+                ))}
+              </div>
+            </div>
+          </div>
+          {/* Content skeleton */}
+          <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
+            <div className="space-y-6">
+              <div className="premium-card p-6 space-y-4">
+                <div className="h-4 w-48 rounded bg-slate-200" />
+                <div className="h-10 w-full rounded bg-slate-100" />
+                <div className="h-32 w-full rounded bg-slate-50" />
+                <div className="flex justify-end"><div className="h-10 w-56 rounded-lg bg-slate-200" /></div>
+              </div>
+              <div className="premium-card p-6 space-y-4">
+                <div className="h-4 w-40 rounded bg-slate-200" />
+                <div className="h-48 w-full rounded bg-slate-50" />
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="premium-card p-6 space-y-3">
+                <div className="h-4 w-36 rounded bg-slate-200" />
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="h-10 rounded bg-slate-100" />
+                ))}
+              </div>
+              <div className="premium-card p-6 space-y-3">
+                <div className="h-4 w-48 rounded bg-slate-200" />
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-3 w-full rounded bg-slate-100" />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </DashboardPage>
     );
@@ -136,152 +182,257 @@ export default function ScansPage() {
       title="AWS Inventory Scanner Console"
       description="Run read-only AWS asset inventory sync scans. Scan results write to PostgreSQL for security and compliance assessments. No mutations are performed."
     >
+      {/* ─── Error Banner ─── */}
       {errorMessage && (
-        <div className="mb-5 rounded-md border border-alert/30 bg-red-50 p-4 text-sm text-alert">
-          {errorMessage}
+        <div className="mb-6 premium-card border-alert/40 p-0 overflow-hidden">
+          <div className="flex items-start gap-3 p-4" style={{ background: "linear-gradient(135deg, rgba(220,38,38,0.06) 0%, rgba(220,38,38,0.02) 100%)" }}>
+            <div className="flex-shrink-0 mt-0.5">
+              <XCircle className="h-5 w-5 text-alert" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-alert">Scan Error</p>
+              <p className="text-sm text-alert/80 mt-0.5">{errorMessage}</p>
+            </div>
+          </div>
         </div>
       )}
 
+      {/* ═══════════════════════════════════════════════
+          §1  SAFETY EXECUTION GATE
+      ═══════════════════════════════════════════════ */}
       {plan && (
-        <section className="rounded-md border border-warning/50 bg-white p-5 mb-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="max-w-3xl">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 text-warning" />
-                <h3 className="text-sm font-semibold text-ink">
-                  AWS Scanner Safety Execution Gate
-                </h3>
+        <section className="premium-card p-0 mb-6" style={{ borderTopWidth: 0 }}>
+          {/* Gradient top accent */}
+          <div
+            className="h-1.5 w-full"
+            style={{
+              background: "linear-gradient(90deg, #f59e0b 0%, #ea580c 50%, #dc2626 100%)",
+              borderRadius: "12px 12px 0 0",
+            }}
+          />
+          <div className="p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              {/* Left: Header + description */}
+              <div className="max-w-3xl">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-amber-100 ring-4 ring-amber-50">
+                    <ShieldAlert className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-ink tracking-tight">
+                      AWS Scanner Safety Execution Gate
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Runtime enforcement policy</p>
+                  </div>
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-slate-600">
+                  {plan.message} The scanner runs only when{" "}
+                  <code className="px-1.5 py-0.5 rounded bg-slate-100 text-xs font-mono font-semibold text-slate-700 border border-line">
+                    AWS_INVENTORY_SCANNER_MODE=readonly-scan
+                  </code>.
+                  Only read-only resource ingestion is performed. AWS resource modifications or Terraform apply are strictly blocked.
+                </p>
               </div>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                {plan.message} The scanner runs only when <code>AWS_INVENTORY_SCANNER_MODE=readonly-scan</code>.
-                Only read-only resource ingestion is performed. AWS resource modifications or Terraform apply are strictly blocked.
-              </p>
+              {/* Right: API call status pill */}
+              <div className="flex-shrink-0">
+                <span className="status-pill text-amber-700 bg-amber-50 border-amber-300">
+                  <span className="status-dot-pulse" style={{ backgroundColor: "#d97706" }} />
+                  awsApiCallExecuted={String(plan.awsApiCallExecuted)}
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="inline-block rounded-md border border-warning/50 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-slate-700">
-                awsApiCallExecuted={String(plan.awsApiCallExecuted)}
-              </span>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-4 text-xs text-slate-600">
-            <div>
-              <span className="font-semibold block uppercase">Scanner mode</span>
-              <span className="font-semibold text-ink text-sm">{plan.scannerMode}</span>
-            </div>
-            <div>
-              <span className="font-semibold block uppercase">Mutation enabled</span>
-              <span className="font-semibold text-ink text-sm">false</span>
-            </div>
-            <div>
-              <span className="font-semibold block uppercase">Terraform apply</span>
-              <span className="font-semibold text-ink text-sm">false</span>
-            </div>
-            <div>
-              <span className="font-semibold block uppercase">Auto remediation</span>
-              <span className="font-semibold text-ink text-sm">false</span>
+
+            {/* Safety indicator mini-cards */}
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <SafetyIndicator
+                icon={<Eye className="h-4 w-4 text-teal" />}
+                label="Scanner mode"
+                value={plan.scannerMode}
+                color="teal"
+              />
+              <SafetyIndicator
+                icon={<Ban className="h-4 w-4 text-red-500" />}
+                label="Mutation enabled"
+                value="false"
+                color="red"
+              />
+              <SafetyIndicator
+                icon={<Lock className="h-4 w-4 text-red-500" />}
+                label="Terraform apply"
+                value="false"
+                color="red"
+              />
+              <SafetyIndicator
+                icon={<ShieldCheck className="h-4 w-4 text-red-500" />}
+                label="Auto remediation"
+                value="false"
+                color="red"
+              />
             </div>
           </div>
         </section>
       )}
 
+      {/* ═══════════════════════════════════════════════
+          §2–5  MAIN CONTENT GRID
+      ═══════════════════════════════════════════════ */}
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
+        {/* ── Left Column ── */}
         <div className="space-y-6">
-          <section className="rounded-md border border-line bg-white p-5">
-            <h3 className="text-sm font-semibold text-ink mb-4">Run Governance Ingestion Scan</h3>
-            
-            <div className="space-y-4">
-              <label className="block text-xs font-semibold text-slate-600">
-                Select AWS Account Registry Record
-                <select
-                  className="mt-1 w-full rounded-md border border-line px-3 py-2.5 text-sm text-ink bg-white focus:outline-none focus:border-signal"
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                >
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.accountId}) — {acc.environment}
-                    </option>
-                  ))}
-                </select>
+
+          {/* §2 RUN GOVERNANCE SCAN */}
+          <section className="premium-card p-0 overflow-hidden">
+            <div className="px-6 pt-5 pb-4 border-b border-line bg-gradient-to-r from-white to-slate-50/60">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-signal/10">
+                  <Zap className="h-4 w-4 text-signal" />
+                </div>
+                <h3 className="text-sm font-bold text-ink tracking-tight">Run Governance Ingestion Scan</h3>
+              </div>
+            </div>
+            <div className="p-6 space-y-5">
+              {/* Account selector */}
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Select AWS Account Registry Record</span>
+                <div className="relative mt-2">
+                  <select
+                    className="mt-0 w-full rounded-lg border border-line bg-white px-4 py-3 pr-10 text-sm text-ink font-medium appearance-none focus:outline-none focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all"
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                  >
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.accountId}) — {acc.environment}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                </div>
               </label>
 
+              {/* Account details info grid */}
               {selectedAccount && (
-                <div className="bg-slate-50 rounded border border-line p-4 space-y-2 text-xs text-slate-600">
-                  <div className="flex justify-between">
-                    <span>Account Name:</span>
-                    <span className="font-semibold text-ink">{selectedAccount.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>AWS Account ID:</span>
-                    <span className="font-semibold text-ink font-mono">{selectedAccount.accountId}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Regions to Scan:</span>
-                    <span className="font-semibold text-ink">{selectedAccount.regions.join(", ")}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Connection Status:</span>
-                    <span className="font-semibold text-ink">{selectedAccount.connectionStatus}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Last Synced:</span>
-                    <span className="font-semibold text-ink">{selectedAccount.lastScanAt ? new Date(selectedAccount.lastScanAt).toLocaleString() : "Never synced"}</span>
-                  </div>
+                <div className="rounded-lg border border-line overflow-hidden">
+                  <AccountDetailRow label="Account Name" value={selectedAccount.name} even />
+                  <AccountDetailRow label="AWS Account ID" value={selectedAccount.accountId} mono />
+                  <AccountDetailRow label="Regions to Scan" value={selectedAccount.regions.join(", ")} even />
+                  <AccountDetailRow label="Connection Status" value={selectedAccount.connectionStatus} />
+                  <AccountDetailRow
+                    label="Last Synced"
+                    value={selectedAccount.lastScanAt ? new Date(selectedAccount.lastScanAt).toLocaleString() : "Never synced"}
+                    even
+                  />
                 </div>
               )}
 
-              <div className="flex justify-end">
+              {/* Scan trigger button */}
+              <div className="flex justify-end pt-1">
                 <button
-                  className="cs-action-signal flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold hover:bg-teal-800 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="group relative flex items-center gap-2.5 rounded-lg px-6 py-3 text-sm font-bold text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none overflow-hidden"
+                  style={{
+                    background: "linear-gradient(135deg, #4f46e5 0%, #4338ca 50%, #3730a3 100%)",
+                    boxShadow: "0 2px 8px rgba(79, 70, 229, 0.35), 0 1px 3px rgba(0,0,0,0.1)",
+                  }}
                   disabled={!selectedAccountId || plan?.scannerMode === "disabled" || plan?.scannerMode === "readonly-plan" || isScanning}
                   onClick={() => setShowConfirm(true)}
                   type="button"
                 >
-                  <Play size={16} />
-                  Run EC2 read-only inventory scan
+                  {/* Hover glow overlay */}
+                  <span className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-200" />
+                  <Play size={16} className="relative z-10 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:scale-110" />
+                  <span className="relative z-10">Run EC2 read-only inventory scan</span>
                 </button>
               </div>
             </div>
           </section>
 
-          <section className="rounded-md border border-line bg-white p-5">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-semibold text-ink">Ingestion Job History</h3>
-              {historyLoading && <span className="text-xs text-slate-500 animate-pulse">Refreshing history...</span>}
+          {/* §3 JOB HISTORY TABLE */}
+          <section className="premium-card p-0 overflow-hidden">
+            <div className="px-6 pt-5 pb-4 border-b border-line flex items-center justify-between bg-gradient-to-r from-white to-slate-50/60">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-indigo-50">
+                  <Layers className="h-4 w-4 text-signal" />
+                </div>
+                <h3 className="text-sm font-bold text-ink tracking-tight">Ingestion Job History</h3>
+              </div>
+              {historyLoading && (
+                <span className="flex items-center gap-2 text-xs text-slate-500">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-signal" />
+                  Refreshing…
+                </span>
+              )}
             </div>
 
             {scanRuns.length > 0 ? (
-              <div className="overflow-x-auto rounded border border-line">
+              <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Job ID</th>
-                      <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Phase</th>
-                      <th className="px-4 py-3">Started At</th>
-                      <th className="px-4 py-3">Completed At</th>
-                      <th className="px-4 py-3">Details</th>
+                  <thead>
+                    <tr
+                      style={{
+                        background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
+                      }}
+                    >
+                      <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Job ID</th>
+                      <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Type</th>
+                      <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Status</th>
+                      <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Phase</th>
+                      <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Started At</th>
+                      <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Completed At</th>
+                      <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Details</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-line">
+                  <tbody className="divide-y divide-line/60">
                     {scanRuns.map((run) => (
-                      <tr key={run.id} className="hover:bg-slate-50 text-xs text-slate-700">
-                        <td className="px-4 py-3 font-mono font-semibold">{run.id.substring(0, 8)}...</td>
-                        <td className="px-4 py-3 font-semibold text-ink">{run.jobType.replaceAll("_", " ")}</td>
-                        <td className="px-4 py-3">
+                      <tr
+                        key={run.id}
+                        className="group relative text-xs text-slate-700 transition-colors duration-150 hover:bg-signal/[0.02]"
+                      >
+                        {/* Left accent on hover */}
+                        <td className="px-6 py-4 relative">
+                          <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r bg-signal opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                          <span className="font-mono font-bold text-ink tracking-tight" title={run.id}>
+                            {run.id.substring(0, 8)}…
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+                            <Terminal className="h-3 w-3 text-slate-400" />
+                            {run.jobType.replaceAll("_", " ")}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
                           <StatusBadge status={run.status} />
                         </td>
-                        <td className="px-4 py-3 font-mono text-[10px] text-slate-500">{run.phase || "init"}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{new Date(run.startedAt).toLocaleString()}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{run.completedAt ? new Date(run.completedAt).toLocaleString() : "—"}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-6 py-4">
+                          <span className="inline-block px-2 py-0.5 rounded bg-slate-100 font-mono text-[10px] text-slate-500 font-semibold">
+                            {run.phase || "init"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="flex items-center gap-1.5 text-slate-600">
+                            <Clock className="h-3 w-3 text-slate-400" />
+                            {formatTimestamp(run.startedAt)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-slate-600">
+                          {run.completedAt ? formatTimestamp(run.completedAt) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
                           {run.errorMessage ? (
-                            <span className="text-alert font-medium truncate max-w-xs block" title={run.errorMessage}>
+                            <span
+                              className="inline-flex items-center gap-1.5 max-w-xs truncate px-2.5 py-1 rounded-md bg-red-50 border border-red-200 text-alert text-[11px] font-semibold"
+                              title={run.errorMessage}
+                            >
+                              <XCircle className="h-3 w-3 flex-shrink-0" />
                               {run.errorMessage}
                             </span>
                           ) : (
-                            <span className="text-emerald-600 font-medium">No errors</span>
+                            <span className="inline-flex items-center gap-1.5 text-emerald-600 font-semibold text-[11px]">
+                              <CheckCircle className="h-3 w-3" />
+                              No errors
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -290,20 +441,34 @@ export default function ScansPage() {
                 </table>
               </div>
             ) : (
-              <div className="text-center p-8 border border-dashed border-line rounded bg-slate-50">
-                <p className="text-sm text-slate-500">No scan job executions recorded for this account.</p>
+              <div className="text-center p-12">
+                <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-slate-100 mb-4">
+                  <Layers className="h-6 w-6 text-slate-400" />
+                </div>
+                <p className="text-sm font-semibold text-slate-500">No scan job executions recorded</p>
+                <p className="text-xs text-slate-400 mt-1">Run an inventory scan to see results here.</p>
               </div>
             )}
           </section>
         </div>
 
+        {/* ── Right Column ── */}
         <div className="space-y-6">
-          <section className="rounded-md border border-line bg-white p-5">
-            <h3 className="text-sm font-semibold text-ink">Read-Only Allowed APIs</h3>
-            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
-              CloudShield scanner core is locked down to read-only API calls only.
-            </p>
-            <div className="mt-4 space-y-3">
+
+          {/* §4 READ-ONLY ALLOWED APIs */}
+          <section className="premium-card p-0 overflow-hidden">
+            <div className="px-6 pt-5 pb-4 border-b border-line bg-gradient-to-r from-white to-slate-50/60">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50">
+                  <Lock className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink tracking-tight">Read-Only Allowed APIs</h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Scanner locked to read-only calls only</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 space-y-2">
               <ApiItem service="STS" operation="GetCallerIdentity" />
               <ApiItem service="EC2" operation="DescribeInstances" />
               <ApiItem service="EC2" operation="DescribeSecurityGroups" />
@@ -313,50 +478,107 @@ export default function ScansPage() {
             </div>
           </section>
 
-          <section className="rounded-md border border-line bg-white p-5 text-xs text-slate-600 leading-6 space-y-3">
-            <h4 className="font-semibold text-ink text-sm">Security Posture Integration</h4>
-            <p>
-              Ingesting resources automatically triggers the security posture analysis:
-            </p>
-            <ul className="list-disc pl-4 space-y-1">
-              <li>Deterministically checks EC2 and SG metadata</li>
-              <li>Generates audit trails and compliance evidences</li>
-              <li>Creates review-only recommendations</li>
-              <li>Runs entirely inside the database (no additional AWS calls)</li>
-            </ul>
+          {/* §5 SECURITY POSTURE INTEGRATION */}
+          <section className="premium-card p-0 overflow-hidden">
+            <div
+              className="h-1"
+              style={{
+                background: "linear-gradient(90deg, #4f46e5 0%, #0d9488 100%)",
+                borderRadius: "12px 12px 0 0",
+              }}
+            />
+            <div className="p-6">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-indigo-50">
+                  <ShieldCheck className="h-4 w-4 text-signal" />
+                </div>
+                <h4 className="font-bold text-ink text-sm tracking-tight">Security Posture Integration</h4>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                Ingesting resources automatically triggers the security posture analysis:
+              </p>
+              <ul className="space-y-2.5">
+                <PostureItem text="Deterministically checks EC2 and SG metadata" />
+                <PostureItem text="Generates audit trails and compliance evidences" />
+                <PostureItem text="Creates review-only recommendations" />
+                <PostureItem text="Runs entirely inside the database (no additional AWS calls)" />
+              </ul>
+            </div>
           </section>
         </div>
       </div>
 
+      {/* ═══════════════════════════════════════════════
+          §6  CONFIRMATION MODAL
+      ═══════════════════════════════════════════════ */}
       {showConfirm && selectedAccount && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg border border-line bg-white p-6 shadow-xl">
-            <h4 className="text-lg font-semibold text-ink flex items-center gap-2">
-              <Play className="text-signal" size={20} />
-              Confirm Read-Only Inventory Scan
-            </h4>
-
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              <strong>Warning:</strong> This triggers live read-only AWS API queries (EC2 describe operations) to sync resource inventory.
-              No mutations, resource creations, or configuration changes will be made to your cloud.
-            </p>
-
-            <div className="mt-4 rounded bg-slate-50 p-3 text-xs text-slate-500 space-y-1.5">
-              <p>Target Account: <span className="font-semibold text-ink">{selectedAccount.name}</span></p>
-              <p>AWS ID: <span className="font-semibold text-ink font-mono">{selectedAccount.accountId}</span></p>
-              <p>Connector Mode: <span className="font-semibold text-ink">{plan?.scannerMode}</span></p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-ink/40 transition-opacity"
+            onClick={() => setShowConfirm(false)}
+          />
+          {/* Modal */}
+          <div className="relative w-full max-w-lg premium-card p-0 overflow-hidden shadow-2xl" style={{ animation: "cs-modal-in 0.2s ease-out" }}>
+            {/* Warning header gradient */}
+            <div
+              className="px-6 py-5"
+              style={{
+                background: "linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(234,88,12,0.05) 100%)",
+                borderBottom: "1px solid #fef3c7",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-10 w-10 rounded-full bg-amber-100">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-ink">Confirm Read-Only Inventory Scan</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Live AWS API queries will be executed</p>
+                </div>
+              </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="p-6 space-y-5">
+              {/* Warning message */}
+              <p className="text-sm leading-relaxed text-slate-600">
+                <strong className="text-ink">Warning:</strong> This triggers live read-only AWS API queries (EC2 describe operations) to sync resource inventory.
+                No mutations, resource creations, or configuration changes will be made to your cloud.
+              </p>
+
+              {/* Account info grid */}
+              <div className="rounded-lg border border-line overflow-hidden">
+                <AccountDetailRow label="Target Account" value={selectedAccount.name} even />
+                <AccountDetailRow label="AWS ID" value={selectedAccount.accountId} mono />
+                <AccountDetailRow label="Connector Mode" value={plan?.scannerMode || "—"} even />
+              </div>
+
+              {/* Safety notice */}
+              <div className="flex items-start gap-2.5 rounded-lg p-3.5 bg-amber-50 border border-amber-200/60">
+                <Info className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  This scan is strictly read-only. No AWS resources will be created, modified, or deleted. All operations are limited to Describe* API calls.
+                </p>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="px-6 py-4 flex justify-end gap-3 border-t border-line bg-slate-50/50">
               <button
-                className="rounded-md border border-line bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                className="rounded-lg border border-line bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-all"
                 onClick={() => setShowConfirm(false)}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                className="rounded-lg px-5 py-2.5 text-sm font-bold text-white transition-all"
+                style={{
+                  background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+                  boxShadow: "0 2px 6px rgba(15, 23, 42, 0.3)",
+                }}
                 onClick={() => {
                   setShowConfirm(false);
                   void triggerScan();
@@ -369,47 +591,163 @@ export default function ScansPage() {
           </div>
         </div>
       )}
+
+      {/* Modal entrance animation */}
+      <style>{`
+        @keyframes cs-modal-in {
+          from { opacity: 0; transform: scale(0.96) translateY(8px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0);    }
+        }
+      `}</style>
     </DashboardPage>
   );
 }
 
+/* ═══════════════════════════════════════════════
+   SUB-COMPONENTS
+═══════════════════════════════════════════════ */
+
+/** Safety indicator mini-card */
+function SafetyIndicator({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  color: "teal" | "red";
+}) {
+  const dotColor = color === "teal" ? "#0d9488" : "#dc2626";
+  return (
+    <div className="group flex items-center gap-3 rounded-lg border border-line bg-white p-3.5 transition-all duration-200 hover:border-slate-300 hover:shadow-sm">
+      <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-slate-50 group-hover:bg-slate-100 transition-colors">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span
+            className="h-2 w-2 rounded-full flex-shrink-0"
+            style={{ backgroundColor: dotColor }}
+          />
+          <span className="text-sm font-bold text-ink truncate">{value}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Account detail row with alternating background */
+function AccountDetailRow({
+  label,
+  value,
+  even,
+  mono,
+}: {
+  label: string;
+  value: string;
+  even?: boolean;
+  mono?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between px-4 py-3 text-xs ${even ? "bg-slate-50/80" : "bg-white"}`}>
+      <span className="text-slate-500 font-medium">{label}</span>
+      <span className={`font-semibold text-ink ${mono ? "font-mono tracking-wide" : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+/** Format ISO timestamp to readable locale string */
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
+    " " +
+    d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Status badge with colored dots and pulse for RUNNING */
 function StatusBadge({ status }: { status: string }) {
-  let classes = "bg-slate-100 text-slate-700";
-  let text = status;
+  let bgClass = "bg-slate-50";
+  let textClass = "text-slate-600";
+  let borderClass = "border-slate-200";
+  let dotColor = "#94a3b8";
+  let pulse = false;
 
   switch (status) {
     case "QUEUED":
-      classes = "bg-blue-50 text-blue-700 border border-blue-200";
+      bgClass = "bg-blue-50";
+      textClass = "text-blue-700";
+      borderClass = "border-blue-200";
+      dotColor = "#3b82f6";
       break;
     case "RUNNING":
-      classes = "bg-amber-50 text-amber-700 border border-amber-200 animate-pulse";
+      bgClass = "bg-amber-50";
+      textClass = "text-amber-700";
+      borderClass = "border-amber-300";
+      dotColor = "#d97706";
+      pulse = true;
       break;
     case "SUCCEEDED":
-      classes = "bg-emerald-50 text-emerald-700 border border-emerald-200";
+      bgClass = "bg-emerald-50";
+      textClass = "text-emerald-700";
+      borderClass = "border-emerald-200";
+      dotColor = "#16a34a";
       break;
     case "FAILED":
-      classes = "bg-red-50 text-red-700 border border-red-200";
+      bgClass = "bg-red-50";
+      textClass = "text-red-700";
+      borderClass = "border-red-200";
+      dotColor = "#dc2626";
       break;
     case "BLOCKED_DISABLED":
-      classes = "bg-orange-50 text-orange-700 border border-orange-200 font-semibold";
+      bgClass = "bg-orange-50";
+      textClass = "text-orange-700";
+      borderClass = "border-orange-300";
+      dotColor = "#ea580c";
       break;
   }
 
   return (
-    <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold ${classes}`}>
-      {text}
+    <span className={`status-pill ${bgClass} ${textClass} border ${borderClass}`}>
+      <span
+        className={pulse ? "status-dot-pulse" : ""}
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          backgroundColor: dotColor,
+          display: "inline-block",
+        }}
+      />
+      {status}
     </span>
   );
 }
 
+/** API item mini-card */
 function ApiItem({ service, operation }: { service: string; operation: string }) {
   return (
-    <div className="flex items-center gap-2 text-xs font-semibold p-2 border border-line rounded bg-slate-50">
-      <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-[10px]">{service}</span>
-      <span className="text-ink font-mono text-[10px]">{operation}</span>
-      <span className="ml-auto text-[10px] font-semibold text-emerald-600 uppercase flex items-center gap-1">
-        <CheckCircle size={10} /> Allowed
+    <div className="group flex items-center gap-3 rounded-lg border border-line bg-white p-3 transition-all duration-200 hover:border-slate-300 hover:shadow-sm hover:bg-slate-50/50">
+      <span className="flex-shrink-0 inline-flex items-center justify-center px-2 py-1 rounded-md bg-indigo-50 text-signal font-mono text-[10px] font-bold tracking-wide border border-indigo-100">
+        {service}
+      </span>
+      <span className="text-ink font-mono text-xs font-semibold truncate">{operation}</span>
+      <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase flex-shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+        <CheckCircle size={12} />
+        Allowed
       </span>
     </div>
+  );
+}
+
+/** Security posture bullet item with check icon */
+function PostureItem({ text }: { text: string }) {
+  return (
+    <li className="flex items-start gap-2.5 text-xs text-slate-600 leading-relaxed">
+      <CheckCircle className="h-4 w-4 text-teal flex-shrink-0 mt-0.5" />
+      <span>{text}</span>
+    </li>
   );
 }

@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { RefreshBadge, fetchCloudShieldClient } from "../../../lib/client-api";
 import { DashboardPage } from "../shared";
 import { AccountRegistryClient } from "./registry-client";
-import { CheckCircle2, CircleDashed, ArrowRight } from "lucide-react";
+import { CheckCircle2, CircleDashed, ArrowRight, ShieldAlert, KeyRound } from "lucide-react";
 
 type ReadinessResponse = {
   awsAccounts: Array<{
@@ -266,27 +266,27 @@ export default function AccountsPage() {
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
       
       {readiness && (
-        <div className="mb-8 space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-md border border-line bg-white p-5">
-              <h3 className="text-sm font-semibold text-ink mb-4">Onboarding Readiness</h3>
+        <div className="mb-6 space-y-6">
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="premium-card p-5">
+              <h3 className="text-sm font-bold text-ink mb-4">Onboarding Readiness</h3>
               <div className="space-y-3">
                 {readiness.awsAccounts.map(acc => (
-                  <div key={acc.accountId} className="flex items-center justify-between p-3 border border-slate-100 rounded bg-slate-50">
+                  <div key={acc.accountId} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-colors">
                     <div>
-                      <div className="text-sm font-semibold text-ink">{acc.name}</div>
-                      <div className="text-xs text-slate-500">
-                        {acc.environment} | Regions: {acc.regionCoverage.join(", ")}
+                      <div className="text-sm font-bold text-ink">{acc.name}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {acc.environment} &bull; Regions: {acc.regionCoverage.join(", ")}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {acc.onboardingComplete ? (
-                        <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
-                          <CheckCircle2 size={14} /> Ready
+                        <span className="status-pill border-emerald-200 bg-emerald-50 text-emerald-700 py-0.5">
+                          <CheckCircle2 size={13} /> Configured
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded">
-                          <CircleDashed size={14} /> Incomplete
+                        <span className="status-pill border-amber-200 bg-amber-50 text-amber-700 py-0.5">
+                          <CircleDashed size={13} className="animate-spin" /> Incomplete
                         </span>
                       )}
                     </div>
@@ -295,27 +295,29 @@ export default function AccountsPage() {
               </div>
             </div>
 
-            <div className="rounded-md border border-line bg-white p-5">
-              <h3 className="text-sm font-semibold text-ink mb-4">What to configure next</h3>
-              <ul className="space-y-4">
-                <li className="flex gap-3">
-                  <div className="mt-0.5"><CircleDashed size={18} className="text-amber-500" /></div>
-                  <div>
-                    <p className="text-sm font-semibold text-ink">Configure AWS Connector</p>
-                    <p className="text-xs text-slate-600 mt-1">Use IAM role assumption with environment variables for read-only STS validation readiness.</p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <div className="mt-0.5"><CircleDashed size={18} className="text-amber-500" /></div>
-                  <div>
-                    <p className="text-sm font-semibold text-ink">Enable Inventory Scanner</p>
-                    <p className="text-xs text-slate-600 mt-1">Scanner execution remains disabled by default and is separate from credential readiness.</p>
-                  </div>
-                </li>
-              </ul>
+            <div className="premium-card p-5 flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-ink mb-4">Setup Recommendation Checkpoints</h3>
+                <ul className="space-y-4">
+                  <li className="flex gap-3">
+                    <div className="mt-0.5 text-amber-500"><CircleDashed size={16} /></div>
+                    <div>
+                      <p className="text-xs font-bold text-ink">Configure AWS Connector Mode</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Use IAM role assumption with environment variables for read-only STS validation readiness.</p>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <div className="mt-0.5 text-amber-500"><CircleDashed size={16} /></div>
+                    <div>
+                      <p className="text-xs font-bold text-ink">Enable Inventory Scanner Mode</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Scanner execution remains disabled by default and is separate from credential readiness.</p>
+                    </div>
+                  </li>
+                </ul>
+              </div>
               <div className="mt-5 pt-4 border-t border-line">
-                <button className="flex items-center gap-2 text-sm font-semibold text-signal hover:text-signal-dark transition-colors">
-                  View documentation <ArrowRight size={16} />
+                <button className="flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors bg-transparent border-0 p-0 min-h-0">
+                  Read Deployment Runbooks <ArrowRight size={14} />
                 </button>
               </div>
             </div>
@@ -350,36 +352,41 @@ function CredentialReadinessPanel({
   ] as const;
 
   return (
-    <section className="rounded-md border border-line bg-white p-5">
-      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-ink">AWS Credential Readiness</h3>
-          <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">
-            No credentials are stored in CloudShield DB. Use environment variables locally and
-            secret manager/IAM role assumption in production. Access keys are optional local-dev
-            fallback only and are not recommended for production.
-          </p>
+    <section className="premium-card p-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between border-b border-line pb-4 mb-5">
+        <div className="flex gap-3 items-start">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+            <KeyRound size={18} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-ink">AWS Credential Readiness</h3>
+            <p className="mt-1 max-w-4xl text-xs text-slate-500 leading-relaxed">
+              No credentials are stored in CloudShield DB. Use environment variables locally and
+              secret manager/IAM role assumption in production. Access keys are optional local-dev
+              fallback only and are not recommended for production.
+            </p>
+          </div>
         </div>
-        <span className="rounded-md border border-line bg-panel px-3 py-2 text-xs font-semibold text-slate-700">
-          {readiness.credentialStorageMode}
+        <span className="status-pill border-indigo-200 bg-indigo-50/50 text-indigo-700 py-1 text-xs self-start">
+          Storage Mode: {readiness.credentialStorageMode}
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4 mb-6">
         <ReadinessTile label="Connector mode" value={readiness.connectorMode} />
         <ReadinessTile label="Scanner mode" value={readiness.scannerMode} />
         <ReadinessTile label="Role-based setup" value={readiness.roleBasedReadiness ? "ready" : "not ready"} />
         <ReadinessTile label="STS validation" value={readiness.stsValidationAvailable ? "available" : "not available"} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-        <div className="rounded-md border border-line p-4">
-          <p className="text-xs font-semibold uppercase text-slate-500">Environment checklist</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
+        <div className="border border-line rounded-xl p-4 bg-slate-50/50">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3">Environment checklist</p>
+          <div className="grid gap-2 sm:grid-cols-2">
             {envChecks.map(([label, configured]) => (
-              <div className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-3 py-2" key={label}>
-                <span className="text-xs font-semibold text-slate-600">{label}</span>
-                <span className={`text-xs font-semibold ${configured ? "text-emerald-700" : "text-amber-700"}`}>
+              <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm" key={label}>
+                <span className="text-[11px] font-mono text-slate-600 font-semibold">{label}</span>
+                <span className={`status-pill py-0.5 text-[10px] ${configured ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
                   {configured ? "configured" : "missing"}
                 </span>
               </div>
@@ -387,15 +394,32 @@ function CredentialReadinessPanel({
           </div>
         </div>
 
-        <div className="rounded-md border border-line p-4">
-          <p className="text-xs font-semibold uppercase text-slate-500">Safety posture</p>
-          <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            <li>No AWS API call executed: {String(readiness.awsApiCallExecuted)}</li>
-            <li>No AWS mutation: {String(readiness.mutationEnabled)}</li>
-            <li>No Terraform apply: {String(readiness.terraformApplyEnabled)}</li>
-            <li>No automatic remediation: {String(readiness.remediationExecutionEnabled)}</li>
-            <li>Local access-key fallback detected: {String(readiness.localAccessKeyFallbackDetected)}</li>
-          </ul>
+        <div className="border border-line rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3">Safety boundaries</p>
+            <ul className="space-y-2 text-xs text-slate-600">
+              <li className="flex justify-between border-b border-line/50 pb-1.5">
+                <span>No AWS API call executed</span>
+                <span className="font-bold text-emerald-600">{String(readiness.awsApiCallExecuted)}</span>
+              </li>
+              <li className="flex justify-between border-b border-line/50 pb-1.5">
+                <span>No AWS mutation</span>
+                <span className="font-bold text-emerald-600">{String(readiness.mutationEnabled)}</span>
+              </li>
+              <li className="flex justify-between border-b border-line/50 pb-1.5">
+                <span>No Terraform apply</span>
+                <span className="font-bold text-emerald-600">{String(readiness.terraformApplyEnabled)}</span>
+              </li>
+              <li className="flex justify-between">
+                <span>No automatic remediation</span>
+                <span className="font-bold text-emerald-600">{String(readiness.remediationExecutionEnabled)}</span>
+              </li>
+            </ul>
+          </div>
+          <div className="flex gap-2 items-center text-[10px] text-amber-700 mt-4 bg-amber-50 border border-amber-100 p-2 rounded-lg">
+            <ShieldAlert size={14} className="shrink-0" />
+            <span>Local access-key fallback is not recommended for production setups.</span>
+          </div>
         </div>
       </div>
     </section>
@@ -404,9 +428,9 @@ function CredentialReadinessPanel({
 
 function ReadinessTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-line bg-panel p-3">
-      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-ink">{value}</p>
+    <div className="border border-line bg-slate-50/50 p-4 rounded-xl shadow-sm">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-bold text-ink capitalize">{value}</p>
     </div>
   );
 }

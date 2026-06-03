@@ -17,7 +17,11 @@ import {
   Play,
   RotateCcw,
   ShieldAlert,
-  UserCheck
+  UserCheck,
+  Server,
+  Layers,
+  HelpCircle,
+  Info
 } from "lucide-react";
 import { DashboardPage } from "../shared";
 import { SampleDataNotice } from "../../../lib/ui";
@@ -98,11 +102,11 @@ const InstantRiskFindings: RiskFindingsResponse = {
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
-  CRITICAL: "border-red-300 bg-red-100 text-red-800",
-  HIGH: "border-orange-300 bg-orange-100 text-orange-800",
-  MEDIUM: "border-amber-300 bg-amber-100 text-amber-800",
-  LOW: "border-blue-300 bg-blue-100 text-blue-700",
-  INFO: "border-slate-300 bg-slate-100 text-slate-600"
+  CRITICAL: "border-red-200 bg-red-50 text-red-700",
+  HIGH: "border-orange-200 bg-orange-50 text-orange-700",
+  MEDIUM: "border-amber-200 bg-amber-50 text-amber-700",
+  LOW: "border-blue-200 bg-blue-50 text-blue-700",
+  INFO: "border-slate-200 bg-slate-100 text-slate-600"
 };
 
 const WORKFLOW_LABELS: Record<string, string> = {
@@ -131,7 +135,7 @@ export default function SecurityPage() {
     error: riskError,
     isRefreshing: riskRefreshing
   } = useCloudShieldData<RiskFindingsResponse>(
-    "/api/v1/risk/findings",
+    "/api/v1/findings/security",
     InstantRiskFindings
   );
 
@@ -202,7 +206,7 @@ export default function SecurityPage() {
 
   return (
     <DashboardPage
-      title="Security Risk Workflow"
+      title="Security Posture Workflow"
       description="Enterprise security finding ownership, risk acceptance, audit trail, and review-only remediation planning."
     >
       <SampleDataNotice />
@@ -211,21 +215,19 @@ export default function SecurityPage() {
         isRefreshing={rulesRefreshing || riskRefreshing}
       />
 
-      <section className="mb-6 rounded-md border border-sky-200 bg-sky-50 p-4">
-        <p className="text-sm font-semibold text-sky-900">
-          Workflow actions update CloudShield records only. No AWS changes are executed.
-        </p>
-        <p className="mt-1 text-xs leading-5 text-sky-700">
-          Remediation plans are review-only. Risk acceptance requires business
-          justification. Sample/demo data remains labeled. Compliance references
-          are CIS-inspired controls, SOC2-inspired evidence, and internal cloud
-          governance evidence only.
-        </p>
+      <section className="safety-banner border border-sky-200/50 bg-sky-50/70 p-4 rounded-xl flex gap-3 items-start mb-6">
+        <Info className="h-5 w-5 shrink-0 text-sky-600 mt-0.5" />
+        <div className="text-xs">
+          <p className="font-bold text-sky-950 uppercase tracking-wider">Operational Console Message</p>
+          <p className="mt-1 leading-relaxed text-sky-800">
+            Workflow actions update CloudShield records only. No AWS changes are executed. Remediation plans are review-only. Risk acceptance requires business justification.
+          </p>
+        </div>
       </section>
 
       <section className="mb-6 flex flex-wrap items-center gap-3">
         <button
-          className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+          className="cs-action-signal inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold shadow-sm"
           type="button"
           onClick={evaluateRules}
         >
@@ -233,49 +235,60 @@ export default function SecurityPage() {
           Evaluate Security Rules
         </button>
         {evalResult ? (
-          <span className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-            awsApiCallExecuted={String(evalResult.awsApiCallExecuted)} mutationExecuted={String(evalResult.mutationExecuted)}
+          <span className="status-pill border-emerald-200 bg-emerald-50 text-emerald-700 py-1 text-[10px]">
+            awsApiCallExecuted={String(evalResult.awsApiCallExecuted)} &bull; mutationExecuted={String(evalResult.mutationExecuted)}
           </span>
         ) : null}
         {actionMessage ? (
-          <span className="rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+          <span className="status-pill border-slate-200 bg-white text-slate-600 py-1 text-[10px]">
             {actionMessage}
           </span>
         ) : null}
       </section>
 
-      <section className="mb-6 grid gap-3 md:grid-cols-5">
+      {/* Severity Grid */}
+      <section className="mb-6 grid gap-4 grid-cols-2 md:grid-cols-5">
         {(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as const).map((severity) => (
-          <div key={severity} className={`rounded-md border p-3 ${SEVERITY_COLORS[severity]}`}>
-            <p className="text-xs font-bold uppercase">{severity}</p>
-            <p className="mt-1 text-2xl font-bold">{activeCounts[severity]}</p>
+          <div key={severity} className={`border p-4 rounded-xl shadow-sm flex flex-col justify-between ${SEVERITY_COLORS[severity]}`}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total {severity}</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-tight">{activeCounts[severity]}</p>
           </div>
         ))}
       </section>
 
-      <section className="mb-6 rounded-md border border-line bg-white p-5">
-        <h3 className="text-sm font-semibold text-ink">
-          Rules Catalog ({rulesData.rules.length} rules)
-        </h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600 mb-4">
-          {rulesData.message} Rule evaluation does not call AWS and does not
-          execute remediation.
-        </p>
+      <section className="mb-6 premium-card">
+        <div className="border-b border-line px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-ink">
+              Security Rules Catalog
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Determinated checking rules evaluate stored DB assets metadata only.
+            </p>
+          </div>
+          <span className="status-pill border-indigo-200 bg-indigo-50/50 text-indigo-700 py-0.5 text-[10px]">
+            {rulesData.rules.length} Rules Active
+          </span>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">Rule ID</th>
-                <th className="px-4 py-3">Severity</th>
-                <th className="px-4 py-3">Description</th>
+                <th className="px-5 py-3">Rule ID</th>
+                <th className="px-5 py-3">Severity</th>
+                <th className="px-5 py-3">Title Description</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {rulesData.rules.map(rule => (
-                <tr key={rule.ruleId}>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-700">{rule.ruleId}</td>
-                  <td className="px-4 py-3"><span className={`rounded border px-2 py-0.5 text-xs font-bold ${SEVERITY_COLORS[rule.severity] || ""}`}>{rule.severity}</span></td>
-                  <td className="px-4 py-3 text-slate-600">{rule.title}</td>
+                <tr key={rule.ruleId} className="hover:bg-slate-50/30 transition-colors">
+                  <td className="px-5 py-3 font-mono text-xs text-slate-600 font-semibold">{rule.ruleId}</td>
+                  <td className="px-5 py-3">
+                    <span className={`status-pill py-0.5 text-[9px] ${SEVERITY_COLORS[rule.severity] || ""}`}>
+                      {rule.severity}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-xs text-slate-600 font-medium">{rule.title}</td>
                 </tr>
               ))}
             </tbody>
@@ -283,19 +296,19 @@ export default function SecurityPage() {
         </div>
       </section>
 
-      <section className="rounded-md border border-line bg-white p-5">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <section className="premium-card p-5">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-line pb-4 mb-4">
           <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-alert" />
-            <h3 className="text-sm font-semibold text-ink">
-              Risk workflow queue ({filteredFindings.length})
+            <ShieldAlert className="h-5 w-5 text-red-600" />
+            <h3 className="text-sm font-bold text-ink">
+              Risk Workflow Execution Queue ({filteredFindings.length})
             </h3>
           </div>
           <div className="flex items-center gap-3">
             <select 
               value={filterSeverity} 
               onChange={e => setFilterSeverity(e.target.value)}
-              className="rounded border border-line px-3 py-1.5 text-sm text-slate-700"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white outline-none"
             >
               <option value="ALL">All Severities</option>
               <option value="CRITICAL">Critical</option>
@@ -307,7 +320,7 @@ export default function SecurityPage() {
             <select 
               value={filterStatus} 
               onChange={e => setFilterStatus(e.target.value)}
-              className="rounded border border-line px-3 py-1.5 text-sm text-slate-700"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white outline-none"
             >
               <option value="ALL">All Statuses</option>
               <option value="OPEN">Open</option>
@@ -321,65 +334,72 @@ export default function SecurityPage() {
           </div>
         </div>
 
-        <div className="mt-4 space-y-4">
+        <div className="space-y-5">
           {filteredFindings.length === 0 ? (
-            <p className="text-sm text-slate-500 py-4">No findings match the selected filters.</p>
+            <p className="text-xs text-slate-500 py-6 text-center italic">No security findings found matching the selected parameters.</p>
           ) : filteredFindings.map((finding) => (
-            <div key={finding.id} className="rounded-md border border-line p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded border px-2 py-0.5 text-xs font-bold ${SEVERITY_COLORS[finding.severity] || ""}`}>
+            <div key={finding.id} className="border border-line p-5 rounded-xl bg-slate-50/20 hover:bg-slate-50/50 transition-all shadow-sm">
+              <div className="flex flex-wrap items-center gap-2 border-b border-line pb-3 mb-4">
+                <span className={`status-pill py-0.5 text-[10px] ${SEVERITY_COLORS[finding.severity] || ""}`}>
                   {finding.severity}
                 </span>
-                <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                  {finding.priority}
+                <span className="status-pill border-slate-200 bg-white text-slate-700 py-0.5 text-[10px]">
+                  Priority: {finding.priority}
                 </span>
-                <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                  {WORKFLOW_LABELS[finding.workflowStatus] || finding.workflowStatus}
+                <span className="status-pill border-slate-200 bg-white text-slate-700 py-0.5 text-[10px]">
+                  State: {WORKFLOW_LABELS[finding.workflowStatus] || finding.workflowStatus}
                 </span>
                 {finding.sampleData ? (
-                  <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">
-                    Sample/demo
+                  <span className="status-pill border-indigo-200 bg-indigo-50 text-indigo-700 py-0.5 text-[10px]">
+                    Sample data
                   </span>
                 ) : null}
               </div>
 
-              <div className="mt-3 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                <div>
-                  <p className="text-sm font-semibold text-ink">{finding.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    {finding.description}
-                  </p>
-                  <div className="mt-3 grid gap-3 text-xs text-slate-600 md:grid-cols-2">
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-ink leading-snug">{finding.title}</h4>
+                    <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                      {finding.description}
+                    </p>
+                  </div>
+                  
+                  <div className="grid gap-3 text-[11px] text-slate-600 sm:grid-cols-2 bg-white p-3 rounded-lg border border-line shadow-sm">
                     <InfoLine label="Owner team" value={finding.ownerTeamName || "Unassigned"} />
                     <InfoLine label="Assigned user" value={finding.assignedToUserEmail || "Unassigned"} />
                     <InfoLine label="Target date" value={formatDate(finding.targetResolutionDate)} />
                     <InfoLine label="Account" value={finding.awsAccountName || "Unknown"} />
-                    <InfoLine label="Resource" value={finding.resourceName || "No resource"} />
-                    <InfoLine label="Evidence" value={finding.evidenceSummary} />
+                    <InfoLine label="Resource Target" value={finding.resourceName || "No resource name"} />
+                    <InfoLine label="Evidence telemetry" value={finding.evidenceSummary} />
                   </div>
+                  
                   {finding.businessImpact ? (
-                    <Panel label="Business impact" value={finding.businessImpact} />
+                    <Panel label="Business Impact" value={finding.businessImpact} />
                   ) : null}
                   {finding.remediationPlan ? (
-                    <Panel label="Review-only remediation plan" value={finding.remediationPlan} />
+                    <Panel label="Review-only Remediation Details" value={finding.remediationPlan} />
                   ) : null}
                   {finding.riskAcceptanceReason ? (
                     <Panel
-                      label="Risk acceptance"
-                      value={`${finding.riskAcceptanceReason} Expires: ${formatDate(finding.riskAcceptedUntil)}`}
+                      label="Risk Acceptance Details"
+                      value={`${finding.riskAcceptanceReason} &bull; Expiration: ${formatDate(finding.riskAcceptedUntil)}`}
                     />
                   ) : null}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-2">
-                  <ActionButton icon={<ClipboardCheck className="h-4 w-4" />} label="Acknowledge" onClick={() => runAction(finding, "acknowledge")} busy={activeFindingId === finding.id} />
-                  <ActionButton icon={<UserCheck className="h-4 w-4" />} label="Assign" onClick={() => runAction(finding, "assign")} busy={activeFindingId === finding.id} />
-                  <ActionButton icon={<Flag className="h-4 w-4" />} label="Plan" onClick={() => runAction(finding, "plan-remediation")} busy={activeFindingId === finding.id} />
-                  <ActionButton icon={<CheckCircle2 className="h-4 w-4" />} label="Accept risk" onClick={() => runAction(finding, "accept-risk")} busy={activeFindingId === finding.id} />
-                  <ActionButton icon={<ShieldAlert className="h-4 w-4" />} label="False positive" onClick={() => runAction(finding, "false-positive")} busy={activeFindingId === finding.id} />
-                  <ActionButton icon={<CheckCircle2 className="h-4 w-4" />} label="Resolve" onClick={() => runAction(finding, "resolve")} busy={activeFindingId === finding.id} />
-                  <ActionButton icon={<Archive className="h-4 w-4" />} label="Archive" onClick={() => runAction(finding, "archive")} busy={activeFindingId === finding.id} />
-                  <ActionButton icon={<RotateCcw className="h-4 w-4" />} label="Reopen" onClick={() => runAction(finding, "reopen")} busy={activeFindingId === finding.id} />
+                <div className="border border-line rounded-xl bg-white p-4 shadow-sm h-fit">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-line pb-2 mb-3">Execute Workflow Transition</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <ActionButton icon={<ClipboardCheck size={14} />} label="Ack" onClick={() => runAction(finding, "acknowledge")} busy={activeFindingId === finding.id} />
+                    <ActionButton icon={<UserCheck size={14} />} label="Assign" onClick={() => runAction(finding, "assign")} busy={activeFindingId === finding.id} />
+                    <ActionButton icon={<Flag size={14} />} label="Plan" onClick={() => runAction(finding, "plan-remediation")} busy={activeFindingId === finding.id} />
+                    <ActionButton icon={<CheckCircle2 size={14} />} label="Accept" onClick={() => runAction(finding, "accept-risk")} busy={activeFindingId === finding.id} />
+                    <ActionButton icon={<ShieldAlert size={14} />} label="False Pos" onClick={() => runAction(finding, "false-positive")} busy={activeFindingId === finding.id} />
+                    <ActionButton icon={<CheckCircle2 size={14} />} label="Resolve" onClick={() => runAction(finding, "resolve")} busy={activeFindingId === finding.id} />
+                    <ActionButton icon={<Archive size={14} />} label="Archive" onClick={() => runAction(finding, "archive")} busy={activeFindingId === finding.id} />
+                    <ActionButton icon={<RotateCcw size={14} />} label="Reopen" onClick={() => runAction(finding, "reopen")} busy={activeFindingId === finding.id} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -448,7 +468,7 @@ function ActionButton({
 }) {
   return (
     <button
-      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-line px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-line px-2 py-1.5 text-[11px] font-bold text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-40"
       type="button"
       disabled={busy}
       onClick={onClick}
@@ -462,16 +482,16 @@ function ActionButton({
 function InfoLine({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="font-semibold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-slate-700">{value}</p>
+      <p className="font-bold text-[9px] uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="mt-0.5 text-slate-700 font-semibold">{value}</p>
     </div>
   );
 }
 
 function Panel({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs leading-5 text-slate-700">
-      <span className="font-semibold">{label}:</span> {value}
+    <div className="mt-2 rounded-lg border border-line bg-slate-50/50 p-3 text-xs leading-relaxed text-slate-700">
+      <span className="font-bold text-indigo-600">{label}:</span> <span dangerouslySetInnerHTML={{ __html: value }} />
     </div>
   );
 }

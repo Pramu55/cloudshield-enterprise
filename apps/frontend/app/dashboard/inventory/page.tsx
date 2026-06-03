@@ -4,7 +4,7 @@ import { DashboardPage } from "../shared";
 import { EmptyState } from "../../../lib/ui";
 import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
 import { useState, useEffect, useMemo } from "react";
-import { ChevronDown, ChevronUp, Search, Tag, Network } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, Tag, Network, Layers, ShieldAlert, Cpu } from "lucide-react";
 
 type ResourceResponse = {
   items: Array<{
@@ -56,7 +56,6 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAccount, setSelectedAccount] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("");
-  const [selectedType, setSelectedType] = useState("");
   const [selectedRisk, setSelectedRisk] = useState("");
 
   // Dynamically extract unique choices from resources list
@@ -70,11 +69,6 @@ export default function InventoryPage() {
     return Array.from(new Set(regs));
   }, [data?.items]);
 
-  const typesList = useMemo(() => {
-    const types = data?.items.map(i => i.resourceType).filter(Boolean) || [];
-    return Array.from(new Set(types));
-  }, [data?.items]);
-
   const filteredItems = data?.items.filter(item => {
     const matchesSearch = 
       (item.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -83,10 +77,9 @@ export default function InventoryPage() {
     
     const matchesAccount = selectedAccount ? item.awsAccount?.name === selectedAccount : true;
     const matchesRegion = selectedRegion ? (item.region || "global") === selectedRegion : true;
-    const matchesType = selectedType ? item.resourceType === selectedType : true;
     const matchesRisk = selectedRisk === "at_risk" ? (item.riskCount && item.riskCount > 0) : true;
 
-    return matchesSearch && matchesAccount && matchesRegion && matchesType && matchesRisk;
+    return matchesSearch && matchesAccount && matchesRegion && matchesRisk;
   }) || [];
 
   const hasRealResources = data?.items.some(r => !r.id.startsWith("instant-resource"));
@@ -96,7 +89,7 @@ export default function InventoryPage() {
       title="Cloud Asset Inventory Console"
       description="Database-backed asset management. Scans populate AWS resources automatically under safe governance rules."
     >
-      <div className="mb-4 inline-flex items-center gap-2 rounded border border-warning bg-yellow-50 px-3 py-1 text-xs font-semibold text-slate-700">
+      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-200/50 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 shadow-sm">
         {hasRealResources ? (
           <>
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -104,7 +97,7 @@ export default function InventoryPage() {
           </>
         ) : (
           <>
-            <span className="h-2 w-2 rounded-full bg-yellow-500"></span>
+            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
             Sample / Demo Inventory Loaded (Scans Not Run)
           </>
         )}
@@ -112,20 +105,20 @@ export default function InventoryPage() {
 
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
 
-      <div className="mb-6 grid gap-3 md:grid-cols-5">
+      <div className="mb-6 grid gap-4 md:grid-cols-4">
         <div className="relative md:col-span-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
           <input 
             type="text" 
             placeholder="Search by name, ID, or type..." 
-            className="w-full pl-9 pr-4 py-2.5 rounded-md border border-line text-sm text-ink focus:outline-none focus:border-signal bg-white"
+            className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-line text-sm text-ink focus:outline-none focus:border-signal bg-white"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
 
         <select
-          className="rounded-md border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal"
+          className="rounded-lg border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal outline-none"
           value={selectedAccount}
           onChange={e => setSelectedAccount(e.target.value)}
         >
@@ -136,7 +129,7 @@ export default function InventoryPage() {
         </select>
 
         <select
-          className="rounded-md border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal"
+          className="rounded-lg border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal outline-none"
           value={selectedRegion}
           onChange={e => setSelectedRegion(e.target.value)}
         >
@@ -145,27 +138,35 @@ export default function InventoryPage() {
             <option key={reg} value={reg}>{reg}</option>
           ))}
         </select>
+      </div>
 
-        <select
-          className="rounded-md border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal"
-          value={selectedRisk}
-          onChange={e => setSelectedRisk(e.target.value)}
+      <div className="flex gap-2 mb-6">
+        <button
+          className={`filter-chip ${selectedRisk === "" ? "active" : ""}`}
+          onClick={() => setSelectedRisk("")}
+          type="button"
         >
-          <option value="">All Risks</option>
-          <option value="at_risk">At Risk / Open Findings</option>
-        </select>
+          All Assets
+        </button>
+        <button
+          className={`filter-chip ${selectedRisk === "at_risk" ? "active" : ""}`}
+          onClick={() => setSelectedRisk("at_risk")}
+          type="button"
+        >
+          At Risk ({data?.items.filter(i => (i.riskCount || 0) > 0).length || 0})
+        </button>
       </div>
 
       {!filteredItems.length ? (
         <EmptyState label="No resources match your filter selections." />
       ) : (
-        <div className="rounded-md border border-line bg-white">
-          <div className="grid gap-2 border-b border-line p-4 md:grid-cols-6 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-            <p className="col-span-2">Resource ID / Name</p>
+        <div className="premium-card">
+          <div className="grid gap-2 border-b border-line p-4 md:grid-cols-6 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-400">
+            <p className="col-span-2 pl-2">Resource ID / Name</p>
             <p>Type</p>
             <p>Account</p>
             <p>Region</p>
-            <p className="text-right">Details</p>
+            <p className="text-right pr-2">Details</p>
           </div>
           <div className="divide-y divide-line">
             {filteredItems.map((resource) => (
@@ -205,105 +206,112 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
   return (
     <div>
       <div 
-        className="grid gap-2 p-4 md:grid-cols-6 cursor-pointer hover:bg-slate-50 transition-colors items-center"
+        className="grid gap-2 p-4 md:grid-cols-6 cursor-pointer hover:bg-slate-50/50 transition-colors items-center"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="col-span-2">
-          <p className="text-sm font-semibold text-ink">{resource.name || resource.resourceId}</p>
-          {resource.name && <span className="text-[10px] font-mono text-slate-500">{resource.resourceId}</span>}
+        <div className="col-span-2 pl-2 flex items-center gap-3">
+          <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${resource.riskCount && resource.riskCount > 0 ? "bg-red-50 text-red-600" : "bg-indigo-50 text-indigo-600"}`}>
+            <Cpu size={15} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-ink leading-tight">{resource.name || resource.resourceId}</p>
+            {resource.name && <span className="text-[10px] font-mono text-slate-400 font-semibold">{resource.resourceId}</span>}
+          </div>
         </div>
-        <p className="text-sm text-slate-600 font-mono text-xs">{resource.resourceType}</p>
-        <p className="text-sm text-slate-600 truncate" title={resource.awsAccount?.name}>{resource.awsAccount?.name}</p>
-        <p className="text-sm text-slate-600">{resource.region || "global"}</p>
-        <div className="text-right text-slate-400">
-          {expanded ? <ChevronUp className="inline" size={18} /> : <ChevronDown className="inline" size={18} />}
+        <p className="text-xs text-slate-500 font-mono font-semibold">{resource.resourceType}</p>
+        <p className="text-xs text-slate-600 font-semibold truncate" title={resource.awsAccount?.name}>{resource.awsAccount?.name}</p>
+        <p className="text-xs text-slate-500 uppercase font-bold">{resource.region || "global"}</p>
+        <div className="text-right pr-2 text-slate-400">
+          {expanded ? <ChevronUp className="inline" size={16} /> : <ChevronDown className="inline" size={16} />}
         </div>
       </div>
       
       {expanded && (
-        <div className="p-5 bg-slate-50 border-t border-line text-sm text-slate-700">
+        <div className="p-6 bg-slate-50/50 border-t border-line text-sm text-slate-700">
           {loading ? (
-            <p className="text-slate-500 animate-pulse">Loading context, tags, and relationships...</p>
+            <div className="flex items-center gap-2 py-4 justify-center text-slate-400 text-xs font-semibold">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+              Loading relationships and metadata context...
+            </div>
           ) : details ? (
-            <div className="space-y-5">
-              <div className="grid gap-6 md:grid-cols-3">
-                <div>
-                  <p className="font-semibold text-xs text-slate-500 uppercase mb-2">Asset Context</p>
-                  <div className="space-y-1.5 bg-white p-3 rounded border border-line text-xs">
-                    <p><span className="font-semibold text-slate-600">ID:</span> {details.resourceId}</p>
-                    <p><span className="font-semibold text-slate-600">Type:</span> {details.type}</p>
-                    <p><span className="font-semibold text-slate-600">Region:</span> {details.region || "global"}</p>
-                    <p><span className="font-semibold text-slate-600">Account:</span> {details.awsAccount?.name}</p>
-                    <p><span className="font-semibold text-slate-600">Source:</span> {details.scanSource}</p>
-                    <p><span className="font-semibold text-slate-600">Last Seen:</span> {details.lastSeenAt ? new Date(details.lastSeenAt).toLocaleString() : "Never"}</p>
+            <div className="space-y-6">
+              <div className="grid gap-5 md:grid-cols-3">
+                <div className="border border-line rounded-xl bg-white p-4 shadow-sm">
+                  <p className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-3">Asset Metadata</p>
+                  <div className="space-y-2 text-xs">
+                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">ID:</span> <span className="font-mono text-slate-800">{details.resourceId}</span></p>
+                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">Type:</span> <span className="text-slate-800">{details.type}</span></p>
+                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">Region:</span> <span className="text-slate-800 uppercase font-bold">{details.region || "global"}</span></p>
+                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">Source:</span> <span className="text-indigo-600 font-semibold">{details.scanSource}</span></p>
+                    <p className="flex justify-between"><span className="font-semibold text-slate-400">Last Seen:</span> <span className="text-slate-700">{details.lastSeenAt ? new Date(details.lastSeenAt).toLocaleString() : "Never"}</span></p>
                   </div>
                 </div>
                 
-                <div>
-                  <p className="font-semibold text-xs text-slate-500 uppercase mb-2 flex items-center gap-1">
-                    <Network size={12} className="text-signal" /> Ingested Relationships
+                <div className="border border-line rounded-xl bg-white p-4 shadow-sm">
+                  <p className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1">
+                    <Network size={12} className="text-indigo-600" /> Ingested Relationships
                   </p>
-                  <div className="space-y-2 bg-white p-3 rounded border border-line min-h-[120px] max-h-[200px] overflow-y-auto">
+                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
                     {details.relationships && details.relationships.length > 0 ? (
                       details.relationships.map((r: any) => {
                         const isSource = r.source.id === resource.id;
                         const peer = isSource ? r.target : r.source;
                         return (
-                          <div key={r.id} className="text-[11px] p-2 border border-slate-100 rounded bg-slate-50 space-y-0.5">
-                            <div className="flex justify-between font-semibold text-slate-700">
-                              <span>{peer.name || peer.resourceId}</span>
-                              <span className="text-signal uppercase text-[9px]">{r.relationshipType}</span>
+                          <div key={r.id} className="text-[11px] p-2 border border-slate-100 rounded-lg bg-slate-50 space-y-1">
+                            <div className="flex justify-between font-bold text-slate-700">
+                              <span className="truncate max-w-[140px]">{peer.name || peer.resourceId}</span>
+                              <span className="status-pill px-2 border-indigo-200 bg-indigo-50/50 text-indigo-600 text-[8px] py-0.5 font-bold uppercase tracking-wider">{r.relationshipType}</span>
                             </div>
-                            <div className="text-[9px] text-slate-400 font-mono">{peer.resourceType}</div>
+                            <div className="text-[9px] text-slate-400 font-mono font-semibold">{peer.resourceType}</div>
                           </div>
                         );
                       })
                     ) : (
-                      <p className="text-xs text-slate-400 italic">No resource relationships detected in DB.</p>
+                      <p className="text-xs text-slate-400 italic py-4 text-center">No resource relationships detected in DB.</p>
                     )}
                   </div>
                 </div>
 
-                <div>
-                  <p className="font-semibold text-xs text-slate-500 uppercase mb-2">Linked Posture Findings</p>
-                  <div className="space-y-2 bg-white p-3 rounded border border-line min-h-[120px] max-h-[200px] overflow-y-auto">
+                <div className="border border-line rounded-xl bg-white p-4 shadow-sm">
+                  <p className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1">
+                    <ShieldAlert size={12} className="text-red-500" /> Linked Posture Findings
+                  </p>
+                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
                     {details.findings && details.findings.length > 0 ? (
                       details.findings.map((f: any) => (
-                        <div key={f.id} className="flex items-center justify-between text-xs p-1.5 border-b last:border-0 border-slate-100">
-                          <span className="font-semibold text-slate-700 truncate max-w-[150px]">{f.title}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            f.severity === "CRITICAL" || f.severity === "HIGH" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"
-                          }`}>{f.severity}</span>
+                        <div key={f.id} className="flex items-center justify-between text-xs p-2 border border-red-100 rounded-lg bg-red-50/30">
+                          <span className="font-bold text-slate-700 truncate max-w-[160px]">{f.title}</span>
+                          <span className="status-pill border-red-200 bg-red-50 text-red-600 text-[8px] font-extrabold uppercase py-0.5">{f.severity}</span>
                         </div>
                       ))
                     ) : (
-                      <p className="text-xs text-slate-400 italic">No security posture violations found.</p>
+                      <p className="text-xs text-slate-400 italic py-4 text-center">No security posture violations found.</p>
                     )}
                   </div>
                 </div>
               </div>
 
               <div>
-                <p className="font-semibold text-xs text-slate-500 uppercase mb-2 flex items-center gap-1">
-                  <Tag size={12} className="text-brand" /> Resource Tags
+                <p className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">
+                  <Tag size={12} className="text-slate-400" /> Resource Tags
                 </p>
                 {details.tags && Object.keys(details.tags).length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 bg-white p-3 rounded border border-line">
+                  <div className="flex flex-wrap gap-2 border border-line bg-white p-3 rounded-xl shadow-sm">
                     {Object.entries(details.tags).map(([k, v]) => (
-                      <span key={k} className="text-[11px] bg-slate-100 px-2 py-1 rounded text-slate-700 font-mono">
-                        <span className="font-semibold text-slate-800">{k}:</span> {String(v)}
+                      <span key={k} className="text-[11px] bg-slate-50 border border-line px-2.5 py-1 rounded-lg text-slate-700 font-mono">
+                        <span className="font-bold text-slate-800">{k}:</span> {String(v)}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white p-3 rounded border border-line text-xs text-slate-400 italic">
+                  <div className="border border-line bg-white p-3 rounded-xl text-xs text-slate-400 italic shadow-sm">
                     No resource tags found on this asset.
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <p className="text-red-500">Failed to load detailed asset context.</p>
+            <p className="text-red-500 text-xs font-semibold text-center py-2">Failed to load detailed asset context.</p>
           )}
         </div>
       )}

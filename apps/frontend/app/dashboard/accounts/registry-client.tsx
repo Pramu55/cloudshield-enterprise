@@ -12,7 +12,7 @@ import type {
   CreateAwsAccountRequest,
   ValidateReadonlyConnectionResponse
 } from "@cloudshield/contracts";
-import { Archive, CheckCircle2, Pencil, Plus, ShieldCheck } from "lucide-react";
+import { Archive, CheckCircle2, Pencil, Plus, ShieldCheck, HelpCircle, ShieldAlert, KeyRound, Cloud } from "lucide-react";
 
 type Props = {
   initialAccounts: AwsAccountDto[];
@@ -224,83 +224,91 @@ export function AccountRegistryClient({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-md border border-warning/50 bg-white p-4">
-        <p className="text-sm font-semibold text-ink">
-          AWS account registry only - real AWS inventory scanning is not enabled yet.
-        </p>
-        <p className="mt-1 text-sm leading-6 text-slate-600">{message}</p>
+      <section className="safety-banner border border-amber-200/50 bg-amber-50/70 p-4 rounded-xl flex items-start gap-3">
+        <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+        <div className="text-xs">
+          <p className="font-bold text-amber-900 uppercase tracking-wider">Operational Console Message</p>
+          <p className="mt-1 leading-relaxed text-amber-800">{message}</p>
+        </div>
       </section>
 
-      <section className="rounded-md border border-line bg-white p-5">
-        <div className="grid gap-4 md:grid-cols-4">
+      <section className="premium-card p-5">
+        <div className="grid gap-4 md:grid-cols-4 border-b border-line pb-4 mb-4">
           <StatusTile label="Connector mode" value={connector.mode} />
           <StatusTile label="Read-only validation" value={connector.status} />
           <StatusTile label="Inventory scan" value="Disabled plan only" />
           <StatusTile
             label="AWS credentials"
-            value="No AWS credentials are stored in CloudShield"
+            value="No credentials in DB"
           />
         </div>
-        <p className="mt-4 text-sm leading-6 text-slate-600">
-          Only STS identity validation is planned or enabled. No inventory scan
-          runs in this milestone, and no AWS resources are changed.
-        </p>
-        <p className="mt-2 text-sm font-medium text-slate-700">
+        <div className="flex gap-2 items-center text-xs text-slate-500 bg-slate-50 border border-line p-3 rounded-lg">
+          <HelpCircle size={14} className="text-slate-400 shrink-0" />
+          <span>
+            Only STS identity validation is planned or enabled. No inventory scan runs in this milestone, and no AWS resources are changed.
+          </span>
+        </div>
+        <p className="mt-2 text-xs font-semibold text-indigo-600">
           {connector.message}
         </p>
       </section>
 
       {lastValidationResult && (
-        <section className="rounded-md border border-emerald-500/30 bg-emerald-50 p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <section className="premium-card border-emerald-300 bg-emerald-50/50 p-5 space-y-3">
+          <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+            <h4 className="text-xs font-bold text-emerald-800 flex items-center gap-2 uppercase tracking-wider">
+              <span className="status-dot-pulse bg-emerald-500" />
               Live AWS STS Connection Validated Successfully
             </h4>
-            <span className="text-xs font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded">
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
               awsApiCallExecuted={String(lastValidationResult.awsApiCallExecuted)}
             </span>
           </div>
-          <div className="grid gap-4 md:grid-cols-5 text-xs text-slate-700">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-5 text-xs text-slate-700">
             <div>
-              <p className="font-semibold text-slate-500 uppercase">AWS Account ID</p>
-              <p className="mt-0.5 font-mono text-sm font-semibold">{lastValidationResult.accountId}</p>
+              <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">AWS Account ID</p>
+              <p className="mt-1 font-mono text-sm font-semibold text-slate-800">{lastValidationResult.accountId}</p>
             </div>
             <div>
-              <p className="font-semibold text-slate-500 uppercase">Caller ARN</p>
-              <p className="mt-0.5 font-mono text-sm font-semibold break-all">{lastValidationResult.callerArn}</p>
+              <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Caller ARN</p>
+              <p className="mt-1 font-mono text-xs font-semibold text-slate-800 break-all">{lastValidationResult.callerArn}</p>
             </div>
             <div>
-              <p className="font-semibold text-slate-500 uppercase">Validation Region</p>
-              <p className="mt-0.5 text-sm font-semibold">{lastValidationResult.region}</p>
+              <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Validation Region</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800">{lastValidationResult.region}</p>
             </div>
             <div>
-              <p className="font-semibold text-slate-500 uppercase">Connector Mode</p>
-              <p className="mt-0.5 text-sm font-semibold">{lastValidationResult.mode}</p>
+              <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Connector Mode</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800 uppercase">{lastValidationResult.mode}</p>
             </div>
             <div>
-              <p className="font-semibold text-slate-500 uppercase">Timestamp</p>
-              <p className="mt-0.5 text-sm font-semibold">{lastValidationResult.validationTime}</p>
+              <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Timestamp</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800">{lastValidationResult.validationTime}</p>
             </div>
           </div>
         </section>
       )}
 
-      <section className="rounded-md border border-line bg-white p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-ink">
-              AWS read-only inventory scanner plan
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {inventoryPlan.message} {inventoryPlan.sampleDataLabel}
-            </p>
+      <section className="premium-card p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between border-b border-line pb-4 mb-4">
+          <div className="flex gap-3 items-start">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+              <Cloud size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-ink">
+                AWS read-only inventory scanner plan
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {inventoryPlan.message} {inventoryPlan.sampleDataLabel}
+              </p>
+            </div>
           </div>
-          <span className="rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-xs font-semibold text-slate-700">
+          <span className="status-pill border-amber-200 bg-amber-50 text-amber-700 py-0.5 text-[10px] font-bold self-start">
             awsApiCallExecuted=false
           </span>
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3">
           <GuideList
               title="Planned resource types"
               items={inventoryPlan.supportedResourceTypes.map((item) =>
@@ -321,95 +329,95 @@ export function AccountRegistryClient({
               items={inventoryPlan.blockedMutationPatterns}
           />
         </div>
-        <p className="mt-4 text-sm font-medium text-slate-700">
+        <div className="mt-5 pt-4 border-t border-line text-xs font-semibold text-slate-500">
           Inventory scanning, automatic remediation, AWS mutation, and Terraform apply remain disabled.
-        </p>
+        </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="rounded-md border border-line bg-white">
-          <div className="border-b border-line px-4 py-3">
-            <h3 className="text-sm font-semibold text-ink">
-              Registered accounts
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="premium-card">
+          <div className="border-b border-line px-5 py-4">
+            <h3 className="text-sm font-bold text-ink">
+              Registered Accounts Registry
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Account</th>
-                  <th className="px-4 py-3">Environment</th>
-                  <th className="px-4 py-3">Owner</th>
-                  <th className="px-4 py-3">Regions</th>
-                  <th className="px-4 py-3">Connection</th>
-                  <th className="px-4 py-3">Scores</th>
-                  <th className="px-4 py-3">Actions</th>
+                  <th className="px-5 py-3">Account details</th>
+                  <th className="px-5 py-3">Env</th>
+                  <th className="px-5 py-3">Owner</th>
+                  <th className="px-5 py-3">Regions</th>
+                  <th className="px-5 py-3">Connection</th>
+                  <th className="px-5 py-3">Posture</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {accounts.map((account) => (
-                  <tr key={account.id}>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-ink">{account.name}</div>
-                      <div className="mt-1 font-mono text-xs text-slate-500">
+                  <tr key={account.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-5 py-4">
+                      <div className="font-bold text-ink">{account.name}</div>
+                      <div className="mt-1 font-mono text-[11px] text-slate-400">
                         {account.accountId}
                       </div>
                       {account.description ? (
-                        <div className="mt-1 max-w-xs text-xs text-slate-500">
+                        <div className="mt-1 max-w-xs text-xs text-slate-500 line-clamp-2">
                           {account.description}
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="px-5 py-4 text-slate-700 font-semibold text-xs">
                       {account.environment}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="px-5 py-4 text-slate-600 text-xs font-medium">
                       {account.ownerTeamName || "Unassigned"}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="px-5 py-4 text-slate-600 text-xs font-medium">
                       {account.regions.join(", ")}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                    <td className="px-5 py-4">
+                      <span className="status-pill border-slate-200 bg-slate-100 text-slate-700 py-0.5 text-[10px]">
                         {ConnectionLabels[account.connectionStatus]}
                       </span>
-                      <div className="mt-1 text-xs text-slate-500">
-                        Last scan: {account.lastScanAt ? new Date(account.lastScanAt).toLocaleString() : "Not scanned"}
+                      <div className="mt-1 text-[10px] text-slate-400 font-medium">
+                        Last scan: {account.lastScanAt ? new Date(account.lastScanAt).toLocaleString() : "Never"}
                       </div>
                       {account.connectionStatus === "VALIDATION_SUCCEEDED" && (
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          Last validated: {new Date(account.updatedAt).toLocaleString()}
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          Validated: {new Date(account.updatedAt).toLocaleString()}
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">
+                    <td className="px-5 py-4 text-xs text-slate-600 font-medium space-y-0.5">
                       <div>Security: {scoreLabel(account.securityScore)}</div>
                       <div>Cost: {scoreLabel(account.costScore)}</div>
                       <div>Compliance: {scoreLabel(account.complianceScore)}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex gap-2.5 justify-end">
                         <button
-                          className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50"
-                          title="Edit account"
+                          className="rounded-lg border border-line p-1.5 text-slate-600 hover:bg-slate-100 hover:text-ink transition-colors min-h-0"
+                          title="Edit Account Details"
                           type="button"
                           onClick={() => setForm(fromAccount(account))}
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
-                          className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50"
-                          title="Run planned validation check"
+                          className="rounded-lg border border-line p-1.5 text-slate-600 hover:bg-slate-100 hover:text-ink transition-colors min-h-0"
+                          title="Run Database-only Connection Posture Check"
                           type="button"
                           onClick={() => validateAccount(account)}
                         >
                           <CheckCircle2 className="h-4 w-4" />
                         </button>
                         <button
-                          className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="rounded-lg border border-line p-1.5 text-slate-600 hover:bg-slate-100 hover:text-ink transition-colors min-h-0 disabled:cursor-not-allowed disabled:opacity-40"
                           title={
                             connector.enabled
-                              ? "Validate read-only STS connection"
+                              ? "Validate Real STS Connection"
                               : connector.message
                           }
                           type="button"
@@ -419,21 +427,21 @@ export function AccountRegistryClient({
                           <ShieldCheck className="h-4 w-4" />
                         </button>
                         <button
-                          className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 font-semibold text-xs"
+                          className="rounded-lg border border-line px-2.5 py-1 text-slate-600 hover:bg-slate-100 hover:text-ink transition-colors min-h-0 disabled:cursor-not-allowed disabled:opacity-40 text-xs font-bold"
                           title={
                             inventoryPlan.scannerMode === "disabled"
-                              ? "EC2 read-only scanner is implemented but disabled by default."
-                              : "Start EC2 inventory scan"
+                              ? "Scanner execution is disabled."
+                              : "Start EC2 Scan"
                           }
                           type="button"
                           disabled={inventoryPlan.scannerMode === "disabled" || inventoryPlan.scannerMode === "readonly-plan"}
                           onClick={() => setModalOpen({ type: "scan", account })}
                         >
-                          Start Scan
+                          Scan
                         </button>
                         <button
-                          className="rounded-md border border-line p-2 text-slate-700 hover:bg-slate-50"
-                          title="Archive registry record"
+                          className="rounded-lg border border-line p-1.5 text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors min-h-0"
+                          title="Archive Registry Record"
                           type="button"
                           onClick={() => archiveAccount(account)}
                         >
@@ -448,28 +456,28 @@ export function AccountRegistryClient({
           </div>
         </div>
 
-        <div className="rounded-md border border-line bg-white p-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Plus className="h-4 w-4 text-signal" />
-            <h3 className="text-sm font-semibold text-ink">
-              {activeAccount ? "Edit registry record" : "Add registry record"}
+        <div className="premium-card p-5 h-fit">
+          <div className="mb-4 flex items-center gap-2 border-b border-line pb-3">
+            <Plus className="h-4 w-4 text-indigo-600" />
+            <h3 className="text-sm font-bold text-ink">
+              {activeAccount ? "Edit Account Details" : "Add Account Details"}
             </h3>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <Field
               label="Account name"
               value={form.name}
               onChange={(value) => setForm({ ...form, name: value })}
             />
             <Field
-              label="AWS account ID"
+              label="AWS account ID (12 digits)"
               value={form.accountId}
               onChange={(value) => setForm({ ...form, accountId: value })}
             />
-            <label className="block text-xs font-semibold text-slate-600">
-              Environment
+            <label className="block text-xs font-bold text-slate-600">
+              Environment Class
               <select
-                className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm text-ink"
+                className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink bg-white outline-none"
                 value={form.environment}
                 onChange={(event) =>
                   setForm({
@@ -491,33 +499,33 @@ export function AccountRegistryClient({
               onChange={(value) => setForm({ ...form, ownerTeamId: value })}
             />
             <Field
-              label="Regions"
+              label="Regions (comma separated)"
               value={form.regions}
               onChange={(value) => setForm({ ...form, regions: value })}
             />
-            <label className="block text-xs font-semibold text-slate-600">
-              Notes
+            <label className="block text-xs font-bold text-slate-600">
+              Description notes
               <textarea
-                className="mt-1 min-h-24 w-full rounded-md border border-line px-3 py-2 text-sm text-ink"
+                className="mt-1 min-h-20 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink outline-none"
                 value={form.description}
                 onChange={(event) =>
                   setForm({ ...form, description: event.target.value })
                 }
               />
             </label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-2 border-t border-line">
               <button
-                className="cs-action-signal inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold"
+                className="cs-action-signal inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold shadow-sm"
                 type="button"
                 disabled={isSaving}
                 onClick={submitAccount}
               >
                 <ShieldCheck className="h-4 w-4" />
-                {isSaving ? "Saving" : "Save"}
+                {isSaving ? "Saving" : "Save Record"}
               </button>
               {activeAccount ? (
                 <button
-                  className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-slate-700"
+                  className="rounded-lg border border-line px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors"
                   type="button"
                   onClick={() => setForm(EmptyForm)}
                 >
@@ -529,57 +537,56 @@ export function AccountRegistryClient({
         </div>
       </section>
 
-      <section className="rounded-md border border-line bg-white p-5">
-        <h3 className="text-sm font-semibold text-ink">{setupGuide.title}</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+      <section className="premium-card p-5">
+        <h3 className="text-sm font-bold text-ink border-b border-line pb-3 mb-4">{setupGuide.title}</h3>
+        <p className="text-xs text-slate-600 leading-relaxed mb-4">
           {setupGuide.message}
         </p>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="grid gap-5 md:grid-cols-2">
           <GuideList title="Planned connection model" items={setupGuide.plannedConnectionModel} />
           <GuideList title="Current limitations" items={setupGuide.currentLimitations} />
         </div>
       </section>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg border border-line bg-white p-6 shadow-xl">
-            <h4 className="text-lg font-semibold text-ink">
-              {modalOpen.type === "validate" ? "Confirm STS Connection Validation" : "Confirm EC2 Inventory Scan"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-line bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <h4 className="text-base font-bold text-ink border-b border-line pb-3 flex items-center gap-2">
+              <ShieldAlert className="text-amber-500" size={18} />
+              {modalOpen.type === "validate" ? "Confirm STS Identity validation" : "Confirm EC2 Scanner Synchronize"}
             </h4>
             
-            <p className="mt-3 text-sm leading-6 text-slate-600">
+            <p className="mt-3 text-xs leading-relaxed text-slate-600">
               {modalOpen.type === "validate" ? (
                 <>
-                  <strong>Warning:</strong> This will execute a live AWS STS <code>GetCallerIdentity</code> API call.
-                  No mutations, resource creations, or scans will be executed.
+                  You are initiating a live connection validation. This requests a caller identity check via <strong>AWS STS GetCallerIdentity API</strong>. No mutation will run and no active scanner operations will execute.
                 </>
               ) : (
                 <>
-                  <strong>Warning:</strong> This will trigger live EC2 Describe API calls to scan and ingest EC2 instances, security groups, EBS volumes, VPCs, and subnets.
-                  No mutations, remediation, or changes to AWS resources will be made.
+                  You are initiating a read-only inventory synchronization. This requests <strong>EC2 Describe APIs</strong> to collect compute instance resources, security configurations, and subnet networks. No Terraform apply or mutations will execute.
                 </>
               )}
             </p>
 
-            <div className="mt-4 rounded bg-slate-50 p-3 text-xs text-slate-500 font-medium">
-              <p>Account: <span className="font-semibold text-ink">{modalOpen.account.name}</span></p>
-              <p>AWS ID: <span className="font-semibold text-ink font-mono">{modalOpen.account.accountId}</span></p>
-              <p className="mt-1 flex items-center gap-1.5 text-signal font-semibold">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-signal"></span>
-                Safe read-only execution gate active
+            <div className="mt-4 rounded-xl bg-slate-50 border border-line p-3 text-xs text-slate-500 font-medium">
+              <p>Account: <span className="font-bold text-ink">{modalOpen.account.name}</span></p>
+              <p>AWS ID: <span className="font-bold text-ink font-mono">{modalOpen.account.accountId}</span></p>
+              <p className="mt-2 flex items-center gap-1.5 text-indigo-600 font-bold text-[10px] uppercase tracking-wider">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping"></span>
+                Safe read-only execution guard active
               </p>
             </div>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 flex justify-end gap-2.5">
               <button
-                className="rounded-md border border-line bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                className="rounded-lg border border-line bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all min-h-0"
                 onClick={() => setModalOpen(null)}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition-all min-h-0 active:scale-95 shadow-sm"
                 onClick={() => {
                   const acc = modalOpen.account;
                   const type = modalOpen.type;
@@ -592,7 +599,7 @@ export function AccountRegistryClient({
                 }}
                 type="button"
               >
-                {modalOpen.type === "validate" ? "Confirm Validate" : "Confirm Scan"}
+                {modalOpen.type === "validate" ? "Confirm Validate" : "Confirm Sync"}
               </button>
             </div>
           </div>
@@ -612,10 +619,10 @@ function Field({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block text-xs font-semibold text-slate-600">
+    <label className="block text-xs font-bold text-slate-600">
       {label}
       <input
-        className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm text-ink"
+        className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink outline-none"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -625,20 +632,23 @@ function Field({
 
 function StatusTile({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-ink">{value}</p>
+    <div className="bg-slate-50/50 border border-line p-3 rounded-lg">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="mt-0.5 text-xs font-bold text-ink leading-tight capitalize">{value}</p>
     </div>
   );
 }
 
 function GuideList({ title, items }: { title: string; items: string[] }) {
   return (
-    <div>
-      <p className="text-xs font-semibold uppercase text-slate-500">{title}</p>
-      <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+    <div className="bg-slate-50/30 border border-line p-4 rounded-xl">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-line pb-2 mb-2">{title}</p>
+      <ul className="space-y-1.5 text-xs leading-relaxed text-slate-600">
         {items.map((item) => (
-          <li key={item}>{item}</li>
+          <li key={item} className="flex gap-2">
+            <span className="text-indigo-400 font-bold">&bull;</span>
+            <span>{item}</span>
+          </li>
         ))}
       </ul>
     </div>
