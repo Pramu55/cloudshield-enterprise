@@ -267,7 +267,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN",
   "CLOUDSHIELD_REAL_WORLD_DYNAMIC_PLATFORM_FOUNDATION_GREEN",
   "CLOUDSHIELD_AWS_CREDENTIAL_ENABLEMENT_READONLY_GREEN",
-  "CLOUDSHIELD_PRODUCTION_READINESS_AND_ORIGINAL_PLATFORM_POLISH_GREEN"
+  "CLOUDSHIELD_PRODUCTION_READINESS_AND_ORIGINAL_PLATFORM_POLISH_GREEN",
+  "CLOUDSHIELD_AUTH_EXPERIENCE_PRODUCTION_POLISH_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -341,6 +342,31 @@ export const CurrentUserResponseSchema = z.object({
   organization: AuthOrganizationSchema
 });
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
+
+export const RegisterRequestSchema = z.object({
+  email: z.string().email("Please enter a valid work email."),
+  organization: z.string().min(1, "Organization name is required."),
+  password: z.string().min(8, "Password must be at least 8 characters."),
+  confirmPassword: z.string().min(8, "Confirm password must be at least 8 characters.")
+});
+export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
+
+export const RegisterResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  user: z.object({
+    id: z.string(),
+    email: z.string(),
+    role: z.string(),
+    organizationId: z.string()
+  }),
+  organization: z.object({
+    id: z.string(),
+    name: z.string(),
+    slug: z.string()
+  })
+});
+export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 
 const AwsAccountIdSchema = z
   .string()
