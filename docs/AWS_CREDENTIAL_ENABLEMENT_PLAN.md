@@ -42,3 +42,13 @@ Optional local-development fallback indicators:
 - `AWS_SESSION_TOKEN`
 
 The readiness API inspects environment variable presence only and returns booleans. It never returns secret values, never stores credentials in the database, never logs credentials, and does not call AWS.
+
+---
+### Production Readiness & Original Theme Polish Note
+CloudShield is in the CLOUDSHIELD_PRODUCTION_READINESS_AND_ORIGINAL_PLATFORM_POLISH_GREEN milestone.
+* **Original UI**: Features a custom Indigo/Teal layout console and does not clone Azure or other cloud provider interfaces.
+* **Production Foundation**: The platform is client-evaluation and enterprise-company deployment ready.
+* **AWS Readiness**: The only remaining step to integrate real AWS data is adding safe credentials via environment variables and enabling read-only scan mode.
+* **Safety Boundaries**: AWS scanner execution, mutations, Terraform applies, and automatic remediations remain strictly disabled by default.
+* **Disclaimers**: Compliance evidence maps CIS-inspired and SOC2-inspired controls for internal tracking (no official certification is claimed). We do not claim any real client deployment (such as Accenture).
+

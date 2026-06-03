@@ -77,7 +77,10 @@ Access the dashboard at `http://localhost:3100/login` with:
 - **Email**: `demo@cloudshield.local`
 - **Password**: `CloudShieldDemo123!`
 
-## Important Disclaimers
-* **Not Deployed to Accenture**: CloudShield is a consulting/client demo ready platform, but is *not* deployed to Accenture, nor is Accenture a customer.
-* **No Official Certifications**: Mentions of CIS or SOC2 are "inspired by" for demonstration of evidence workflows. This platform does not claim official audit readiness or certification.
-* **Demo Data**: All data shown in the initial setup is sample data for evaluation.
+## Important Disclaimers & Design Identity
+* **Original Platform Identity**: CloudShield has its own original visual identity (Indigo/Teal workspace console) and does not copy Microsoft Azure or other cloud provider interfaces.
+* **Evaluator Mode Limits**: Currently in local evaluator mode reading strictly from the CloudShield Postgres DB. The only remaining step to read real AWS data is adding safe credentials via container environment variables and enabling read-only scan mode.
+* **Operational Boundaries**: Strictly read-only. No AWS mutations, no Terraform apply, and no automatic remediation exist on the platform.
+* **No Somatic Client Deployments**: CloudShield is client-evaluation ready, but is *not* deployed to Accenture, and Accenture is not a customer.
+* **No Official Certifications**: Compliance rules are CIS-inspired and SOC2-inspired for demonstrating evidence workflows. No official CIS or SOC2 certification is claimed.
+

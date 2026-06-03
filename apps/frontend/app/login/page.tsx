@@ -4,15 +4,15 @@ import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-panel px-6">
-      <section className="w-full max-w-md rounded-md border border-line bg-white p-6">
+    <main className="portal-auth flex min-h-screen items-center justify-center px-6">
+      <section className="portal-auth-card w-full max-w-md rounded-md border border-line bg-white p-6">
         <div className="flex items-center gap-3">
           <div className="cs-action-primary flex h-10 w-10 items-center justify-center rounded-md">
             <ShieldCheck size={20} />
           </div>
           <div>
             <h1 className="text-xl font-semibold text-ink">CloudShield</h1>
-            <p className="text-sm text-slate-600">Local demo login</p>
+            <p className="text-sm text-slate-600">Cloud governance portal</p>
           </div>
         </div>
         <LoginForm />

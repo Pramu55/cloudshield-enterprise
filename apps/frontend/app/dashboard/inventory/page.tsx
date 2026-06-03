@@ -107,7 +107,7 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
   useEffect(() => {
     if (expanded && !details && !loading) {
       setLoading(true);
-      fetch(`/api/v1/inventory/resources/${resource.id}`, {
+      fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100"}/api/v1/inventory/resources/${resource.id}/context`, {
         headers: {
           Authorization: `Bearer ${window.localStorage.getItem("cloudshield_access_token") || ""}`
         }
@@ -130,7 +130,7 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
         onClick={() => setExpanded(!expanded)}
       >
         <p className="text-sm font-semibold text-ink col-span-2">{resource.name || resource.resourceId}</p>
-        <p className="text-sm text-slate-600">{resource.resourceType}</p>
+        <p className="text-sm text-slate-600 font-mono text-xs">{resource.resourceType}</p>
         <p className="text-sm text-slate-600 truncate" title={resource.awsAccount.name}>{resource.awsAccount.name}</p>
         <p className="text-sm text-slate-600">{resource.region || "global"}</p>
         <div className="text-right text-slate-400">
@@ -138,28 +138,56 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
         </div>
       </div>
       {expanded && (
-        <div className="p-4 bg-slate-50 border-t border-line text-sm text-slate-700">
+        <div className="p-5 bg-slate-50 border-t border-line text-sm text-slate-700 space-y-4">
           {loading ? (
-            <p>Loading details...</p>
+            <p className="text-slate-500 animate-pulse">Loading context and security posture...</p>
           ) : details ? (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-3">
               <div>
-                <p className="font-semibold text-xs text-slate-500 uppercase mb-2">Resource Details</p>
-                <div className="space-y-1">
-                  <p><span className="font-medium">ID:</span> {details.resource?.id}</p>
-                  <p><span className="font-medium">Status:</span> {details.resource?.status || "Unknown"}</p>
-                  <p><span className="font-medium">Findings:</span> {details.resource?.findingsCount ?? 0}</p>
+                <p className="font-semibold text-xs text-slate-500 uppercase mb-2">Asset Context</p>
+                <div className="space-y-1 bg-white p-3 rounded border border-line">
+                  <p><span className="font-semibold text-slate-600">ID:</span> {details.resourceId}</p>
+                  <p><span className="font-semibold text-slate-600">Type:</span> {details.type}</p>
+                  <p><span className="font-semibold text-slate-600">Region:</span> {details.region || "global"}</p>
+                  <p><span className="font-semibold text-slate-600">Account Name:</span> {details.awsAccount?.name}</p>
+                  <p><span className="font-semibold text-slate-600">Owner Team:</span> {details.ownerTeam?.name || "Unassigned"}</p>
                 </div>
               </div>
+              
               <div>
-                <p className="font-semibold text-xs text-slate-500 uppercase mb-2">Tags / Metadata</p>
-                <div className="bg-white p-2 rounded border border-line text-xs font-mono max-h-32 overflow-y-auto">
-                  {JSON.stringify(details.resource?.tags || details.resource?.metadata || {}, null, 2)}
+                <p className="font-semibold text-xs text-slate-500 uppercase mb-2">Linked Posture Findings</p>
+                <div className="space-y-2 bg-white p-3 rounded border border-line min-h-[100px] max-h-[200px] overflow-y-auto">
+                  {details.findings && details.findings.length > 0 ? (
+                    details.findings.map((f: any) => (
+                      <div key={f.id} className="flex items-center justify-between text-xs p-1.5 border-b last:border-0 border-slate-100">
+                        <span className="font-semibold text-slate-700 truncate max-w-[150px]">{f.title}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          f.severity === "CRITICAL" || f.severity === "HIGH" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"
+                        }`}>{f.severity}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">No security posture violations found.</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="font-semibold text-xs text-slate-500 uppercase mb-2">Compliance Governance Checks</p>
+                <div className="space-y-2 bg-white p-3 rounded border border-line">
+                  <p className="text-xs font-semibold text-slate-600">Framework coverage:</p>
+                  <p className="text-xs text-slate-700 font-medium">{details.complianceContext?.framework}</p>
+                  <p className="text-xs font-semibold text-slate-600 mt-2">Evaluated controls:</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {details.complianceContext?.controlsChecked?.map((c: string) => (
+                      <span key={c} className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono font-semibold">{c}</span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-red-500">Failed to load details.</p>
+            <p className="text-red-500">Failed to load detailed asset context.</p>
           )}
         </div>
       )}

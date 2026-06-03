@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   BarChart3,
+  Bell,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -12,8 +14,12 @@ import {
   Database,
   FileCheck2,
   Gauge,
+  HelpCircle,
+  Menu,
   Network,
+  RefreshCw,
   ScrollText,
+  Search,
   Settings,
   ShieldAlert,
   Wrench
@@ -21,17 +27,17 @@ import {
 import { LogoutButton } from "./logout-button";
 
 const navItems = [
-  { href: "/dashboard", label: "Overview", icon: Gauge },
-  { href: "/dashboard/accounts", label: "Accounts", icon: Cloud },
-  { href: "/dashboard/inventory", label: "Inventory", icon: Database },
-  { href: "/dashboard/graph", label: "Risk Graph", icon: Network },
-  { href: "/dashboard/security", label: "Security", icon: ShieldAlert },
-  { href: "/dashboard/cost", label: "Cost", icon: BarChart3 },
-  { href: "/dashboard/compliance", label: "Compliance", icon: FileCheck2 },
-  { href: "/dashboard/recommendations", label: "Recommendations", icon: Wrench },
-  { href: "/dashboard/scans", label: "Scans", icon: ClipboardList },
-  { href: "/dashboard/reports", label: "Reports", icon: ScrollText },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings }
+  { href: "/dashboard", label: "Overview", icon: Gauge, group: "General" },
+  { href: "/dashboard/accounts", label: "Accounts", icon: Cloud, group: "Governance" },
+  { href: "/dashboard/inventory", label: "Inventory", icon: Database, group: "Governance" },
+  { href: "/dashboard/graph", label: "Risk Graph", icon: Network, group: "Governance" },
+  { href: "/dashboard/security", label: "Security", icon: ShieldAlert, group: "Operations" },
+  { href: "/dashboard/cost", label: "Cost", icon: BarChart3, group: "Operations" },
+  { href: "/dashboard/compliance", label: "Compliance", icon: FileCheck2, group: "Operations" },
+  { href: "/dashboard/recommendations", label: "Recommendations", icon: Wrench, group: "Operations" },
+  { href: "/dashboard/scans", label: "Scans", icon: ClipboardList, group: "Monitoring" },
+  { href: "/dashboard/reports", label: "Reports", icon: ScrollText, group: "Monitoring" },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings, group: "Manage" }
 ];
 
 type CurrentUser = {
@@ -108,10 +114,7 @@ export default function DashboardLayout({
   function toggleSidebar() {
     setIsSidebarCollapsed((current) => {
       const next = !current;
-      window.localStorage.setItem(
-        "cloudshield_sidebar_collapsed",
-        String(next)
-      );
+      window.localStorage.setItem("cloudshield_sidebar_collapsed", String(next));
       return next;
     });
   }
@@ -121,137 +124,152 @@ export default function DashboardLayout({
     [authState, currentUser]
   );
 
+  const activeItem = navItems.find((item) => item.href === pathname) ?? navItems[0]!;
+  const ActiveIcon = activeItem.icon;
+
   if (authState === "checking") {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-panel px-6">
-        <section className="rounded-md border border-line bg-white px-5 py-4 text-sm font-semibold text-ink">
-          Loading CloudShield console...
-        </section>
-      </main>
-    );
+    return <PortalLoading label="Loading CloudShield console..." />;
   }
 
   if (!showConsole) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-panel px-6">
-        <section className="rounded-md border border-line bg-white px-5 py-4 text-sm font-semibold text-ink">
-          Redirecting to login...
-        </section>
-      </main>
-    );
+    return <PortalLoading label="Redirecting to login..." />;
   }
 
   return (
-    <main className="min-h-screen bg-panel">
+    <main className="portal-app">
+      <header className="portal-topbar sticky top-0 z-30 flex h-12 items-center">
+        <div className="flex h-full w-12 items-center justify-center">
+          <Menu size={20} />
+        </div>
+        <Link className="flex h-full min-w-52 items-center px-2 text-[15px] font-semibold" href="/dashboard">
+          CloudShield
+        </Link>
+        <div className="mx-4 hidden h-8 max-w-2xl flex-1 items-center gap-2 px-3 text-sm lg:flex portal-search">
+          <Search size={16} />
+          <span className="text-slate-600">Search resources, services, and docs</span>
+        </div>
+        <div className="ml-auto flex h-full items-center">
+          <TopbarButton label="Activity" icon={<Activity size={17} />} />
+          <TopbarButton label="Notifications" icon={<Bell size={17} />} />
+          <TopbarButton label="Help" icon={<HelpCircle size={17} />} />
+          <div className="hidden h-full items-center border-l border-white/20 px-4 text-xs md:flex">
+            {currentUser?.organization.name || "CloudShield workspace"}
+          </div>
+        </div>
+      </header>
+
       <div
-        className={`grid min-h-screen transition-[grid-template-columns] duration-300 ease-out ${
-          isSidebarCollapsed
-            ? "lg:grid-cols-[76px_1fr]"
-            : "lg:grid-cols-[264px_1fr]"
+        className={`grid min-h-[calc(100vh-48px)] transition-[grid-template-columns] duration-200 ${
+          isSidebarCollapsed ? "lg:grid-cols-[52px_1fr]" : "lg:grid-cols-[236px_1fr]"
         }`}
       >
-        <aside className="overflow-hidden border-r border-line bg-white transition-all duration-300 ease-out">
-          <div
-            className={`flex h-[97px] items-center border-b border-line transition-all duration-300 ${
-              isSidebarCollapsed ? "justify-center px-3" : "justify-between p-5"
-            }`}
-          >
-            <div
-              className={`min-w-0 transition-all duration-200 ${
-                isSidebarCollapsed
-                  ? "w-0 scale-95 overflow-hidden opacity-0"
-                  : "w-auto scale-100 opacity-100"
-              }`}
-            >
-              <p className="text-sm font-semibold uppercase tracking-wide text-signal">
-                CloudShield
+        <aside className="portal-nav hidden min-w-0 lg:block">
+          <div className="flex h-11 items-center justify-between border-b border-line">
+            {!isSidebarCollapsed ? (
+              <p className="px-4 text-xs font-semibold uppercase text-slate-500">
+                Cloud resources
               </p>
-              <h1 className="mt-1 whitespace-nowrap text-lg font-semibold text-ink">
-                Governance Console
-              </h1>
-            </div>
+            ) : null}
             <button
               aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line text-slate-700 transition hover:bg-panel hover:text-ink"
+              className="portal-icon-button ml-auto flex h-11 w-12 items-center justify-center text-slate-600 hover:bg-panel"
               onClick={toggleSidebar}
               title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               type="button"
             >
-              {isSidebarCollapsed ? (
-                <ChevronRight size={17} />
-              ) : (
-                <ChevronLeft size={17} />
-              )}
+              {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
             </button>
           </div>
-          <nav
-            className={`space-y-1 transition-all duration-300 ${
-              isSidebarCollapsed ? "p-2" : "p-3"
-            }`}
-          >
-            {navItems.map((item) => {
+
+          <nav className="py-2">
+            {navItems.map((item, index) => {
               const Icon = item.icon;
+              const previousGroup = navItems[index - 1]?.group;
+              const showGroup = !isSidebarCollapsed && item.group !== previousGroup;
+
               return (
-                <Link
-                  className={`flex h-10 items-center rounded-md text-sm font-medium transition-all duration-200 hover:bg-panel hover:text-ink ${
-                    isSidebarCollapsed
-                      ? "justify-center px-0"
-                      : "gap-3 px-3"
-                  } ${
-                    pathname === item.href
-                      ? "bg-panel text-ink"
-                      : "text-slate-700"
-                  }`}
-                  href={item.href}
-                  key={item.href}
-                  prefetch
-                  title={item.label}
-                >
-                  <Icon className="shrink-0" size={17} />
-                  <span
-                    className={`whitespace-nowrap transition-all duration-200 ${
-                      isSidebarCollapsed
-                        ? "w-0 translate-x-1 overflow-hidden opacity-0"
-                        : "w-auto translate-x-0 opacity-100"
+                <div key={item.href}>
+                  {showGroup ? (
+                    <p className="px-4 pb-1 pt-3 text-[11px] font-semibold uppercase text-slate-500">
+                      {item.group}
+                    </p>
+                  ) : null}
+                  <Link
+                    className={`portal-nav-link flex h-9 items-center text-sm ${
+                      isSidebarCollapsed ? "justify-center px-0" : "gap-3 px-3"
                     }`}
+                    data-active={pathname === item.href}
+                    href={item.href}
+                    prefetch
+                    title={item.label}
                   >
-                    {item.label}
-                  </span>
-                </Link>
+                    <Icon className="shrink-0" size={16} />
+                    {!isSidebarCollapsed ? <span className="truncate">{item.label}</span> : null}
+                  </Link>
+                </div>
               );
             })}
           </nav>
         </aside>
-        <section className="min-w-0">
-          <header className="flex h-16 items-center justify-between border-b border-line bg-white px-6">
-            <div>
-              <p className="text-sm font-semibold text-ink">
-                CLOUDSHIELD_LOCAL_RELEASE_AND_PORTFOLIO_PACKAGE_GREEN
-              </p>
-              <p className="text-xs text-slate-500">
-                Read-only posture, evidence, recommendations, and tenant-scoped access
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {currentUser && (
-                <div className="text-right">
-                  <p className="text-xs font-semibold text-ink">
-                    {currentUser.user.email}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {currentUser.organization.name}
-                  </p>
-                </div>
-              )}
-              <div className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-signal">
-                AWS scanner not configured
+
+        <section className="portal-content min-w-0">
+          <div className="portal-commandbar sticky top-12 z-20 flex min-h-11 flex-wrap items-center justify-between gap-2 px-4 py-1.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <ActiveIcon className="hidden shrink-0 text-signal sm:block" size={18} />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink">{activeItem.label}</p>
+                <p className="truncate text-xs text-slate-500">
+                  CloudShield local release / read-only governance workspace
+                </p>
               </div>
-              {currentUser && <LogoutButton />}
             </div>
-          </header>
+            <div className="flex items-center gap-2">
+              <button
+                className="inline-flex items-center gap-2 border border-line bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                onClick={() => router.refresh()}
+                type="button"
+              >
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+              <span className="hidden border border-line bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 md:inline-flex">
+                Scanner disabled
+              </span>
+              {currentUser ? (
+                <div className="hidden text-right md:block">
+                  <p className="text-xs font-semibold text-ink">{currentUser.user.email}</p>
+                  <p className="text-xs text-slate-500">{currentUser.organization.name}</p>
+                </div>
+              ) : null}
+              {currentUser ? <LogoutButton /> : null}
+            </div>
+          </div>
           {children}
         </section>
       </div>
     </main>
+  );
+}
+
+function PortalLoading({ label }: { label: string }) {
+  return (
+    <main className="portal-auth flex min-h-screen items-center justify-center px-6">
+      <section className="portal-auth-card w-full max-w-sm border bg-white px-5 py-4 text-sm font-semibold text-ink">
+        {label}
+      </section>
+    </main>
+  );
+}
+
+function TopbarButton({ label, icon }: { label: string; icon: React.ReactNode }) {
+  return (
+    <button
+      aria-label={label}
+      className="portal-icon-button flex h-12 w-11 items-center justify-center text-white hover:bg-white/10"
+      title={label}
+      type="button"
+    >
+      {icon}
+    </button>
   );
 }

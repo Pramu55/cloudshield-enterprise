@@ -86,4 +86,97 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
       sampleData: true
     };
   });
+
+  app.get("/api/v1/platform/readiness", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    const orgScope = scopeByOrganization(auth.organizationId);
+    const accountsCount = await prisma.awsAccount.count({ where: orgScope });
+    const credentialsReady = getAwsCredentialReadiness(app.config);
+    return {
+      credentialReadiness: credentialsReady,
+      awsAccountsCount: accountsCount,
+      scannerMode: app.config.AWS_INVENTORY_SCANNER_MODE,
+      connectorMode: app.config.AWS_CONNECTOR_MODE,
+      isReadyForReadOnlyScans: credentialsReady.roleBasedReadiness && app.config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan",
+      message: "Platform readiness status read from environment configuration. No real AWS calls were executed."
+    };
+  });
+
+  app.get("/api/v1/dashboard/module-status", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    const orgScope = scopeByOrganization(auth.organizationId);
+    const [accounts, resources, findings, recommendations, reports] = await Promise.all([
+      prisma.awsAccount.count({ where: orgScope }),
+      prisma.cloudResource.count({ where: orgScope }),
+      prisma.securityFinding.count({ where: orgScope }),
+      prisma.recommendation.count({ where: orgScope }),
+      prisma.reportExport.count({ where: orgScope })
+    ]);
+    return {
+      modules: {
+        accounts: { status: "ACTIVE", count: accounts, description: "AWS registry metadata only." },
+        inventory: { status: "ACTIVE", count: resources, description: "Asset inventory backed by CloudShield records." },
+        security: { status: "ACTIVE", count: findings, description: "Rules engine posture analysis." },
+        compliance: { status: "ACTIVE", count: 12, description: "Internal governance controls." },
+        reports: { status: "ACTIVE", count: reports, description: "Compliance preview reports." },
+        recommendations: { status: "ACTIVE", count: recommendations, description: "Manual governance suggestions." }
+      },
+      sampleData: true,
+      message: "All governance metrics loaded from CloudShield database."
+    };
+  });
+
+  app.get("/api/v1/aws/readiness/details", { preHandler: requireAuth }, async () => {
+    const credentialReadiness = getAwsCredentialReadiness(app.config);
+    return {
+      ...credentialReadiness,
+      recommendedActions: [
+        "Ensure AWS_REGION and AWS_ROLE_ARN are set in env to enable read-only validation mode.",
+        "Configure AWS IAM Trust Policy for IAM Role assumption matching CloudShield External ID.",
+        "Optionally set AWS_CONNECTOR_MODE=readonly-validation for connectivity checking."
+      ],
+      awsApiCallExecuted: false,
+      scannerRun: false
+    };
+  });
+
+  app.get("/api/v1/inventory/resources/:resourceId/context", { preHandler: requireAuth }, async (request, reply) => {
+    const auth = getAuthContext(request);
+    const { resourceId } = request.params as { resourceId: string };
+    const orgScope = scopeByOrganization(auth.organizationId);
+    const resource = await prisma.cloudResource.findFirst({
+      where: { ...orgScope, id: resourceId },
+      include: { awsAccount: true, ownerTeam: true }
+    });
+    if (!resource) return reply.code(404).send({ message: "Resource not found" });
+
+    const findings = await prisma.securityFinding.findMany({
+      where: { ...orgScope, resourceId: resource.id }
+    });
+
+    return {
+      resourceId: resource.id,
+      name: resource.name || resource.resourceId,
+      type: resource.resourceType,
+      region: resource.region,
+      awsAccount: {
+        name: resource.awsAccount.name,
+        accountId: resource.awsAccount.accountId
+      },
+      ownerTeam: resource.ownerTeam ? { name: resource.ownerTeam.name } : null,
+      findings: findings.map(f => ({
+        id: f.id,
+        title: f.title,
+        severity: f.severity,
+        status: f.status,
+        ruleId: f.ruleId
+      })),
+      complianceContext: {
+        framework: "CIS-inspired / SOC2-inspired governance",
+        controlsChecked: ["CIS-NETWORK-001", "SOC2-ACCESS-001"]
+      },
+      sampleData: true,
+      awsApiCallExecuted: false
+    };
+  });
 }
