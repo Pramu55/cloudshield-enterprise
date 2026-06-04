@@ -29,8 +29,14 @@ The scanner plan endpoint describes future read-only inventory APIs but does not
 
 When explicitly configured with:
 
+When explicitly configured with:
+
 ```text
 AWS_CONNECTOR_MODE=readonly-validation
+```
+or
+```text
+AWS_CONNECTOR_MODE=sts-validation
 ```
 
 the only allowed AWS SDK call in this milestone is:
@@ -41,7 +47,7 @@ sts:GetCallerIdentity
 
 This validates the identity available to the runtime. It does not enumerate EC2, S3, IAM, Security Groups, VPCs, CloudTrail, KMS, or billing data.
 
-The validation endpoint returns `awsApiCallExecuted=false` when the connector is disabled or not configured. It returns `awsApiCallExecuted=true` only after attempting STS `GetCallerIdentity` in explicitly enabled `readonly-validation` mode.
+The validation endpoint returns `awsApiCallExecuted=false` when the connector is disabled or not configured. It returns `awsApiCallExecuted=true` only after attempting STS `GetCallerIdentity` in explicitly enabled `readonly-validation` or `sts-validation` mode.
 
 ## Credential Model
 

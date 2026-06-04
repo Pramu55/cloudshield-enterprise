@@ -9,7 +9,8 @@ import {
 } from "@cloudshield/contracts";
 import type {
   AwsConnectorConfig,
-  AwsReadonlyValidationResult
+  AwsReadonlyValidationResult,
+  AwsIdentityValidationResult
 } from "./aws-connector.types.js";
 
 const DISABLED_MESSAGE =
@@ -96,6 +97,93 @@ export class AwsConnectorService {
         callerIdentity: null,
         message:
           "STS GetCallerIdentity failed. No AWS inventory APIs were called, no AWS role assumption was attempted, and no AWS resources were changed."
+      };
+    }
+  }
+
+  async validateIdentity(expectedAccountId: string): Promise<AwsIdentityValidationResult> {
+    const connector = this.getStatus();
+
+    if (connector.mode === "disabled") {
+      return {
+        status: "BLOCKED_DISABLED",
+        message: "AWS connector mode is disabled. To enable STS identity validation, set AWS_CONNECTOR_MODE to sts-validation or readonly-validation.",
+        accountIdMatched: null,
+        registeredAccountId: expectedAccountId,
+        validatedAccountId: null,
+        principalArnMasked: null,
+        awsApiCallExecuted: false,
+        allowedAwsCall: "sts:GetCallerIdentity",
+        mutationExecuted: false,
+        terraformApplyExecuted: false,
+        automaticRemediationExecuted: false,
+        scannerRun: false,
+        credentialStorageMode: "environment-only"
+      };
+    }
+
+    if (connector.status === "NOT_CONFIGURED" || connector.status === "DISABLED") {
+      return {
+        status: connector.status as "NOT_CONFIGURED" | "DISABLED",
+        message: connector.message,
+        accountIdMatched: null,
+        registeredAccountId: expectedAccountId,
+        validatedAccountId: null,
+        principalArnMasked: null,
+        awsApiCallExecuted: false,
+        allowedAwsCall: "sts:GetCallerIdentity",
+        mutationExecuted: false,
+        terraformApplyExecuted: false,
+        automaticRemediationExecuted: false,
+        scannerRun: false,
+        credentialStorageMode: "environment-only"
+      };
+    }
+
+    try {
+      const client = new STSClient({
+        region: this.config.region
+      });
+      const identity = await client.send(new GetCallerIdentityCommand({}));
+
+      const returnedAccount = identity.Account ?? null;
+      const arn = identity.Arn ?? null;
+      const maskedArn = arn ? arn.replace(/(arn:aws:iam::\d{12}:[^\/]+\/).+/, "$1***") : null;
+      const accountIdMatched = returnedAccount === expectedAccountId;
+
+      return {
+        status: accountIdMatched ? "VALIDATION_SUCCEEDED" : "VALIDATION_FAILED",
+        message: accountIdMatched 
+          ? "STS GetCallerIdentity succeeded and matched the registered AWS account." 
+          : `STS GetCallerIdentity succeeded but returned account ${returnedAccount} does not match expected account ${expectedAccountId}.`,
+        accountIdMatched,
+        registeredAccountId: expectedAccountId,
+        validatedAccountId: returnedAccount,
+        principalArnMasked: maskedArn,
+        awsApiCallExecuted: true,
+        allowedAwsCall: "sts:GetCallerIdentity",
+        mutationExecuted: false,
+        terraformApplyExecuted: false,
+        automaticRemediationExecuted: false,
+        scannerRun: false,
+        credentialStorageMode: "environment-only"
+      };
+    } catch (error) {
+      const status = mapAwsErrorToStatus(error);
+      return {
+        status,
+        message: "STS GetCallerIdentity failed.",
+        accountIdMatched: null,
+        registeredAccountId: expectedAccountId,
+        validatedAccountId: null,
+        principalArnMasked: null,
+        awsApiCallExecuted: true,
+        allowedAwsCall: "sts:GetCallerIdentity",
+        mutationExecuted: false,
+        terraformApplyExecuted: false,
+        automaticRemediationExecuted: false,
+        scannerRun: false,
+        credentialStorageMode: "environment-only"
       };
     }
   }

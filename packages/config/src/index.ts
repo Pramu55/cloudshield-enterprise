@@ -10,7 +10,7 @@ export const RuntimeEnvSchema = z.object({
   REDIS_PORT: z.coerce.number().int().positive().default(6379),
   JWT_SECRET: z.string().min(16).default("cloudshield-local-demo-jwt-secret-change-me"),
   AWS_CONNECTOR_MODE: z
-    .enum(["disabled", "readonly-validation"])
+    .enum(["disabled", "readonly-validation", "sts-validation"])
     .default("disabled"),
   AWS_INVENTORY_SCANNER_MODE: z
     .enum(["disabled", "readonly-plan", "readonly-scan"])

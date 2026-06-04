@@ -1,7 +1,8 @@
 import type {
   AwsConnectorMode,
   AwsConnectorStatusResponse,
-  AwsReadonlyValidationStatus
+  AwsReadonlyValidationStatus,
+  AwsIdentityValidationResponse
 } from "@cloudshield/contracts";
 
 export type AwsConnectorConfig = {
@@ -22,3 +23,5 @@ export type AwsReadonlyValidationResult = {
   } | null;
   message: string;
 };
+
+export type AwsIdentityValidationResult = AwsIdentityValidationResponse;

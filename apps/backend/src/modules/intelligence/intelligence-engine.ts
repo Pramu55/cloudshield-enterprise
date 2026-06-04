@@ -33,7 +33,7 @@ export function resolveAssessmentMode(config: RuntimeEnv): AutomationAssessmentM
     return "AWS_READONLY_SCAN";
   }
 
-  if (config.AWS_CONNECTOR_MODE === "readonly-validation") {
+  if (config.AWS_CONNECTOR_MODE === "readonly-validation" || config.AWS_CONNECTOR_MODE === "sts-validation") {
     return "AWS_STS_ONLY";
   }
 

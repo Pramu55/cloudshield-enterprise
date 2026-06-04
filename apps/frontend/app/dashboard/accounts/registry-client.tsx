@@ -10,7 +10,7 @@ import type {
   AwsInventoryPlanResponse,
   AwsSetupGuideResponse,
   CreateAwsAccountRequest,
-  ValidateReadonlyConnectionResponse
+  AwsIdentityValidationResponse
 } from "@cloudshield/contracts";
 import { Archive, CheckCircle2, Pencil, Plus, ShieldCheck, HelpCircle, ShieldAlert, KeyRound, Cloud } from "lucide-react";
 
@@ -161,7 +161,7 @@ export function AccountRegistryClient({
     }
   }
 
-  async function validateReadonlyConnection(account: AwsAccountDto) {
+  async function validateIdentity(account: AwsAccountDto) {
     if (connector.status === "DISABLED" || connector.status === "NOT_CONFIGURED") {
       setMessage(connector.message);
       return;
@@ -170,21 +170,27 @@ export function AccountRegistryClient({
     setMessage("Running STS identity validation only. No inventory scan will run.");
 
     try {
-      const result = await apiRequest<ValidateReadonlyConnectionResponse>(
-        `/api/v1/aws/accounts/${account.id}/validate-readonly-connection`,
+      const result = await apiRequest<AwsIdentityValidationResponse>(
+        `/api/v1/aws/accounts/${account.id}/validate-identity`,
         { method: "POST" }
       );
-      setConnector(result.connector);
-      setAccounts((current) => upsertAccount(current, result.account));
+      
+      // Update account status in our list
+      setAccounts((current) => current.map((item) => 
+        item.id === account.id 
+          ? { ...item, connectionStatus: result.status as AwsConnectionStatus }
+          : item
+      ));
+
       setMessage(result.message);
 
-      if (result.callerIdentity) {
+      if (result.principalArnMasked) {
         setLastValidationResult({
-          accountId: result.callerIdentity.account || "N/A",
-          callerArn: result.callerIdentity.arn || "N/A",
+          accountId: result.validatedAccountId || "N/A",
+          callerArn: result.principalArnMasked || "N/A",
           validationTime: new Date().toLocaleString(),
-          region: result.connector.region || "us-east-1",
-          mode: result.connector.mode,
+          region: connector.region || "us-east-1",
+          mode: connector.mode,
           awsApiCallExecuted: result.awsApiCallExecuted
         });
       } else {
@@ -192,8 +198,8 @@ export function AccountRegistryClient({
           accountId: "N/A",
           callerArn: "N/A",
           validationTime: new Date().toLocaleString(),
-          region: result.connector.region || "us-east-1",
-          mode: result.connector.mode,
+          region: connector.region || "us-east-1",
+          mode: connector.mode,
           awsApiCallExecuted: result.awsApiCallExecuted
         });
       }
@@ -422,7 +428,7 @@ export function AccountRegistryClient({
                           className="rounded-lg border border-line p-1.5 text-slate-600 hover:bg-slate-100 hover:text-ink transition-colors min-h-0 disabled:cursor-not-allowed disabled:opacity-40"
                           title={
                             connector.enabled
-                              ? "Validate Real STS Connection"
+                              ? "Validate AWS Identity"
                               : connector.message
                           }
                           type="button"
@@ -597,7 +603,7 @@ export function AccountRegistryClient({
                   const type = modalOpen.type;
                   setModalOpen(null);
                   if (type === "validate") {
-                    void validateReadonlyConnection(acc);
+                    void validateIdentity(acc);
                   } else {
                     void startScan(acc);
                   }

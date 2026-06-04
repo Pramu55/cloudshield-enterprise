@@ -63,7 +63,8 @@ export type AwsConnectionStatus = z.infer<typeof AwsConnectionStatusSchema>;
 
 export const AwsConnectorModeSchema = z.enum([
   "disabled",
-  "readonly-validation"
+  "readonly-validation",
+  "sts-validation"
 ]);
 export type AwsConnectorMode = z.infer<typeof AwsConnectorModeSchema>;
 
@@ -1505,3 +1506,37 @@ export const GovernanceBusinessUnitResponseSchema = z.object({
   scannerRun: z.literal(false)
 });
 export type GovernanceBusinessUnitResponse = z.infer<typeof GovernanceBusinessUnitResponseSchema>;
+
+export const AwsIdentityValidationStatusSchema = z.enum([
+  "DISABLED",
+  "NOT_CONFIGURED",
+  "READY_FOR_VALIDATION",
+  "VALIDATION_SUCCEEDED",
+  "AUTH_FAILED",
+  "PERMISSION_DENIED",
+  "VALIDATION_NOT_IMPLEMENTED",
+  "VALIDATION_FAILED",
+  "BLOCKED_DISABLED"
+]);
+export type AwsIdentityValidationStatus = z.infer<typeof AwsIdentityValidationStatusSchema>;
+
+export const AwsIdentityValidationSafetyFlagsSchema = z.object({
+  awsApiCallExecuted: z.boolean(),
+  allowedAwsCall: z.literal("sts:GetCallerIdentity"),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  credentialStorageMode: z.literal("environment-only")
+});
+export type AwsIdentityValidationSafetyFlags = z.infer<typeof AwsIdentityValidationSafetyFlagsSchema>;
+
+export const AwsIdentityValidationResponseSchema = AwsIdentityValidationSafetyFlagsSchema.extend({
+  status: AwsIdentityValidationStatusSchema,
+  message: z.string(),
+  accountIdMatched: z.boolean().nullable(),
+  registeredAccountId: z.string().nullable(),
+  validatedAccountId: z.string().nullable(),
+  principalArnMasked: z.string().nullable()
+});
+export type AwsIdentityValidationResponse = z.infer<typeof AwsIdentityValidationResponseSchema>;

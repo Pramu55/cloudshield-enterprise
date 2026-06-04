@@ -3,7 +3,9 @@ import { z } from "zod";
 import {
   AwsCredentialReadinessResponseSchema,
   ValidateReadonlyConnectionResponseSchema,
-  type AwsReadonlyValidationStatus
+  AwsIdentityValidationResponseSchema,
+  type AwsReadonlyValidationStatus,
+  type AwsIdentityValidationStatus
 } from "@cloudshield/contracts";
 import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
 import { prisma } from "@cloudshield/database";
@@ -35,6 +37,38 @@ export async function registerAwsConnectorRoutes(
       return AwsCredentialReadinessResponseSchema.parse(
         getAwsCredentialReadiness(app.config)
       );
+    }
+  );
+
+  app.post(
+    "/api/v1/aws/accounts/:accountId/validate-identity",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      const accountId = accountParamsSchema.parse(request.params).accountId;
+      const account = await findAccountForOrganization(
+        auth.organizationId,
+        accountId
+      );
+
+      if (!account) {
+        reply.status(404).send({
+          error: "aws_account_not_found",
+          message: "AWS account registry record was not found for this organization."
+        });
+        return;
+      }
+
+      const result = await getConnectorService(app).validateIdentity(account.accountId);
+      
+      await prisma.awsAccount.update({
+        where: { id: account.id },
+        data: {
+          connectionStatus: mapIdentityValidationStatusToConnectionStatus(result.status)
+        }
+      });
+
+      return AwsIdentityValidationResponseSchema.parse(result);
     }
   );
 
@@ -99,6 +133,31 @@ function mapValidationStatusToConnectionStatus(
 ) {
   switch (status) {
     case "DISABLED":
+      return "DISABLED";
+    case "NOT_CONFIGURED":
+      return "NOT_CONFIGURED";
+    case "READY_FOR_VALIDATION":
+      return "READY_FOR_VALIDATION";
+    case "VALIDATION_SUCCEEDED":
+      return "VALIDATION_SUCCEEDED";
+    case "AUTH_FAILED":
+      return "AUTH_FAILED";
+    case "PERMISSION_DENIED":
+      return "PERMISSION_DENIED";
+    case "VALIDATION_NOT_IMPLEMENTED":
+      return "VALIDATION_NOT_IMPLEMENTED";
+    case "VALIDATION_FAILED":
+    default:
+      return "VALIDATION_FAILED";
+  }
+}
+
+function mapIdentityValidationStatusToConnectionStatus(
+  status: AwsIdentityValidationStatus
+) {
+  switch (status) {
+    case "DISABLED":
+    case "BLOCKED_DISABLED":
       return "DISABLED";
     case "NOT_CONFIGURED":
       return "NOT_CONFIGURED";

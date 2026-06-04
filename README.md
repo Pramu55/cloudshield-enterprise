@@ -44,7 +44,7 @@ For safety and evaluation purposes, the following are strictly disabled:
 
 ### Safety Model
 - **Read-Only**: The platform operates in a strict read-only mode. Live connections only permit read/identity actions.
-- **Dynamic AWS Connector**: When `AWS_CONNECTOR_MODE=readonly-validation` and `AWS_INVENTORY_SCANNER_MODE=readonly-scan` are set, the platform executes live `sts:GetCallerIdentity` connection validation and `ec2:Describe*` resource scans.
+- **Dynamic AWS Connector**: When `AWS_CONNECTOR_MODE=readonly-validation` or `AWS_CONNECTOR_MODE=sts-validation`, and `AWS_INVENTORY_SCANNER_MODE=readonly-scan` are set, the platform executes live `sts:GetCallerIdentity` connection validation and `ec2:Describe*` resource scans.
 - **No Secrets Stored**: No real AWS credentials or keys are committed, logged, or saved in the database.
 - **No Secret Exposure**: All API responses hide sensitive strings, returning safe booleans and execution logs.
 - **Deterministic Evaluation**: Scanned assets are evaluated locally inside the Postgres database using security rules, generating linked recommendations dynamically.
