@@ -17,7 +17,6 @@ import {
   Gauge,
   GitPullRequestDraft,
   HelpCircle,
-  Menu,
   Network,
   RefreshCw,
   ScrollText,
@@ -190,9 +189,8 @@ export default function DashboardLayout({
       </header>
 
       <div
-        className={`grid h-[calc(100vh-56px)] transition-[grid-template-columns] duration-200 ${
-          isSidebarCollapsed ? "lg:grid-cols-[60px_1fr]" : "lg:grid-cols-[240px_1fr]"
-        }`}
+        className="portal-shell grid h-[calc(100vh-56px)]"
+        data-sidebar-collapsed={isSidebarCollapsed}
       >
         <aside className="portal-nav hidden min-w-0 lg:flex flex-col justify-between py-2 h-full overflow-y-auto border-r border-slate-800">
           <div>
@@ -247,7 +245,7 @@ export default function DashboardLayout({
           <div className="px-3 py-2 border-t border-slate-800 mt-2">
             {!isSidebarCollapsed ? (
               <div className="rounded-lg bg-slate-900/60 p-3 border border-slate-800">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 mb-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#ff9900] mb-1">
                   Safety Guardrails
                 </p>
                 <p className="text-[10px] leading-relaxed text-slate-400">
@@ -256,7 +254,7 @@ export default function DashboardLayout({
               </div>
             ) : (
               <div className="flex justify-center text-slate-500" title="Safety active">
-                <ShieldAlert size={16} className="text-indigo-400" />
+                <ShieldAlert size={16} className="text-[#ff9900]" />
               </div>
             )}
           </div>

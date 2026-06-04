@@ -89,10 +89,10 @@ export function LoginForm() {
   }
 
   return (
-    <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-      <label className="block">
-        <span className="text-xs font-semibold text-slate-600">Work Email</span>
-        <div className="relative mt-1.5">
+    <form className="aws-auth-form" onSubmit={onSubmit}>
+      <label>
+        <span>Work email</span>
+        <div>
           <input
             className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-3 pr-3 text-sm text-slate-900 outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
             onChange={(event) => setEmail(event.target.value)}
@@ -104,13 +104,13 @@ export function LoginForm() {
         </div>
       </label>
       
-      <label className="block">
-        <span className="text-xs font-semibold text-slate-600">Password</span>
-        <div className="relative mt-1.5">
+      <label>
+        <span>Password</span>
+        <div>
           <input
             className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-3 pr-3 text-sm text-slate-900 outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="••••••••"
+            placeholder="Password"
             type="password"
             value={password}
             disabled={isSubmitting}
@@ -119,23 +119,21 @@ export function LoginForm() {
       </label>
 
       {error && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-700"
-          style={{ animation: "fadeIn 0.2s ease-out" }}>
+        <div className="aws-form-message aws-form-error">
           <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
           {error}
         </div>
       )}
 
       {successMsg && (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-700"
-          style={{ animation: "fadeIn 0.2s ease-out" }}>
+        <div className="aws-form-message aws-form-success">
           <Loader2 size={14} className="animate-spin text-emerald-600" />
           {successMsg}
         </div>
       )}
 
       <button
-        className="cs-action-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:ring-offset-2 disabled:opacity-60"
+        className="cs-action-primary aws-auth-submit"
         disabled={isSubmitting}
         type="submit"
       >
@@ -152,22 +150,21 @@ export function LoginForm() {
         )}
       </button>
 
-      {/* Demo Credentials & Safety Notice */}
-      <div className="mt-5 space-y-3">
-        <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3.5">
-          <div className="flex items-center gap-2 mb-2">
+      <div className="aws-auth-support">
+        <div className="aws-demo-credentials">
+          <div>
             <KeyRound size={13} className="text-indigo-600" />
-            <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">Local Demo Credentials</p>
+            <p>Local demo credentials</p>
           </div>
-          <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs text-slate-600">
+          <div>
             <span className="text-slate-500">Email</span>
-            <code className="font-mono font-semibold text-slate-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded text-[11px]">demo@cloudshield.local</code>
+            <code>demo@cloudshield.local</code>
             <span className="text-slate-500">Password</span>
-            <code className="font-mono font-semibold text-slate-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded text-[11px]">CloudShieldDemo123!</code>
+            <code>CloudShieldDemo123!</code>
           </div>
         </div>
 
-        <div className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-500">
+        <div className="aws-auth-notice">
           <Info size={13} className="shrink-0 mt-0.5 text-slate-400" />
           <span>
             <strong className="text-slate-600">Safety:</strong> CloudShield runs in a secure sandbox mode. No AWS scans, API requests, or active remediations are triggered from this login console.
