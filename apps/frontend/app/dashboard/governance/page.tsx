@@ -12,7 +12,8 @@ import {
   Info,
   Building2,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Bot
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -61,6 +62,16 @@ type ActivityEvent = {
   actorUserId: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
+};
+
+type AutomationLatestResponse = {
+  assessment: { id: string; status: string; mode: string } | null;
+  intelligenceSummary: {
+    remediationPlanSummary: Array<Record<string, unknown>>;
+    nextActions: Array<Record<string, unknown>>;
+  } | null;
+  awsApiCallExecuted: false;
+  scannerRun: false;
 };
 
 const EmptyPlans = {
@@ -114,6 +125,15 @@ export default function GovernancePage() {
     error: activityError,
     isRefreshing: activityRefreshing
   } = useCloudShieldData("/api/v1/governance/activity", EmptyActivity);
+  const { data: automationLatest } = useCloudShieldData<AutomationLatestResponse>(
+    "/api/v1/automation/latest",
+    {
+      assessment: null,
+      intelligenceSummary: null,
+      awsApiCallExecuted: false,
+      scannerRun: false
+    }
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
 
@@ -196,6 +216,44 @@ export default function GovernancePage() {
           {message}
         </div>
       ) : null}
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <InsightPanel
+          title="Automation-created advisory drafts"
+          description="CloudShield Intelligence Engine drafts stay approval-based and execution-blocked."
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            {(automationLatest.intelligenceSummary?.remediationPlanSummary?.length
+              ? automationLatest.intelligenceSummary.remediationPlanSummary.slice(0, 4)
+              : [{ title: "Run automated assessment to generate advisory drafts", riskLevel: "pending", executionStatus: "blocked" }]
+            ).map((item, index) => (
+              <article className="rounded-xl border border-line bg-white p-4" key={`${String(item.title)}-${index}`}>
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-indigo-700">
+                  <Bot size={13} />
+                  Advisory automation
+                </div>
+                <p className="text-sm font-bold text-ink">{String(item.title)}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {String(item.riskLevel)} / {String(item.executionStatus)}
+                </p>
+              </article>
+            ))}
+          </div>
+        </InsightPanel>
+        <InsightPanel
+          title="Automation safety state"
+          description="No destructive action is attached to automation output."
+        >
+          <StatusMatrix
+            items={[
+              { label: "Assessment", value: automationLatest.assessment?.status ?? "not started", tone: automationLatest.assessment ? "good" : "warning" },
+              { label: "AWS API", value: automationLatest.awsApiCallExecuted, tone: "good" },
+              { label: "Scanner", value: automationLatest.scannerRun, tone: "good" },
+              { label: "Plans", value: automationLatest.intelligenceSummary?.remediationPlanSummary?.length ?? 0, tone: "info" }
+            ]}
+          />
+        </InsightPanel>
+      </section>
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Metric 

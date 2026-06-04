@@ -214,3 +214,18 @@ Delivered before live AWS credentials:
 
 AWS validation, AWS scanning, AWS mutation, Terraform apply, and automatic remediation remain disabled in the current local runtime unless explicitly configured later.
 
+---
+### Current Milestone: AI Automation And Intelligence Foundation
+
+Delivered:
+
+- CloudShield Intelligence Engine for deterministic AI-assisted assessment
+- automation assessment tables, events, and intelligence summaries
+- `/api/v1/automation/*` and `/api/v1/intelligence/summary`
+- `/dashboard/automation` operator workflow
+- automated report preview record creation
+- advisory remediation plan drafts that remain execution-blocked
+- `cloud-assessment` worker queue hook
+
+Automation is advisory and governed. It does not execute AWS mutation, Terraform apply, automatic remediation, or destructive cloud APIs.
+

@@ -276,7 +276,8 @@ const reportBuilders: Record<
   COMPLIANCE_EVIDENCE_SUMMARY: complianceSummary,
   RISK_WORKFLOW_SUMMARY: riskSummary,
   AWS_ACCOUNT_GOVERNANCE_SUMMARY: accountSummary,
-  COST_GOVERNANCE_SUMMARY: costSummary
+  COST_GOVERNANCE_SUMMARY: costSummary,
+  AUTOMATED_ASSESSMENT: automatedAssessmentSummary
 };
 
 function executiveSummary(context: ReportContext) {
@@ -437,6 +438,34 @@ function costSummary(context: ReportContext) {
       section("Tagging hygiene", "Ownership and cost allocation gaps from CloudShield records.", [
         metric("Missing tag findings", taggingGaps.length, taggingGaps.length ? "warning" : "good")
       ])
+    ]
+  };
+}
+
+function automatedAssessmentSummary(context: ReportContext) {
+  const highSeverity = context.securityFindings.filter((item) =>
+    ["CRITICAL", "HIGH"].includes(item.severity)
+  );
+  const complianceGaps = context.complianceControls.filter((item) =>
+    ["FAIL", "WARNING", "NEEDS_REVIEW"].includes(item.status)
+  );
+
+  return {
+    metrics: [
+      metric("Automated assessment ready", true, "good"),
+      metric("High-priority risks", highSeverity.length, highSeverity.length ? "warning" : "good"),
+      metric("Compliance gaps", complianceGaps.length, complianceGaps.length ? "warning" : "good"),
+      metric("Advisory plans", context.remediationPlans.length),
+      metric("AWS mutation executed", false, "good")
+    ],
+    sections: [
+      section("Assessment scope", "CloudShield deterministic intelligence summary from tenant-scoped records.", [
+        metric("Accounts", context.awsAccounts.length),
+        metric("Resources", context.resources.length),
+        metric("Security findings", context.securityFindings.length),
+        metric("Cost findings", context.costFindings.length)
+      ]),
+      section("Safety boundary", "Assessment reports never execute AWS mutation, Terraform apply, or automatic remediation.", safetyMetrics())
     ]
   };
 }

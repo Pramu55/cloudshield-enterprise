@@ -98,3 +98,14 @@ CloudShield now includes DB-backed dynamic operations views for enterprise demos
 - report evidence summary generated from CloudShield records only
 
 This milestone does not call AWS APIs, run scanners, mutate AWS resources, execute Terraform apply, or perform automatic remediation.
+
+## AI Automation And Intelligence Foundation
+
+CloudShield now includes an AI-assisted deterministic automation layer called the CloudShield Intelligence Engine:
+
+- `POST /api/v1/automation/assessment/start` runs a governed automated assessment
+- `/dashboard/automation` shows readiness, progress timeline, generated summaries, top risks, compliance gaps, cost opportunities, advisory remediation drafts, report pointer, and safety flags
+- assessment output is stored in `AutomationAssessment`, `AutomationEvent`, `IntelligenceSummary`, advisory `RemediationPlan` drafts, and an `AUTOMATED_ASSESSMENT` report record
+- the `cloud-assessment` worker queue hook is available for future async orchestration
+
+Automation means advisory analysis, evidence generation, report generation, and approval-based remediation planning. It does not mean auto-fixing AWS. In default evaluation mode, AWS execution is blocked and the assessment uses CloudShield database records only.

@@ -32,7 +32,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/v1/platform/status", async () => {
-    const milestone = "CLOUDSHIELD_DYNAMIC_OPERATIONS_AND_RESOURCE_GRAPH_GREEN";
+    const milestone = "CLOUDSHIELD_AI_AUTOMATION_AND_INTELLIGENCE_FOUNDATION_GREEN";
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,
@@ -84,7 +84,10 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
         "DB-backed dynamic operations timeline",
         "Resource relationship graph",
         "Scan lifecycle readiness workspace",
-        "Report evidence summary"
+        "Report evidence summary",
+        "AI-assisted deterministic assessment engine",
+        "Automation assessment timeline",
+        "Intelligence summary generation"
       ],
       disabledCapabilities: [
         "Live AWS Mutation",

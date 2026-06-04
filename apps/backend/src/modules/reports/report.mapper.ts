@@ -53,7 +53,8 @@ function normalizeReportType(value: string): ReportType {
     "COMPLIANCE_EVIDENCE_SUMMARY",
     "RISK_WORKFLOW_SUMMARY",
     "AWS_ACCOUNT_GOVERNANCE_SUMMARY",
-    "COST_GOVERNANCE_SUMMARY"
+    "COST_GOVERNANCE_SUMMARY",
+    "AUTOMATED_ASSESSMENT"
   ];
 
   return allowed.includes(value as ReportType)

@@ -159,3 +159,14 @@ The resource graph is assembled from CloudShield records: AWS account registry, 
 
 For the current local milestone, AWS credentials are not configured and scanner/connector execution remains disabled until explicit environment mode is enabled.
 
+## AI-Assisted Automation Layer
+
+`CLOUDSHIELD_AI_AUTOMATION_AND_INTELLIGENCE_FOUNDATION_GREEN` adds an advisory automation layer:
+
+- Fastify automation routes create and read assessment records.
+- Prisma stores `AutomationAssessment`, `AutomationEvent`, and `IntelligenceSummary`.
+- The deterministic intelligence module ranks risks, summarizes compliance/FinOps posture, drafts approval-based remediation plans, and creates an internal report preview.
+- BullMQ exposes a `cloud-assessment` queue hook for future asynchronous orchestration.
+- The Next.js `/dashboard/automation` workspace presents mode readiness, timeline events, generated summaries, report pointers, and safety flags.
+
+The layer does not store AWS credentials, call external AI APIs, perform AWS mutation, run Terraform apply, or execute automatic remediation.

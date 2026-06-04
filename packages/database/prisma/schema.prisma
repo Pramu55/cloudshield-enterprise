@@ -151,6 +151,29 @@ enum ApprovalRequestStatus {
   CANCELLED
 }
 
+enum AutomationAssessmentStatus {
+  CREATED
+  CHECKING_CREDENTIALS
+  VALIDATING_IDENTITY
+  INVENTORY_BLOCKED
+  INVENTORY_RUNNING
+  INVENTORY_COMPLETED
+  ANALYZING_SECURITY
+  ANALYZING_COST
+  MAPPING_COMPLIANCE
+  GENERATING_REMEDIATION_PLANS
+  GENERATING_REPORT
+  COMPLETED
+  FAILED
+  BLOCKED_DISABLED
+}
+
+enum AutomationAssessmentMode {
+  EVALUATION
+  AWS_STS_ONLY
+  AWS_READONLY_SCAN
+}
+
 model User {
   id             String       @id @default(cuid())
   organizationId String
@@ -168,6 +191,7 @@ model User {
   approvedRemediationPlans     RemediationPlan[] @relation("RemediationPlanApprover")
   requestedApprovalRequests    ApprovalRequest[] @relation("ApprovalRequestRequester")
   approvalDecisions            ApprovalRequest[] @relation("ApprovalRequestApprover")
+  requestedAutomationAssessments AutomationAssessment[] @relation("AutomationAssessmentRequester")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -196,6 +220,9 @@ model Organization {
   reportExports      ReportExport[]
   remediationPlans   RemediationPlan[]
   approvalRequests   ApprovalRequest[]
+  automationAssessments AutomationAssessment[]
+  automationEvents      AutomationEvent[]
+  intelligenceSummaries IntelligenceSummary[]
 }
 
 model Team {
@@ -626,4 +653,63 @@ model ReportExport {
   @@index([organizationId, status])
   @@index([organizationId, reportType])
   @@index([organizationId, archivedAt])
+}
+
+model AutomationAssessment {
+  id             String                     @id @default(cuid())
+  organizationId String
+  organization   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requestedById  String
+  requestedBy    User                       @relation("AutomationAssessmentRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  status         AutomationAssessmentStatus @default(CREATED)
+  mode           AutomationAssessmentMode   @default(EVALUATION)
+  summary        Json                       @default("{}")
+  safetyFlags    Json                       @default("{}")
+  startedAt      DateTime                   @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  events              AutomationEvent[]
+  intelligenceSummary IntelligenceSummary?
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+model AutomationEvent {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assessmentId   String
+  assessment     AutomationAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  type           String
+  status         String
+  message        String
+  metadata       Json                 @default("{}")
+  createdAt      DateTime             @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, assessmentId])
+  @@index([organizationId, type])
+}
+
+model IntelligenceSummary {
+  id                     String               @id @default(cuid())
+  organizationId         String
+  organization           Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assessmentId           String               @unique
+  assessment             AutomationAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  executiveSummary       String
+  topRisks               Json                 @default("[]")
+  costOpportunities      Json                 @default("[]")
+  complianceGaps         Json                 @default("[]")
+  remediationPlanSummary Json                 @default("[]")
+  nextActions            Json                 @default("[]")
+  safetyNotes            Json                 @default("{}")
+  createdAt              DateTime             @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
 }

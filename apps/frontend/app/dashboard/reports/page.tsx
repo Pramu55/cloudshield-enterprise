@@ -35,7 +35,8 @@ type ReportType =
   | "COMPLIANCE_EVIDENCE_SUMMARY"
   | "RISK_WORKFLOW_SUMMARY"
   | "AWS_ACCOUNT_GOVERNANCE_SUMMARY"
-  | "COST_GOVERNANCE_SUMMARY";
+  | "COST_GOVERNANCE_SUMMARY"
+  | "AUTOMATED_ASSESSMENT";
 
 type ReportMetric = {
   label: string;
@@ -167,6 +168,12 @@ const reportCards: Array<{
     title: "Cost governance summary",
     description: "FinOps findings, tagging hygiene gaps, and sample/demo cost governance labels.",
     icon: <Wallet size={18} />
+  },
+  {
+    type: "AUTOMATED_ASSESSMENT",
+    title: "Automated assessment summary",
+    description: "CloudShield Intelligence Engine output with prioritized risks, evidence, advisory plans, and safety flags.",
+    icon: <Sparkles size={18} />
   }
 ];
 
@@ -175,7 +182,7 @@ const InstantSummary: ReportSummary = {
   counts: {
     reportExports: 0,
     completed: 0,
-    previewsAvailable: 6,
+    previewsAvailable: 7,
     latestGeneratedAt: null,
     complianceEvidenceCount: 10,
     openRiskCount: 3

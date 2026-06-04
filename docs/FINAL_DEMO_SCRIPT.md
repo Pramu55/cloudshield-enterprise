@@ -62,3 +62,14 @@ This script is designed for walking an evaluator, interviewer, or client through
 5. Open `/dashboard/governance` and show approval workflow activity.
 6. Open `/dashboard/reports` and show evidence summary plus internal preview reports.
 7. State clearly that AWS credentials are not configured and no AWS API, scanner, mutation, Terraform apply, or automatic remediation was run.
+## AI Automation Demo Addendum
+
+Open `/dashboard/automation` and click `Run CloudShield Automated Assessment`.
+
+Narrate:
+
+- CloudShield checks credential readiness without showing secrets.
+- AWS execution is blocked in evaluation mode.
+- The Intelligence Engine still analyzes DB-backed inventory, findings, compliance controls, cost signals, and governance records.
+- The assessment creates a persisted event timeline, executive summary, top risks, compliance gaps, FinOps opportunities, advisory remediation drafts, and an internal report preview.
+- Safety flags remain false for AWS mutation, scanner execution in disabled mode, Terraform apply, and automatic remediation.

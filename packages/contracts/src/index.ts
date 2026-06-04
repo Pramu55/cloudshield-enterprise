@@ -5,6 +5,7 @@ export const PLATFORM_TITLE =
   "CloudShield Enterprise - AWS Security Posture, Cost Governance & Compliance Platform";
 
 export const CLOUD_SCAN_QUEUE_NAME = "cloud-scans";
+export const CLOUD_ASSESSMENT_QUEUE_NAME = "cloud-assessment";
 export const REMEDIATION_BLOCKED_REASON =
   "Automatic remediation is disabled in CloudShield v1.";
 
@@ -73,6 +74,46 @@ export const AwsInventoryScannerModeSchema = z.enum([
 ]);
 export type AwsInventoryScannerMode = z.infer<
   typeof AwsInventoryScannerModeSchema
+>;
+
+export const AutomationAssessmentStatusSchema = z.enum([
+  "CREATED",
+  "CHECKING_CREDENTIALS",
+  "VALIDATING_IDENTITY",
+  "INVENTORY_BLOCKED",
+  "INVENTORY_RUNNING",
+  "INVENTORY_COMPLETED",
+  "ANALYZING_SECURITY",
+  "ANALYZING_COST",
+  "MAPPING_COMPLIANCE",
+  "GENERATING_REMEDIATION_PLANS",
+  "GENERATING_REPORT",
+  "COMPLETED",
+  "FAILED",
+  "BLOCKED_DISABLED"
+]);
+export type AutomationAssessmentStatus = z.infer<
+  typeof AutomationAssessmentStatusSchema
+>;
+
+export const AutomationAssessmentModeSchema = z.enum([
+  "EVALUATION",
+  "AWS_STS_ONLY",
+  "AWS_READONLY_SCAN"
+]);
+export type AutomationAssessmentMode = z.infer<
+  typeof AutomationAssessmentModeSchema
+>;
+
+export const AutomationSafetyFlagsSchema = z.object({
+  awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false)
+});
+export type AutomationSafetyFlags = z.infer<
+  typeof AutomationSafetyFlagsSchema
 >;
 
 export const AwsInventoryResourceTypeSchema = z.enum([
@@ -254,7 +295,8 @@ export const CloudScanJobTypeSchema = z.enum([
   "COST_RULE_EVALUATION",
   "COMPLIANCE_EVIDENCE_GENERATION",
   "RISK_SCORE_CALCULATION",
-  "REPORT_EXPORT"
+  "REPORT_EXPORT",
+  "CLOUD_ASSESSMENT"
 ]);
 export type CloudScanJobType = z.infer<typeof CloudScanJobTypeSchema>;
 
@@ -281,7 +323,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FOUNDATION_GREEN",
   "CLOUDSHIELD_PREMIUM_CLOUD_CONSOLE_VISUAL_EXPERIENCE_GREEN",
   "CLOUDSHIELD_GOVERNED_REAL_WORLD_OPERATIONS_FOUNDATION_GREEN",
-  "CLOUDSHIELD_DYNAMIC_OPERATIONS_AND_RESOURCE_GRAPH_GREEN"
+  "CLOUDSHIELD_DYNAMIC_OPERATIONS_AND_RESOURCE_GRAPH_GREEN",
+  "CLOUDSHIELD_AI_AUTOMATION_AND_INTELLIGENCE_FOUNDATION_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -1202,7 +1245,8 @@ export const ReportTypeSchema = z.enum([
   "COMPLIANCE_EVIDENCE_SUMMARY",
   "RISK_WORKFLOW_SUMMARY",
   "AWS_ACCOUNT_GOVERNANCE_SUMMARY",
-  "COST_GOVERNANCE_SUMMARY"
+  "COST_GOVERNANCE_SUMMARY",
+  "AUTOMATED_ASSESSMENT"
 ]);
 export type ReportType = z.infer<typeof ReportTypeSchema>;
 

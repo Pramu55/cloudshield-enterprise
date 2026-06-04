@@ -19,6 +19,7 @@ import {
   Gauge,
   Fingerprint,
   Settings,
+  Bot,
 } from "lucide-react";
 
 type SafetySettings = {
@@ -57,6 +58,21 @@ type AwsCredentialReadiness = {
   remediationExecutionEnabled: false;
   awsApiCallExecuted: false;
   message: string;
+};
+
+type AutomationLatestResponse = {
+  assessment: { status: string; mode: string } | null;
+  readiness: {
+    mode: string;
+    connectorMode: string;
+    scannerMode: string;
+    roleBasedReadiness: boolean;
+    missingEnvKeys: string[];
+    credentialStorageMode: string;
+    blockedReason: string | null;
+  };
+  awsApiCallExecuted: false;
+  scannerRun: false;
 };
 
 const DefaultCredentialReadiness: AwsCredentialReadiness = {
@@ -100,6 +116,23 @@ const DefaultSafety: SafetySettings = {
 
 export default function SettingsPage() {
   const { data, error, isRefreshing } = useCloudShieldData<SafetySettings>("/api/v1/settings/safety", DefaultSafety);
+  const { data: automationLatest } = useCloudShieldData<AutomationLatestResponse>(
+    "/api/v1/automation/latest",
+    {
+      assessment: null,
+      readiness: {
+        mode: "EVALUATION",
+        connectorMode: "disabled",
+        scannerMode: "disabled",
+        roleBasedReadiness: false,
+        missingEnvKeys: ["AWS_REGION", "AWS_ROLE_ARN"],
+        credentialStorageMode: "environment-only",
+        blockedReason: "AWS execution disabled. Assessment uses CloudShield DB/sample records."
+      },
+      awsApiCallExecuted: false,
+      scannerRun: false
+    }
+  );
 
   const guardrails = [
     {
@@ -188,6 +221,42 @@ export default function SettingsPage() {
             <CommandCard icon={<Key size={18} />} title="Role-based AWS setup" description="Use IAM role assumption and external ID. Avoid long-lived access keys." />
             <CommandCard icon={<Lock size={18} />} title="Secret storage model" description="Use environment variables locally and secret manager in production." />
             <CommandCard icon={<ShieldCheck size={18} />} title="Governed execution" description="Keep remediation approval, dry-run, rollback, and audit controls explicit." />
+          </div>
+        </InsightPanel>
+      </section>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Automation modes and safety gates"
+          description="CloudShield automation remains advisory unless explicit safe AWS modes are configured."
+        >
+          <StatusMatrix
+            items={[
+              { label: "Assessment mode", value: automationLatest.readiness.mode, tone: "warning" },
+              { label: "Connector mode", value: automationLatest.readiness.connectorMode, tone: "warning" },
+              { label: "Scanner mode", value: automationLatest.readiness.scannerMode, tone: "warning" },
+              { label: "AWS API executed", value: automationLatest.awsApiCallExecuted, tone: "good" },
+              { label: "Scanner run", value: automationLatest.scannerRun, tone: "good" },
+              { label: "Latest assessment", value: automationLatest.assessment?.status ?? "not started", tone: automationLatest.assessment ? "good" : "warning" }
+            ]}
+          />
+        </InsightPanel>
+        <InsightPanel
+          title="Only credentials remaining"
+          description="Automation can run in evaluation mode now; AWS validation requires env-only configuration."
+        >
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-indigo-700">
+              <Bot size={14} />
+              Governed automation readiness
+            </div>
+            <p className="text-sm leading-6 text-slate-700">
+              {automationLatest.readiness.blockedReason ??
+                "Safe gates are configured. CloudShield still blocks mutation, Terraform apply, and automatic remediation."}
+            </p>
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              Missing env keys: {automationLatest.readiness.missingEnvKeys.join(", ") || "none"}
+            </p>
           </div>
         </InsightPanel>
       </section>

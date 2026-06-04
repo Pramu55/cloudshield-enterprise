@@ -2,6 +2,7 @@ import { Queue, Worker as BullWorker } from "bullmq";
 import { createLogger } from "@cloudshield/logger";
 import { executeEc2Scan } from "./aws-ec2-scanner.js";
 import {
+  CLOUD_ASSESSMENT_QUEUE_NAME,
   CLOUD_SCAN_QUEUE_NAME,
   CloudScanJobTypeSchema,
   type CloudScanJobType
@@ -20,11 +21,22 @@ export const cloudScanQueue = new Queue(CLOUD_SCAN_QUEUE_NAME, {
   connection
 });
 
+export const cloudAssessmentQueue = new Queue(CLOUD_ASSESSMENT_QUEUE_NAME, {
+  connection
+});
+
 type CloudScanJob = {
   type: CloudScanJobType;
   organizationId?: string;
   awsAccountId?: string;
   scanRunId?: string;
+};
+
+type CloudAssessmentJob = {
+  assessmentId: string;
+  organizationId: string;
+  requestedById: string;
+  mode: "EVALUATION" | "AWS_STS_ONLY" | "AWS_READONLY_SCAN";
 };
 
 const worker = new BullWorker<CloudScanJob>(
@@ -69,6 +81,33 @@ const worker = new BullWorker<CloudScanJob>(
   { connection }
 );
 
+const assessmentWorker = new BullWorker<CloudAssessmentJob>(
+  CLOUD_ASSESSMENT_QUEUE_NAME,
+  async (job) => {
+    logger.info(
+      {
+        jobId: job.id,
+        assessmentId: job.data.assessmentId,
+        organizationId: job.data.organizationId,
+        mode: job.data.mode
+      },
+      "Received CloudShield automated assessment job"
+    );
+
+    return {
+      status: "accepted",
+      awsApiCallExecuted: false,
+      scannerRun: false,
+      mutationExecuted: false,
+      terraformApplyExecuted: false,
+      automaticRemediationExecuted: false,
+      reason:
+        "CloudShield assessment worker hook is installed. Backend deterministic engine handles evaluation-mode assessments without AWS execution."
+    };
+  },
+  { connection }
+);
+
 worker.on("completed", (job) => {
   logger.info({ jobId: job.id }, "CloudShield worker job completed");
 });
@@ -77,9 +116,18 @@ worker.on("failed", (job, error) => {
   logger.error({ jobId: job?.id, error }, "CloudShield worker job failed");
 });
 
+assessmentWorker.on("completed", (job) => {
+  logger.info({ jobId: job.id }, "CloudShield assessment worker job completed");
+});
+
+assessmentWorker.on("failed", (job, error) => {
+  logger.error({ jobId: job?.id, error }, "CloudShield assessment worker job failed");
+});
+
 logger.info(
   {
     queue: CLOUD_SCAN_QUEUE_NAME,
+    assessmentQueue: CLOUD_ASSESSMENT_QUEUE_NAME,
     preparedJobTypes: CloudScanJobTypeSchema.options,
     awsScanning: "EC2 read-only slice available (disabled by default)"
   },

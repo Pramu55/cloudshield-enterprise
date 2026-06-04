@@ -71,3 +71,10 @@ The platform reports readiness through booleans only and does not expose, store,
 This milestone turns CloudShield from static dashboard cards into a DB-backed enterprise governance console. The platform now presents operational timelines, resource relationships, scan lifecycle states, governance approval activity, and report evidence summaries before real AWS credentials are enabled.
 
 The graph and operations endpoints are read-only, tenant scoped, and built from CloudShield database records. The implementation intentionally avoids claims of real client deployment, official certification, live AWS scanning in the current local runtime, AWS mutation, Terraform apply, or automatic remediation execution.
+## AI-Assisted Automation Milestone
+
+The latest milestone adds a deterministic CloudShield Intelligence Engine that makes the product feel like an automated cloud governance platform while preserving strict safety boundaries.
+
+The engine turns a single operator action into a complete assessment: readiness checks, blocked AWS inventory state when disabled, security prioritization, compliance mapping, cost opportunity summary, advisory remediation drafts, governance events, and an internal report preview.
+
+This is intentionally not uncontrolled remediation. All generated remediation output is approval-based and execution-blocked.

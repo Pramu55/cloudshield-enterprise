@@ -337,3 +337,10 @@ Safety guarantees:
 - No AWS validation is run by the readiness endpoint.
 - No AWS scanner is run.
 - No AWS mutation, Terraform apply, or automatic remediation is added.
+## AI-Assisted Automation Safety
+
+CloudShield automation is advisory automation. The deterministic intelligence engine can create assessment records, events, summaries, evidence/report records, and remediation plan drafts. It cannot auto-fix AWS, mutate cloud resources, run Terraform apply, or execute remediation.
+
+Credentials remain environment-only. The database stores readiness booleans and mode labels, not secret values.
+
+Default local mode is `EVALUATION`, where AWS execution is blocked and all automation output is generated from CloudShield DB records.
