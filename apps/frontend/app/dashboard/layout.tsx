@@ -190,11 +190,11 @@ export default function DashboardLayout({
       </header>
 
       <div
-        className={`grid min-h-[calc(100vh-56px)] transition-[grid-template-columns] duration-200 ${
+        className={`grid h-[calc(100vh-56px)] transition-[grid-template-columns] duration-200 ${
           isSidebarCollapsed ? "lg:grid-cols-[60px_1fr]" : "lg:grid-cols-[240px_1fr]"
         }`}
       >
-        <aside className="portal-nav hidden min-w-0 lg:flex flex-col justify-between py-2 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto">
+        <aside className="portal-nav hidden min-w-0 lg:flex flex-col justify-between py-2 h-full overflow-y-auto border-r border-slate-800">
           <div>
             <div className="flex h-11 items-center justify-between border-b border-slate-800 px-4 mb-2">
               {!isSidebarCollapsed ? (
@@ -244,7 +244,7 @@ export default function DashboardLayout({
             </nav>
           </div>
 
-          <div className="px-3 py-2 border-t border-slate-800">
+          <div className="px-3 py-2 border-t border-slate-800 mt-2">
             {!isSidebarCollapsed ? (
               <div className="rounded-lg bg-slate-900/60 p-3 border border-slate-800">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 mb-1">
@@ -262,8 +262,8 @@ export default function DashboardLayout({
           </div>
         </aside>
 
-        <section className="portal-content min-w-0">
-          <div className="portal-commandbar sticky top-14 z-20 flex min-h-12 flex-wrap items-center justify-between gap-2 px-6 py-2">
+        <section className="portal-content min-w-0 h-full overflow-y-auto">
+          <div className="portal-commandbar sticky top-0 z-20 flex min-h-12 flex-wrap items-center justify-between gap-2 px-6 py-2 bg-white/80 backdrop-blur-md border-b border-line">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
                 <ActiveIcon className="shrink-0" size={16} />

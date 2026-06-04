@@ -101,15 +101,17 @@ export default function AutomationPage() {
   );
   const [latest, setLatest] = useState<AutomationLatestResponse | null>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const view = latest ?? data;
+  const view = latest ?? data ?? emptyAutomation;
+  const events = view.events || [];
+  const readiness = view.readiness || emptyAutomation.readiness;
   const summary = view.intelligenceSummary;
   const assessment = view.assessment;
   const safety = assessment?.safetyFlags ?? view;
 
   const completion = useMemo(() => {
-    const completed = view.events.filter((event) => event.status === "completed").length;
+    const completed = events.filter((event) => event.status === "completed").length;
     return Math.min(100, Math.round((completed / 9) * 100));
-  }, [view.events]);
+  }, [events]);
 
   async function startAssessment() {
     setIsStarting(true);
@@ -119,10 +121,14 @@ export default function AutomationPage() {
         { method: "POST" }
       );
       setLatest(response);
+    } catch (err) {
+      console.error("Failed to start assessment:", err);
+      alert("Failed to start assessment. The API might be unreachable.");
     } finally {
       setIsStarting(false);
     }
   }
+
 
   return (
     <DashboardPage
@@ -137,7 +143,7 @@ export default function AutomationPage() {
         description="CloudShield automatically evaluates tenant-scoped records, checks safe AWS readiness gates, creates advisory remediation drafts, and generates an internal report preview. AWS mutation, Terraform apply, and automatic remediation remain disabled."
         icon={<Bot size={20} />}
         badges={[
-          { label: view.readiness.mode.replace(/_/g, " "), tone: view.readiness.mode === "EVALUATION" ? "warning" : "info" },
+          { label: readiness.mode.replace(/_/g, " "), tone: readiness.mode === "EVALUATION" ? "warning" : "info" },
           { label: "Deterministic intelligence", tone: "good" },
           { label: "Human-approved remediation only", tone: "info" }
         ]}
@@ -156,7 +162,7 @@ export default function AutomationPage() {
         <StatusMatrix
           items={[
             { label: "Progress", value: `${completion}%`, tone: completion >= 90 ? "good" : "info" },
-            { label: "Mode", value: view.readiness.mode, tone: "warning" },
+            { label: "Mode", value: readiness.mode, tone: "warning" },
             { label: "AWS API", value: safety.awsApiCallExecuted, tone: "good" },
             { label: "Scanner run", value: safety.scannerRun, tone: "good" }
           ]}
@@ -170,12 +176,12 @@ export default function AutomationPage() {
         >
           <StatusMatrix
             items={[
-              { label: "Connector mode", value: view.readiness.connectorMode, tone: "warning" },
-              { label: "Scanner mode", value: view.readiness.scannerMode, tone: "warning" },
-              { label: "Role readiness", value: view.readiness.roleBasedReadiness, tone: view.readiness.roleBasedReadiness ? "good" : "warning" },
-              { label: "Credential storage", value: view.readiness.credentialStorageMode, tone: "good" },
-              { label: "Missing env keys", value: view.readiness.missingEnvKeys.join(", ") || "none", tone: view.readiness.missingEnvKeys.length ? "warning" : "good" },
-              { label: "Blocked reason", value: view.readiness.blockedReason ?? "safe gates satisfied", tone: view.readiness.blockedReason ? "warning" : "good" }
+              { label: "Connector mode", value: readiness.connectorMode, tone: "warning" },
+              { label: "Scanner mode", value: readiness.scannerMode, tone: "warning" },
+              { label: "Role readiness", value: readiness.roleBasedReadiness, tone: readiness.roleBasedReadiness ? "good" : "warning" },
+              { label: "Credential storage", value: readiness.credentialStorageMode, tone: "good" },
+              { label: "Missing env keys", value: readiness.missingEnvKeys.join(", ") || "none", tone: readiness.missingEnvKeys.length ? "warning" : "good" },
+              { label: "Blocked reason", value: readiness.blockedReason ?? "safe gates satisfied", tone: readiness.blockedReason ? "warning" : "good" }
             ]}
           />
         </InsightPanel>
@@ -206,7 +212,7 @@ export default function AutomationPage() {
           description="Each step is persisted as an organization-scoped automation event."
         >
           <ActivityTimeline
-            events={(view.events.length ? view.events : [
+            events={(events.length ? events : [
               {
                 id: "ready",
                 type: "READY",
