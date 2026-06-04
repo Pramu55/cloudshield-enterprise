@@ -100,6 +100,32 @@ type ReportSummary = {
   message: string;
 };
 
+type EvidenceSummary = {
+  counts: {
+    evidenceRecords: number;
+    reportExports: number;
+    controls: number;
+    remediationPlans: number;
+    approvalRequests: number;
+    findings: number;
+  };
+  byFramework: Record<string, number>;
+  byControlStatus: Record<string, number>;
+  recentEvidence: Array<{
+    id: string;
+    status: string;
+    evidenceType: string;
+    collectedAt: string;
+    control: { controlId: string; title: string; framework: string; status: string };
+    resource: { name: string | null; resourceType: string; resourceId: string } | null;
+  }>;
+  awsApiCallExecuted: false;
+  scannerRun: false;
+  mutationExecuted: false;
+  terraformApplyExecuted: false;
+  automaticRemediationExecuted: false;
+};
+
 const reportCards: Array<{
   type: ReportType;
   title: string;
@@ -196,6 +222,27 @@ export default function ReportsPage() {
     "/api/v1/reports/summary",
     InstantSummary
   );
+  const { data: evidenceSummary } = useCloudShieldData<EvidenceSummary>(
+    "/api/v1/reports/evidence-summary",
+    {
+      counts: {
+        evidenceRecords: 0,
+        reportExports: 0,
+        controls: 0,
+        remediationPlans: 0,
+        approvalRequests: 0,
+        findings: 0
+      },
+      byFramework: {},
+      byControlStatus: {},
+      recentEvidence: [],
+      awsApiCallExecuted: false,
+      scannerRun: false,
+      mutationExecuted: false,
+      terraformApplyExecuted: false,
+      automaticRemediationExecuted: false
+    }
+  );
   const [preview, setPreview] = useState<ReportPreview | null>(null);
   const [generated, setGenerated] = useState<ReportExport | null>(null);
   const [activeType, setActiveType] = useState<ReportType>("EXECUTIVE_POSTURE_SUMMARY");
@@ -268,10 +315,12 @@ export default function ReportsPage() {
         >
           <StatusMatrix
             items={[
-              { label: "Generated from DB", value: data.generatedFromCloudShieldRecordsOnly, tone: "good" },
-              { label: "Audit report claim", value: data.officialAuditReportClaim, tone: "good" },
-              { label: "Certification claim", value: data.officialCertificationClaim, tone: "good" },
-              { label: "Mutation executed", value: data.mutationExecuted, tone: "good" }
+              { label: "Evidence records", value: evidenceSummary.counts.evidenceRecords, tone: "good" },
+              { label: "Controls", value: evidenceSummary.counts.controls, tone: "info" },
+              { label: "Plans", value: evidenceSummary.counts.remediationPlans, tone: "warning" },
+              { label: "Approvals", value: evidenceSummary.counts.approvalRequests, tone: "good" },
+              { label: "AWS API call", value: evidenceSummary.awsApiCallExecuted, tone: "good" },
+              { label: "Terraform apply", value: evidenceSummary.terraformApplyExecuted, tone: "good" }
             ]}
           />
         </InsightPanel>
@@ -294,6 +343,42 @@ export default function ReportsPage() {
               }
             ])}
           />
+        </InsightPanel>
+      </section>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Recent evidence records"
+          description="Control evidence linked to resources and ready for internal preview reports."
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            {evidenceSummary.recentEvidence.slice(0, 6).map((item) => (
+              <article className="rounded-xl border border-line bg-white p-4 shadow-sm" key={item.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="status-pill border-indigo-200 bg-indigo-50 text-indigo-700">{item.status}</span>
+                  <span className="text-[10px] font-mono text-slate-400">{new Date(item.collectedAt).toLocaleDateString()}</span>
+                </div>
+                <p className="mt-3 text-sm font-bold text-ink">{item.control.title}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {item.control.controlId} / {item.control.framework} / {item.resource?.name || item.resource?.resourceId || "organization scoped"}
+                </p>
+              </article>
+            ))}
+            {!evidenceSummary.recentEvidence.length ? (
+              <div className="rounded-xl border border-dashed border-line bg-slate-50 p-6 text-sm text-slate-500">
+                No evidence records were returned yet.
+              </div>
+            ) : null}
+          </div>
+        </InsightPanel>
+        <InsightPanel
+          title="Evidence distribution"
+          description="Framework and status spread from CloudShield DB."
+        >
+          <div className="space-y-3">
+            <MiniDistribution title="Frameworks" values={evidenceSummary.byFramework} />
+            <MiniDistribution title="Control status" values={evidenceSummary.byControlStatus} />
+          </div>
         </InsightPanel>
       </section>
 
@@ -650,6 +735,31 @@ function MetricChip({ metric }: { metric: ReportMetric }) {
         <p className="text-[11px] font-semibold uppercase tracking-wide">{metric.label}</p>
       </div>
       <p className="mt-1 text-sm font-bold">{String(metric.value)}</p>
+    </div>
+  );
+}
+
+function MiniDistribution({
+  title,
+  values
+}: {
+  title: string;
+  values: Record<string, number>;
+}) {
+  const entries = Object.entries(values);
+  return (
+    <div className="rounded-xl border border-line bg-white p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{title}</p>
+      <div className="mt-3 space-y-2">
+        {entries.length ? entries.map(([label, value]) => (
+          <div className="flex items-center justify-between text-xs" key={label}>
+            <span className="font-semibold text-slate-600">{label}</span>
+            <span className="font-mono text-slate-500">{value}</span>
+          </div>
+        )) : (
+          <p className="text-xs text-slate-500">No records yet.</p>
+        )}
+      </div>
     </div>
   );
 }

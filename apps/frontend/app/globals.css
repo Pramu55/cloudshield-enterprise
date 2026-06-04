@@ -61,17 +61,17 @@ button:disabled {
 /* Premium System Action Buttons */
 .cs-action-primary,
 .cs-action-signal {
-  border: 1px solid #4f46e5;
-  background: #4f46e5;
-  color: #ffffff;
+  border: 1px solid #4f46e5 !important;
+  background: #4f46e5 !important;
+  color: #ffffff !important;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .cs-action-primary:hover,
 .cs-action-signal:hover {
-  border-color: #4338ca;
-  background: #4338ca;
-  color: #ffffff;
+  border-color: #4338ca !important;
+  background: #4338ca !important;
+  color: #ffffff !important;
   box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2), 0 2px 4px -2px rgba(79, 70, 229, 0.2);
 }
 
@@ -582,19 +582,69 @@ button:disabled {
   transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.portal-app button:not(.portal-icon-button):not([class*="bg-indigo"]):not(.cs-action-signal):not(.cs-action-primary),
-.portal-auth button:not(.cs-action-primary) {
+.portal-app button:not(.portal-icon-button):not(.cs-action-signal):not(.cs-action-primary):not([class*="text-white"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-teal"]):not([class*="bg-signal"]),
+.portal-auth button:not(.cs-action-primary):not([class*="text-white"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-teal"]):not([class*="bg-signal"]) {
   border: 1px solid #cbd5e1 !important;
   background: #ffffff;
   color: #334155;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-.portal-app button:not(:disabled):hover,
-.portal-auth button:not(:disabled):hover {
+.portal-app button:not(:disabled):not(.portal-icon-button):not(.cs-action-signal):not(.cs-action-primary):not([class*="text-white"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-teal"]):not([class*="bg-signal"]):hover,
+.portal-auth button:not(:disabled):not(.cs-action-primary):not([class*="text-white"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-teal"]):not([class*="bg-signal"]):hover {
   background-color: #f8fafc;
   border-color: #94a3b8 !important;
   color: #0f172a;
+}
+
+.portal-app button[class*="text-white"],
+.portal-auth button[class*="text-white"],
+.portal-app a[class*="text-white"],
+.portal-auth a[class*="text-white"] {
+  color: #ffffff !important;
+}
+
+.portal-app button[class*="text-black"],
+.portal-auth button[class*="text-black"],
+.portal-app a[class*="text-black"],
+.portal-auth a[class*="text-black"] {
+  color: #020617 !important;
+}
+
+.portal-app button[class*="bg-indigo-500"],
+.portal-auth button[class*="bg-indigo-500"],
+.portal-app button[class*="bg-indigo-600"],
+.portal-auth button[class*="bg-indigo-600"],
+.portal-app button[class*="bg-indigo-700"],
+.portal-auth button[class*="bg-indigo-700"],
+.portal-app button[class*="bg-emerald-500"],
+.portal-auth button[class*="bg-emerald-500"],
+.portal-app button[class*="bg-emerald-600"],
+.portal-auth button[class*="bg-emerald-600"],
+.portal-app button[class*="bg-emerald-700"],
+.portal-auth button[class*="bg-emerald-700"],
+.portal-app button[class*="bg-red-500"],
+.portal-auth button[class*="bg-red-500"],
+.portal-app button[class*="bg-red-600"],
+.portal-auth button[class*="bg-red-600"],
+.portal-app button[class*="bg-red-700"],
+.portal-auth button[class*="bg-red-700"],
+.portal-app button[class*="bg-teal-500"],
+.portal-auth button[class*="bg-teal-500"],
+.portal-app button[class*="bg-teal-600"],
+.portal-auth button[class*="bg-teal-600"],
+.portal-app button[class*="bg-teal-700"],
+.portal-auth button[class*="bg-teal-700"],
+.portal-app button[class*="bg-signal"],
+.portal-auth button[class*="bg-signal"] {
+  color: #ffffff !important;
+}
+
+.portal-app button[class*="bg-amber-400"],
+.portal-auth button[class*="bg-amber-400"],
+.portal-app button[class*="bg-amber-500"],
+.portal-auth button[class*="bg-amber-500"] {
+  color: #451a03 !important;
 }
 
 .portal-app input,

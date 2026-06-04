@@ -21,6 +21,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       complianceNeedsReviewCount,
       riskAcceptanceCount,
       openRiskCount,
+      highRiskFindingCount,
       recommendationCount,
       reportExportCount,
       latestReport,
@@ -46,6 +47,14 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
         where: {
           ...organizationScope,
           archivedAt: null,
+          status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
+        }
+      }),
+      prisma.securityFinding.count({
+        where: {
+          ...organizationScope,
+          archivedAt: null,
+          severity: { in: ["CRITICAL", "HIGH"] },
           status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
         }
       }),
@@ -103,8 +112,11 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
         complianceEvidence: complianceEvidenceCount,
         complianceNeedsReview: complianceNeedsReviewCount,
         riskAcceptances: riskAcceptanceCount,
+        acceptedRisks: riskAcceptanceCount,
         openRisks: openRiskCount,
+        highRiskFindings: highRiskFindingCount,
         reportExports: reportExportCount,
+        reportsReady: reportExportCount,
         recommendations: recommendationCount
       },
       reportReadiness: {
@@ -113,7 +125,21 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
           latestReport?.generatedAt?.toISOString() ?? latestReport?.createdAt.toISOString() ?? null,
         latestReport
       },
-      latestScanStatus: latestScan
+      latestScanStatus: latestScan,
+      scannerStatus: {
+        mode: app.config.AWS_INVENTORY_SCANNER_MODE,
+        awsApiCallExecuted: false,
+        scannerRun: false
+      },
+      connectorStatus: {
+        mode: app.config.AWS_CONNECTOR_MODE,
+        configured: false
+      },
+      awsApiCallExecuted: false,
+      scannerRun: false,
+      mutationExecuted: false,
+      terraformApplyExecuted: false,
+      automaticRemediationExecuted: false
     };
   });
 

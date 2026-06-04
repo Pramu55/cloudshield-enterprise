@@ -94,6 +94,19 @@ type Activity = {
   status: string;
 };
 
+type ModuleStatusResponse = {
+  modules: Record<string, { status: string; count: number; description: string }>;
+  awsApiCallExecuted: false;
+  scannerRun: false;
+  mutationExecuted: false;
+};
+
+type OperationsTimelineResponse = {
+  items: Activity[];
+  awsApiCallExecuted: false;
+  scannerRun: false;
+};
+
 // Mock data for Business Units Topology
 const BusinessUnitsMock = [
   { name: "Retail Operations", center: "CC-1042", accounts: 4, resources: 842, risk: "A", status: "good" as const },
@@ -110,6 +123,19 @@ export default function DashboardHome() {
   const { data: activityData } = useCloudShieldData<{ activities: Activity[] }>(
     "/api/v1/dashboard/activity",
     { activities: [] }
+  );
+  const { data: moduleStatus } = useCloudShieldData<ModuleStatusResponse>(
+    "/api/v1/dashboard/module-status",
+    {
+      modules: {},
+      awsApiCallExecuted: false,
+      scannerRun: false,
+      mutationExecuted: false
+    }
+  );
+  const { data: operationsTimeline } = useCloudShieldData<OperationsTimelineResponse>(
+    "/api/v1/operations/timeline",
+    { items: [], awsApiCallExecuted: false, scannerRun: false }
   );
 
   const { data: readiness } = useCloudShieldData<PlatformReadiness>(
@@ -215,6 +241,39 @@ export default function DashboardHome() {
           />
         </div>
       </WorkspaceHero>
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="Live module status"
+          description="Counts and health signals are loaded from tenant-scoped CloudShield records."
+        >
+          <div className="grid gap-3 md:grid-cols-3">
+            {Object.entries(moduleStatus.modules).map(([name, module]) => (
+              <div className="rounded-xl border border-line bg-white p-4 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md" key={name}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{name}</p>
+                  <span className="status-pill border-emerald-200 bg-emerald-50 text-emerald-700">{module.status}</span>
+                </div>
+                <p className="mt-2 text-2xl font-extrabold text-ink">{module.count}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{module.description}</p>
+              </div>
+            ))}
+          </div>
+        </InsightPanel>
+        <InsightPanel
+          title="Operations timeline"
+          description="Scans, findings, reports, approvals, plans, and audit events from the DB."
+        >
+          <ActivityTimeline
+            events={(operationsTimeline.items.length ? operationsTimeline.items.slice(0, 6) : activityData.activities.slice(0, 6)).map((event) => ({
+              title: event.title,
+              description: event.description,
+              time: new Date(event.timestamp).toLocaleTimeString(),
+              tone: event.status === "FAILED" || event.status === "BLOCKED_DISABLED" ? "danger" as const : "info" as const
+            }))}
+          />
+        </InsightPanel>
+      </section>
 
       {/* Safety Notice Banners and Refresh Indicator */}
       <section className="mb-6 grid gap-4 lg:grid-cols-3">

@@ -200,3 +200,17 @@ CloudShield is in the CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FO
 * **Local Posture Evaluation**: Automatically runs security rules assessments on newly scanned database resources, spawning findings and governance recommendations dynamically.
 * **Documentation & Operations**: Provided complete operational runbooks and blueprint documents detailing IAM role assumption, backups, queues, and logging configurations.
 
+---
+### Current Milestone: Dynamic Operations And Resource Graph
+
+Delivered before live AWS credentials:
+
+- DB-backed dashboard activity and module status
+- tenant-scoped operations timeline
+- resource relationship graph and resource context endpoint
+- scan run lifecycle and readiness checklist
+- governance activity stream
+- report evidence summary
+
+AWS validation, AWS scanning, AWS mutation, Terraform apply, and automatic remediation remain disabled in the current local runtime unless explicitly configured later.
+

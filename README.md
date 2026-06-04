@@ -87,3 +87,14 @@ Access the dashboard at `http://localhost:3100/login` with:
 
 
 **Note**: A premium public landing page is now available at / which guides users into the console login flow (/login), highlighting platform capabilities and safety constraints without claiming official compliance or real client deployments.
+
+## Dynamic Operations And Resource Graph
+
+CloudShield now includes DB-backed dynamic operations views for enterprise demos before AWS credentials are enabled:
+
+- resource graph from CloudShield account, resource, finding, remediation, approval, audit, evidence, and report records
+- operations timeline for scan lifecycle, findings, reports, approvals, remediation plans, and audit events
+- scan run readiness and blocked-state visibility while AWS scanner mode is disabled
+- report evidence summary generated from CloudShield records only
+
+This milestone does not call AWS APIs, run scanners, mutate AWS resources, execute Terraform apply, or perform automatic remediation.

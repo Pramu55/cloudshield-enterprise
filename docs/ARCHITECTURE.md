@@ -150,3 +150,12 @@ CloudShield is in the CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FO
 * **Operational Readlines**: All active credentials are environment-driven. Operational runbooks specify production topologies, multi-account roles, and backup plans.
 * **Disclaimers**: Compliance evidence maps CIS-inspired and SOC2-inspired controls for internal tracking (no official certification is claimed). We do not claim any real client deployment (such as Accenture).
 
+---
+### Dynamic Operations And Resource Graph Note
+
+CloudShield includes a DB-backed dynamic operations layer. Fastify endpoints expose module status, operations timeline, scan run lifecycle, resource graph, resource context, governance activity, and report evidence summary from tenant-scoped PostgreSQL records.
+
+The resource graph is assembled from CloudShield records: AWS account registry, cloud resources, resource relationships, security findings, remediation plans, approval requests, audit events, compliance evidence, and report export records. It is read-only and returns safety flags confirming no AWS API call, scanner run, mutation, Terraform apply, or automatic remediation execution occurred.
+
+For the current local milestone, AWS credentials are not configured and scanner/connector execution remains disabled until explicit environment mode is enabled.
+

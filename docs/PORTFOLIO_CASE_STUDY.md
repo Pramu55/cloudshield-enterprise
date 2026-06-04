@@ -65,3 +65,9 @@ The platform reports readiness through booleans only and does not expose, store,
 
 
 **Note**: A premium public landing page is now available at / which guides users into the console login flow (/login), highlighting platform capabilities and safety constraints without claiming official compliance or real client deployments.
+
+## Dynamic Operations And Resource Graph Addition
+
+This milestone turns CloudShield from static dashboard cards into a DB-backed enterprise governance console. The platform now presents operational timelines, resource relationships, scan lifecycle states, governance approval activity, and report evidence summaries before real AWS credentials are enabled.
+
+The graph and operations endpoints are read-only, tenant scoped, and built from CloudShield database records. The implementation intentionally avoids claims of real client deployment, official certification, live AWS scanning in the current local runtime, AWS mutation, Terraform apply, or automatic remediation execution.

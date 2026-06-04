@@ -8,7 +8,10 @@ export const ReportSafety: ReportSafetyFlags = {
   officialAuditReportClaim: false,
   officialCertificationClaim: false,
   awsApiCallExecuted: false,
+  scannerRun: false,
   mutationExecuted: false,
+  terraformApplyExecuted: false,
+  automaticRemediationExecuted: false,
   remediationExecuted: false
 };
 

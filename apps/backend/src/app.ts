@@ -15,6 +15,7 @@ import { registerDataRoutes } from "./routes/data.routes.js";
 import { registerAuthRoutes } from "./routes/auth.routes.js";
 import { registerPlatformRoutes } from "./routes/platform.routes.js";
 import { registerPlatformDynamicRoutes } from "./routes/platform-dynamic.routes.js";
+import { registerOperationsRoutes } from "./routes/operations.routes.js";
 
 export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify(opts);
@@ -42,6 +43,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   await registerRemediationGovernanceRoutes(app);
   await registerDataRoutes(app);
   await registerPlatformDynamicRoutes(app);
+  await registerOperationsRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send({

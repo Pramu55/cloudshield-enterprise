@@ -192,6 +192,60 @@ async function main() {
         organizationId_awsAccountId_resourceType_resourceId: {
           organizationId: organization.id,
           awsAccountId: productionAccount.id,
+          resourceType: "vpc",
+          resourceId: "vpc-sample001"
+        }
+      },
+      update: {},
+      create: {
+        organizationId: organization.id,
+        awsAccountId: productionAccount.id,
+        resourceType: "vpc",
+        resourceId: "vpc-sample001",
+        arn: "arn:aws:ec2:us-east-1:111111111111:vpc/vpc-sample001",
+        name: "sample-prod-vpc",
+        region: "us-east-1",
+        status: "available",
+        environment: "prod",
+        ownerTeamId: platformTeam.id,
+        tags: { ...demoTags, environment: "prod", owner: "Platform Engineering" },
+        metadata: { cidrBlock: "10.42.0.0/16", sampleData: true },
+        riskCount: 0,
+        lastSeenAt: new Date()
+      }
+    }),
+    prisma.cloudResource.upsert({
+      where: {
+        organizationId_awsAccountId_resourceType_resourceId: {
+          organizationId: organization.id,
+          awsAccountId: productionAccount.id,
+          resourceType: "subnet",
+          resourceId: "subnet-sample001"
+        }
+      },
+      update: {},
+      create: {
+        organizationId: organization.id,
+        awsAccountId: productionAccount.id,
+        resourceType: "subnet",
+        resourceId: "subnet-sample001",
+        arn: "arn:aws:ec2:us-east-1:111111111111:subnet/subnet-sample001",
+        name: "sample-prod-public-subnet-a",
+        region: "us-east-1",
+        status: "available",
+        environment: "prod",
+        ownerTeamId: platformTeam.id,
+        tags: { ...demoTags, environment: "prod", owner: "Platform Engineering" },
+        metadata: { cidrBlock: "10.42.1.0/24", availabilityZone: "us-east-1a", sampleData: true },
+        riskCount: 1,
+        lastSeenAt: new Date()
+      }
+    }),
+    prisma.cloudResource.upsert({
+      where: {
+        organizationId_awsAccountId_resourceType_resourceId: {
+          organizationId: organization.id,
+          awsAccountId: productionAccount.id,
           resourceType: "ec2-instance",
           resourceId: "i-sample001"
         }
@@ -326,9 +380,11 @@ async function main() {
     })
   ]);
 
-  const [ec2, s3Bucket, iamRole, securityGroup, ebsVolume] = resources;
+  const [vpc, subnet, ec2, s3Bucket, iamRole, securityGroup, ebsVolume] = resources;
 
   await Promise.all([
+    createRelationship(organization.id, vpc.id, subnet.id, "contains-subnet"),
+    createRelationship(organization.id, subnet.id, ec2.id, "hosts-compute"),
     createRelationship(organization.id, securityGroup.id, ec2.id, "protects"),
     createRelationship(organization.id, ec2.id, iamRole.id, "assumes-role"),
     createRelationship(organization.id, ec2.id, ebsVolume.id, "attached-volume-sample")
@@ -571,6 +627,140 @@ async function main() {
     createRecommendation(organization.id, null, costFindings[1].id, "Add sample cost allocation tags", "Add owner and cost-center tags through normal change control.", "aws ec2 create-tags --resources vol-sample001 --tags Key=owner,Value=FinOps Key=cost-center,Value=sample", "resource \"aws_ec2_tag\" \"sample_owner\" {\n  resource_id = \"vol-sample001\"\n  key = \"owner\"\n  value = \"FinOps\"\n}")
   ]);
 
+  const remediationPlan = await prisma.remediationPlan.upsert({
+    where: { id: "sample-remediation-plan-open-ssh" },
+    update: {
+      approvalStatus: "PENDING_APPROVAL",
+      executionStatus: "EXECUTION_BLOCKED",
+      updatedAt: new Date()
+    },
+    create: {
+      id: "sample-remediation-plan-open-ssh",
+      organizationId: organization.id,
+      findingId: securityFindings[0].id,
+      resourceId: securityGroup.id,
+      title: "Sample demo data - Restrict public SSH exposure",
+      summary: "Governed plan to replace public SSH ingress with approved administrative CIDR ranges. Manual execution only.",
+      riskLevel: "HIGH",
+      actionType: "NETWORK_EXPOSURE_REVIEW",
+      implementationMode: "MANUAL",
+      recommendedSteps: [
+        "Confirm administrative source ranges with Platform Engineering.",
+        "Prepare security group ingress change for human review.",
+        "Capture before and after evidence outside CloudShield."
+      ],
+      rollbackPlan: [
+        "Retain original ingress rule in the change ticket.",
+        "Restore only approved source ranges through emergency change control."
+      ],
+      approvalChecklist: [
+        "Owner approval captured",
+        "Business impact documented",
+        "Rollback owner assigned"
+      ],
+      riskImpactSummary: "Public administrative exposure is reduced through approved network boundaries.",
+      awsCliReview: "aws ec2 describe-security-groups --group-ids sg-sample001",
+      terraformPatch: "Review-only Terraform note. CloudShield does not run terraform apply.",
+      approvalStatus: "PENDING_APPROVAL",
+      executionStatus: "EXECUTION_BLOCKED",
+      createdById: demoUser.id
+    }
+  });
+
+  const approvalRequest = await prisma.approvalRequest.upsert({
+    where: { id: "sample-approval-open-ssh" },
+    update: {
+      status: "PENDING"
+    },
+    create: {
+      id: "sample-approval-open-ssh",
+      organizationId: organization.id,
+      remediationPlanId: remediationPlan.id,
+      requestedById: demoUser.id,
+      status: "PENDING"
+    }
+  });
+
+  await Promise.all([
+    prisma.auditEvent.upsert({
+      where: { id: "sample-audit-plan-created" },
+      update: {},
+      create: {
+        id: "sample-audit-plan-created",
+        organizationId: organization.id,
+        actorUserId: demoUser.id,
+        action: "governance.remediation_plan.created",
+        targetType: "remediation_plan",
+        targetId: remediationPlan.id,
+        metadata: {
+          sampleData: true,
+          awsApiCallExecuted: false,
+          scannerRun: false,
+          mutationExecuted: false,
+          terraformApplyExecuted: false,
+          automaticRemediationExecuted: false
+        }
+      }
+    }),
+    prisma.auditEvent.upsert({
+      where: { id: "sample-audit-approval-requested" },
+      update: {},
+      create: {
+        id: "sample-audit-approval-requested",
+        organizationId: organization.id,
+        actorUserId: demoUser.id,
+        action: "governance.remediation_plan.approval_requested",
+        targetType: "remediation_plan",
+        targetId: remediationPlan.id,
+        metadata: {
+          sampleData: true,
+          approvalRequestId: approvalRequest.id,
+          awsApiCallExecuted: false,
+          scannerRun: false,
+          mutationExecuted: false,
+          terraformApplyExecuted: false,
+          automaticRemediationExecuted: false
+        }
+      }
+    })
+  ]);
+
+  await prisma.reportExport.upsert({
+    where: { id: "sample-report-evidence-summary" },
+    update: {
+      status: "COMPLETED",
+      generatedAt: new Date(),
+      completedAt: new Date()
+    },
+    create: {
+      id: "sample-report-evidence-summary",
+      organizationId: organization.id,
+      reportType: "COMPLIANCE_EVIDENCE_SUMMARY",
+      reportScope: "organization",
+      title: "Sample demo data - Compliance evidence summary",
+      status: "COMPLETED",
+      format: "json-preview",
+      summaryJson: {
+        sampleData: true,
+        generatedFromCloudShieldRecordsOnly: true,
+        awsApiCallExecuted: false,
+        scannerRun: false,
+        mutationExecuted: false,
+        terraformApplyExecuted: false,
+        automaticRemediationExecuted: false
+      },
+      filtersJson: {},
+      filters: {},
+      sampleData: true,
+      officialAuditReportClaim: false,
+      requestedByUserId: demoUser.id,
+      generatedByUserId: demoUser.id,
+      requestedBy: demoUser.id,
+      generatedAt: new Date(),
+      completedAt: new Date()
+    }
+  });
+
   await prisma.scanRun.upsert({
     where: { id: "sample-scan-run-foundation" },
     update: {
@@ -591,6 +781,66 @@ async function main() {
       }
     }
   });
+
+  await Promise.all([
+    prisma.scanRun.upsert({
+      where: { id: "sample-scan-run-blocked-disabled" },
+      update: { status: "BLOCKED_DISABLED", completedAt: new Date() },
+      create: {
+        id: "sample-scan-run-blocked-disabled",
+        organizationId: organization.id,
+        awsAccountId: productionAccount.id,
+        jobType: "AWS_INVENTORY_SCAN",
+        status: "BLOCKED_DISABLED",
+        phase: "scanner disabled",
+        completedAt: new Date(),
+        errorCode: "SCANNER_DISABLED",
+        errorMessage: "AWS inventory scanner mode is disabled. No AWS API call was made.",
+        metadata: {
+          sampleData: true,
+          awsApiCallExecuted: false,
+          scannerRun: false
+        }
+      }
+    }),
+    prisma.scanRun.upsert({
+      where: { id: "sample-scan-run-queued-preview" },
+      update: { status: "QUEUED" },
+      create: {
+        id: "sample-scan-run-queued-preview",
+        organizationId: organization.id,
+        awsAccountId: developmentAccount.id,
+        jobType: "AWS_INVENTORY_PLAN",
+        status: "QUEUED",
+        phase: "safe preview",
+        metadata: {
+          sampleData: true,
+          awsApiCallExecuted: false,
+          scannerRun: false
+        }
+      }
+    }),
+    prisma.scanRun.upsert({
+      where: { id: "sample-scan-run-failed-readiness" },
+      update: { status: "FAILED", completedAt: new Date() },
+      create: {
+        id: "sample-scan-run-failed-readiness",
+        organizationId: organization.id,
+        awsAccountId: developmentAccount.id,
+        jobType: "AWS_EC2_INVENTORY_SCAN",
+        status: "FAILED",
+        phase: "readiness check",
+        completedAt: new Date(),
+        errorCode: "READINESS_NOT_CONFIGURED",
+        errorMessage: "Read-only AWS credential readiness is incomplete. No AWS API call was made.",
+        metadata: {
+          sampleData: true,
+          awsApiCallExecuted: false,
+          scannerRun: false
+        }
+      }
+    })
+  ]);
 
   console.log("Seeded CloudShield sample demo data. Real AWS scanning is not enabled yet.");
 }

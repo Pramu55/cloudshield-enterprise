@@ -3,6 +3,14 @@ import { prisma, scopeByOrganization } from "@cloudshield/database";
 import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 
+const SafetyFlags = {
+  awsApiCallExecuted: false as const,
+  scannerRun: false as const,
+  mutationExecuted: false as const,
+  terraformApplyExecuted: false as const,
+  automaticRemediationExecuted: false as const
+};
+
 export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/v1/dashboard/activity", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
@@ -22,7 +30,7 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
       ...riskAcceptances.map(r => ({ id: r.id, type: "risk_acceptance" as const, title: `Risk accepted for ${r.owner}`, description: r.businessJustification || "No justification", timestamp: r.createdAt.toISOString(), status: "ACCEPTED" }))
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 15);
 
-    return { activities };
+    return { activities, ...SafetyFlags };
   });
 
   app.get("/api/v1/dashboard/readiness", { preHandler: requireAuth }, async (request) => {
@@ -40,7 +48,8 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
     return {
       awsAccounts,
       overallReadiness: "EVALUATION_MODE",
-      credentialReadiness: getAwsCredentialReadiness(app.config)
+      credentialReadiness: getAwsCredentialReadiness(app.config),
+      ...SafetyFlags
     };
   });
 
@@ -59,7 +68,8 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
           : "not-configured",
         credentialReadinessDetails: credentialReadiness
       },
-      message: "Safety guardrails are active."
+      message: "Safety guardrails are active.",
+      ...SafetyFlags
     };
   });
 
@@ -116,7 +126,8 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
         complianceControlsCount: 0
       },
       relationships,
-      sampleData: resource.id.startsWith("instant-resource")
+      sampleData: resource.id.startsWith("instant-resource"),
+      ...SafetyFlags
     };
   });
 
@@ -131,7 +142,8 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
       scannerMode: app.config.AWS_INVENTORY_SCANNER_MODE,
       connectorMode: app.config.AWS_CONNECTOR_MODE,
       isReadyForReadOnlyScans: credentialsReady.roleBasedReadiness && app.config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan",
-      message: "Platform readiness status read from environment configuration. No real AWS calls were executed."
+      message: "Platform readiness status read from environment configuration. No real AWS calls were executed.",
+      ...SafetyFlags
     };
   });
 
@@ -155,7 +167,8 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
         recommendations: { status: "ACTIVE", count: recommendations, description: "Manual governance suggestions." }
       },
       sampleData: true,
-      message: "All governance metrics loaded from CloudShield database."
+      message: "All governance metrics loaded from CloudShield database.",
+      ...SafetyFlags
     };
   });
 
@@ -168,8 +181,7 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
         "Configure AWS IAM Trust Policy for IAM Role assumption matching CloudShield External ID.",
         "Optionally set AWS_CONNECTOR_MODE=readonly-validation for connectivity checking."
       ],
-      awsApiCallExecuted: false,
-      scannerRun: false
+      ...SafetyFlags
     };
   });
 
@@ -246,7 +258,7 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
         controlsChecked: ["CIS-NETWORK-001", "SOC2-ACCESS-001"]
       },
       sampleData: resource.id.startsWith("instant-resource"),
-      awsApiCallExecuted: false
+      ...SafetyFlags
     };
   });
 }

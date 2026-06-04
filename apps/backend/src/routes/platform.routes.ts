@@ -32,7 +32,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/v1/platform/status", async () => {
-    const milestone = "CLOUDSHIELD_GOVERNED_REAL_WORLD_OPERATIONS_FOUNDATION_GREEN";
+    const milestone = "CLOUDSHIELD_DYNAMIC_OPERATIONS_AND_RESOURCE_GRAPH_GREEN";
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,
@@ -53,6 +53,10 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
       inventoryScanningEnabled: false,
       mutationEnabled: false,
       remediationExecutionEnabled: false,
+      awsApiCallExecuted: false,
+      scannerRun: false,
+      terraformApplyExecuted: false,
+      automaticRemediationExecuted: false,
       sampleDataMode: true,
       backend: "Fastify 5",
       contracts: "Zod 4",
@@ -76,7 +80,11 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
         "AWS credential readiness metadata foundation",
         "Governed remediation planning",
         "Approval-based manual execution workflow",
-        "Governance audit activity"
+        "Governance audit activity",
+        "DB-backed dynamic operations timeline",
+        "Resource relationship graph",
+        "Scan lifecycle readiness workspace",
+        "Report evidence summary"
       ],
       disabledCapabilities: [
         "Live AWS Mutation",

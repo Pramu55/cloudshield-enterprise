@@ -13,6 +13,7 @@ type ActorContext = {
 
 export const GovernanceSafety = {
   awsApiCallExecuted: false as const,
+  scannerRun: false as const,
   mutationExecuted: false as const,
   terraformApplyExecuted: false as const,
   automaticRemediationExecuted: false as const

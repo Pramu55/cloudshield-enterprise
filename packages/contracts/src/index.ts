@@ -280,7 +280,8 @@ export const MilestoneSchema = z.enum([
   "CLOUDSHIELD_AUTH_EXPERIENCE_PRODUCTION_POLISH_GREEN",
   "CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FOUNDATION_GREEN",
   "CLOUDSHIELD_PREMIUM_CLOUD_CONSOLE_VISUAL_EXPERIENCE_GREEN",
-  "CLOUDSHIELD_GOVERNED_REAL_WORLD_OPERATIONS_FOUNDATION_GREEN"
+  "CLOUDSHIELD_GOVERNED_REAL_WORLD_OPERATIONS_FOUNDATION_GREEN",
+  "CLOUDSHIELD_DYNAMIC_OPERATIONS_AND_RESOURCE_GRAPH_GREEN"
 ]);
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
@@ -561,6 +562,10 @@ export const EnterprisePlatformStatusSchema = PlatformStatusSchema.extend({
   inventoryScanningEnabled: z.literal(false),
   mutationEnabled: z.literal(false),
   remediationExecutionEnabled: z.literal(false),
+  awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false),
   sampleDataMode: z.literal(true),
   implementedCapabilities: z.array(z.string()),
   disabledCapabilities: z.array(z.string()),
@@ -921,6 +926,7 @@ export type ApprovalRequestStatus = z.infer<
 
 export const GovernanceSafetyFlagsSchema = z.object({
   awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
   mutationExecuted: z.literal(false),
   terraformApplyExecuted: z.literal(false),
   automaticRemediationExecuted: z.literal(false)
@@ -1220,7 +1226,10 @@ const ReportSafetyFlagsSchema = z.object({
   officialAuditReportClaim: z.literal(false),
   officialCertificationClaim: z.literal(false),
   awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
   mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false),
   remediationExecuted: z.literal(false)
 });
 export type ReportSafetyFlags = z.infer<typeof ReportSafetyFlagsSchema>;

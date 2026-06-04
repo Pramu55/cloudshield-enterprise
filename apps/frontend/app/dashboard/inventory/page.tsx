@@ -20,6 +20,21 @@ type ResourceResponse = {
   }>;
 };
 
+type ResourceGraphResponse = {
+  summary: {
+    accounts: number;
+    resources: number;
+    relationships: number;
+    findings: number;
+    remediationPlans: number;
+    approvalRequests: number;
+    auditEvents: number;
+    reports: number;
+  };
+  awsApiCallExecuted: false;
+  scannerRun: false;
+};
+
 const InstantResources: ResourceResponse = {
   items: [
     {
@@ -51,6 +66,23 @@ export default function InventoryPage() {
   const { data, error, isRefreshing } = useCloudShieldData<ResourceResponse>(
     "/api/v1/inventory/resources",
     InstantResources
+  );
+  const { data: graph } = useCloudShieldData<ResourceGraphResponse>(
+    "/api/v1/resources/graph",
+    {
+      summary: {
+        accounts: 0,
+        resources: 0,
+        relationships: 0,
+        findings: 0,
+        remediationPlans: 0,
+        approvalRequests: 0,
+        auditEvents: 0,
+        reports: 0
+      },
+      awsApiCallExecuted: false,
+      scannerRun: false
+    }
   );
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -102,11 +134,11 @@ export default function InventoryPage() {
       >
         <StatusMatrix
           items={[
-            { label: "Accounts", value: accountsList.length, tone: "info" },
-            { label: "Regions", value: regionsList.length, tone: "info" },
-            { label: "At risk", value: data?.items.filter((i) => (i.riskCount || 0) > 0).length || 0, tone: "warning" },
-            { label: "Source", value: hasRealResources ? "database" : "sample", tone: hasRealResources ? "good" : "warning" }
-          ]}
+              { label: "Accounts", value: accountsList.length, tone: "info" },
+              { label: "Regions", value: regionsList.length, tone: "info" },
+              { label: "At risk", value: data?.items.filter((i) => (i.riskCount || 0) > 0).length || 0, tone: "warning" },
+              { label: "Relationships", value: graph.summary.relationships, tone: "good" }
+            ]}
         />
       </WorkspaceHero>
 
@@ -133,9 +165,9 @@ export default function InventoryPage() {
         >
           <div className="grid gap-3 md:grid-cols-4">
             <CommandCard icon={<Database size={18} />} title="Account registry" description="Business ownership and environment context anchor each resource." />
-            <CommandCard icon={<GitBranch size={18} />} title="Relationships" description="Resource context expands to peers and dependency links from DB records." />
-            <CommandCard icon={<ShieldAlert size={18} />} title="Findings" description="Linked posture findings appear directly inside asset detail views." />
-            <CommandCard icon={<RadioTower size={18} />} title="Scan source" description="Every resource exposes source and last-seen metadata for evidence review." />
+            <CommandCard icon={<GitBranch size={18} />} title="Relationships" description={`${graph.summary.relationships} DB edges connect account, network, compute, findings, plans, approvals, and evidence.`} href="/dashboard/graph" />
+            <CommandCard icon={<ShieldAlert size={18} />} title="Findings" description={`${graph.summary.findings} linked posture findings can be opened from asset context panels.`} />
+            <CommandCard icon={<RadioTower size={18} />} title="Scan source" description={`scannerRun=${String(graph.scannerRun)} and awsApiCallExecuted=${String(graph.awsApiCallExecuted)} for this milestone.`} />
           </div>
         </InsightPanel>
         <DetailBlade
@@ -239,7 +271,7 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
   useEffect(() => {
     if (expanded && !details && !loading) {
       setLoading(true);
-      fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100"}/api/v1/inventory/resources/${resource.id}/context`, {
+      fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100"}/api/v1/resources/${resource.id}/context`, {
         headers: {
           Authorization: `Bearer ${window.localStorage.getItem("cloudshield_access_token") || ""}`
         }
@@ -291,11 +323,11 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
                 <div className="border border-line rounded-xl bg-white p-4 shadow-sm">
                   <p className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-3">Asset Metadata</p>
                   <div className="space-y-2 text-xs">
-                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">ID:</span> <span className="font-mono text-slate-800">{details.resourceId}</span></p>
-                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">Type:</span> <span className="text-slate-800">{details.type}</span></p>
-                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">Region:</span> <span className="text-slate-800 uppercase font-bold">{details.region || "global"}</span></p>
+                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">ID:</span> <span className="font-mono text-slate-800">{details.resource?.resourceId || details.resourceId}</span></p>
+                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">Type:</span> <span className="text-slate-800">{details.resource?.type || details.type}</span></p>
+                    <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">Region:</span> <span className="text-slate-800 uppercase font-bold">{details.resource?.region || details.region || "global"}</span></p>
                     <p className="flex justify-between border-b border-line pb-1.5"><span className="font-semibold text-slate-400">Source:</span> <span className="text-indigo-600 font-semibold">{details.scanSource}</span></p>
-                    <p className="flex justify-between"><span className="font-semibold text-slate-400">Last Seen:</span> <span className="text-slate-700">{details.lastSeenAt ? new Date(details.lastSeenAt).toLocaleString() : "Never"}</span></p>
+                    <p className="flex justify-between"><span className="font-semibold text-slate-400">Last Seen:</span> <span className="text-slate-700">{details.resource?.lastSeenAt || details.lastSeenAt ? new Date(details.resource?.lastSeenAt || details.lastSeenAt).toLocaleString() : "Never"}</span></p>
                   </div>
                 </div>
                 
@@ -347,9 +379,9 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
                 <p className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">
                   <Tag size={12} className="text-slate-400" /> Resource Tags
                 </p>
-                {details.tags && Object.keys(details.tags).length > 0 ? (
+                {(details.resource?.tags || details.tags) && Object.keys(details.resource?.tags || details.tags).length > 0 ? (
                   <div className="flex flex-wrap gap-2 border border-line bg-white p-3 rounded-xl shadow-sm">
-                    {Object.entries(details.tags).map(([k, v]) => (
+                    {Object.entries(details.resource?.tags || details.tags).map(([k, v]) => (
                       <span key={k} className="text-[11px] bg-slate-50 border border-line px-2.5 py-1 rounded-lg text-slate-700 font-mono">
                         <span className="font-bold text-slate-800">{k}:</span> {String(v)}
                       </span>

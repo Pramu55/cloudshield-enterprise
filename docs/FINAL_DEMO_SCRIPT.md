@@ -52,3 +52,13 @@ This script is designed for walking an evaluator, interviewer, or client through
 
 
 **Note**: A premium public landing page is now available at / which guides users into the console login flow (/login), highlighting platform capabilities and safety constraints without claiming official compliance or real client deployments.
+
+## Dynamic Operations Demo Flow
+
+1. Open `/dashboard` and show live module status, operations timeline, and refresh timestamp.
+2. Open `/dashboard/graph` and explain that the relationship graph is built from CloudShield DB records only.
+3. Open `/dashboard/inventory`, select a resource, and show linked relationships, findings, plans, and evidence.
+4. Open `/dashboard/scans` and show blocked scanner readiness plus scan lifecycle states.
+5. Open `/dashboard/governance` and show approval workflow activity.
+6. Open `/dashboard/reports` and show evidence summary plus internal preview reports.
+7. State clearly that AWS credentials are not configured and no AWS API, scanner, mutation, Terraform apply, or automatic remediation was run.

@@ -19,10 +19,23 @@ type ScanRunDto = {
   metadata?: Record<string, any>;
 };
 
+type ScanRunsOverview = {
+  items: ScanRunDto[];
+  readinessChecklist: Array<{ id: string; label: string; complete: boolean }>;
+  lifecycleStates: string[];
+  disabledReason: string | null;
+  scannerMode: string;
+  safeCollectionPreview: string[];
+  awsApiCallExecuted: false;
+  scannerRun: false;
+  mutationExecuted: false;
+};
+
 export default function ScansPage() {
   const [accounts, setAccounts] = useState<AwsAccountDto[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [scanRuns, setScanRuns] = useState<ScanRunDto[]>([]);
+  const [scanOverview, setScanOverview] = useState<ScanRunsOverview | null>(null);
   const [plan, setPlan] = useState<AwsInventoryPlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -52,6 +65,13 @@ export default function ScansPage() {
         if (planRes.ok) {
           setPlan(planJson);
         }
+
+        const runsRes = await fetch(`${API_BASE_URL}/api/v1/scans/runs`, { headers });
+        const runsJson = await runsRes.json();
+        if (runsRes.ok) {
+          setScanOverview(runsJson);
+          setScanRuns(runsJson.items || []);
+        }
       } catch (err: any) {
         setErrorMessage(err.message || "Failed to load initial data.");
       } finally {
@@ -74,7 +94,7 @@ export default function ScansPage() {
         const statusRes = await fetch(`${API_BASE_URL}/api/v1/aws/accounts/${selectedAccountId}/inventory/status`, { headers });
         const statusJson = await statusRes.json();
         if (statusRes.ok && statusJson.runs) {
-          setScanRuns(statusJson.runs);
+          setScanRuns(statusJson.runs.length ? statusJson.runs : scanOverview?.items || []);
         }
       } catch (err: any) {
         console.error("Failed to load scan history", err);
@@ -249,6 +269,55 @@ export default function ScansPage() {
           </div>
         </div>
       )}
+
+      <section className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <InsightPanel
+          title="DB-backed scan run timeline"
+          description="Lifecycle records come from CloudShield scan_run rows. Disabled and failed states are visible without running AWS scanners."
+        >
+          <ActivityTimeline
+            events={(scanOverview?.items?.length ? scanOverview.items.slice(0, 8).map((run) => ({
+              title: `${run.jobType} / ${run.status}`,
+              description: run.errorMessage || run.phase || "Lifecycle event recorded in CloudShield DB.",
+              time: run.startedAt ? new Date(run.startedAt).toLocaleString() : "queued",
+              tone: run.status === "FAILED" || run.status === "BLOCKED_DISABLED" ? "danger" as const : run.status === "SUCCEEDED" ? "good" as const : "info" as const
+            })) : [
+              {
+                title: "No scan runs recorded",
+                description: "Seed data or scanner preview records will appear here.",
+                time: "ready",
+                tone: "warning" as const
+              }
+            ])}
+          />
+        </InsightPanel>
+        <InsightPanel
+          title="Readiness checklist"
+          description="Start scan remains blocked unless explicit read-only scanner mode is enabled."
+        >
+          <div className="space-y-2">
+            {(scanOverview?.readinessChecklist || []).map((item) => (
+              <div className="flex items-center justify-between rounded-lg border border-line bg-white px-3 py-2 text-xs" key={item.id}>
+                <span className="font-semibold text-slate-600">{item.label}</span>
+                <span className={`status-pill ${item.complete ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                  {item.complete ? "ready" : "blocked"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+            {scanOverview?.disabledReason || "Scanner start still requires explicit read-only mode and user confirmation."}
+          </div>
+          <StatusMatrix
+            items={[
+              { label: "Scanner mode", value: scanOverview?.scannerMode || plan?.scannerMode || "disabled", tone: "warning" },
+              { label: "AWS API call", value: String(scanOverview?.awsApiCallExecuted ?? false), tone: "good" },
+              { label: "Scanner run", value: String(scanOverview?.scannerRun ?? false), tone: "good" },
+              { label: "Mutation", value: String(scanOverview?.mutationExecuted ?? false), tone: "good" }
+            ]}
+          />
+        </InsightPanel>
+      </section>
 
       {/* ═══════════════════════════════════════════════
           §1  SAFETY EXECUTION GATE
