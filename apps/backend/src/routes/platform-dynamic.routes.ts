@@ -141,7 +141,10 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
       awsAccountsCount: accountsCount,
       scannerMode: app.config.AWS_INVENTORY_SCANNER_MODE,
       connectorMode: app.config.AWS_CONNECTOR_MODE,
-      isReadyForReadOnlyScans: credentialsReady.roleBasedReadiness && app.config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan",
+      isReadyForReadOnlyScans:
+        credentialsReady.roleBasedReadiness &&
+        (app.config.AWS_INVENTORY_SCANNER_MODE === "readonly" ||
+          app.config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan"),
       message: "Platform readiness status read from environment configuration. No real AWS calls were executed.",
       ...SafetyFlags
     };

@@ -400,6 +400,8 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
       orderBy: { startedAt: "desc" },
       take: 100
     });
+    const latestInventoryRun = runs.find((run) => run.jobType === "AWS_READONLY_INVENTORY_SYNC" || run.jobType === "AWS_EC2_INVENTORY_SCAN");
+    const hasSuccessfulInventorySync = runs.some((run) => run.jobType === "AWS_READONLY_INVENTORY_SYNC" && run.status === "SUCCEEDED");
 
     const items = runs.map((run) => ({
         id: run.id,
@@ -431,8 +433,8 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         },
         {
           id: "scanner-mode",
-          label: "AWS_INVENTORY_SCANNER_MODE=readonly-scan",
-          complete: app.config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan"
+          label: "AWS_INVENTORY_SCANNER_MODE=readonly",
+          complete: app.config.AWS_INVENTORY_SCANNER_MODE === "readonly" || app.config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan"
         },
         {
           id: "execution-gates",
@@ -440,12 +442,13 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
           complete: true
         }
       ],
-      lifecycleStates: ["BLOCKED_DISABLED", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED"],
+      lifecycleStates: ["QUEUED", "VALIDATING_IDENTITY", "SYNCING_REGIONS", "SYNCING_NETWORK", "SYNCING_COMPUTE", "NORMALIZING_RESOURCES", "UPDATING_GRAPH", "ANALYZING_POSTURE", "GENERATING_EVIDENCE", "SUCCEEDED", "FAILED", "BLOCKED_DISABLED"],
       disabledReason:
-        app.config.AWS_INVENTORY_SCANNER_MODE === "disabled"
-          ? "Scanner mode is disabled. Start scan remains blocked until explicit read-only mode is configured."
+        app.config.AWS_INVENTORY_SCANNER_MODE !== "readonly" && app.config.AWS_INVENTORY_SCANNER_MODE !== "readonly-scan"
+          ? "Scanner mode is disabled. Start sync remains blocked until AWS_INVENTORY_SCANNER_MODE=readonly is configured."
           : null,
       scannerMode: app.config.AWS_INVENTORY_SCANNER_MODE,
+      latestInventoryRun,
       safeCollectionPreview: [
         "EC2 instance metadata",
         "VPC/subnet/security group relationships",
@@ -453,14 +456,15 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         "Resource tags and ownership signals",
         "Security posture records written to CloudShield DB"
       ],
-      ...SafetyFlags
+      ...SafetyFlags,
+      scannerRun: hasSuccessfulInventorySync
     };
   });
 
   app.get("/api/v1/reports/evidence-summary", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
     const scope = scopeByOrganization(auth.organizationId);
-    const [evidence, reports, controls, plans, approvals, findings] = await Promise.all([
+    const [evidence, reports, controls, plans, approvals, findings, successfulInventoryRuns] = await Promise.all([
       prisma.complianceEvidence.findMany({
         where: scope,
         include: {
@@ -478,7 +482,8 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
       prisma.complianceControl.findMany({ where: scope, take: 100 }),
       prisma.remediationPlan.count({ where: scope }),
       prisma.approvalRequest.count({ where: scope }),
-      prisma.securityFinding.count({ where: scope })
+      prisma.securityFinding.count({ where: scope }),
+      prisma.scanRun.count({ where: { ...scope, jobType: "AWS_READONLY_INVENTORY_SYNC", status: "SUCCEEDED" } })
     ]);
 
     return {
@@ -513,9 +518,14 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         reportPreviewAvailable: true,
         exportReady: reports.length > 0,
         officialAuditReportClaim: false,
-        officialCertificationClaim: false
+        officialCertificationClaim: false,
+        awsReadonlyInventoryEvidenceAvailable: successfulInventoryRuns > 0
       },
-      ...SafetyFlags
+      ...SafetyFlags,
+      scannerRun: successfulInventoryRuns > 0,
+      awsInventoryReadonlySyncEvidence: successfulInventoryRuns > 0
+        ? "AWS inventory read-only sync evidence is present from completed ScanRun records."
+        : "AWS inventory read-only sync evidence is not present because no successful sync has run."
     };
   });
 }

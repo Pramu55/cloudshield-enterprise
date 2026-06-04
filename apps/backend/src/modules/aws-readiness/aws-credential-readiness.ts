@@ -45,9 +45,13 @@ export function getAwsCredentialReadiness(
   });
 
   const stsValidationAvailable =
-    config.AWS_CONNECTOR_MODE === "readonly-validation" && roleBasedReadiness;
+    (config.AWS_CONNECTOR_MODE === "readonly-validation" ||
+      config.AWS_CONNECTOR_MODE === "sts-validation") &&
+    roleBasedReadiness;
   const inventoryScanAvailable =
-    config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan" && roleBasedReadiness;
+    (config.AWS_INVENTORY_SCANNER_MODE === "readonly" ||
+      config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan") &&
+    roleBasedReadiness;
 
   return {
     connectorMode: config.AWS_CONNECTOR_MODE,

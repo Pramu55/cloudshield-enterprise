@@ -29,7 +29,10 @@ const criticalityWeight: Record<string, number> = {
 export type IntelligenceContext = Awaited<ReturnType<typeof loadIntelligenceContext>>;
 
 export function resolveAssessmentMode(config: RuntimeEnv): AutomationAssessmentMode {
-  if (config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan") {
+  if (
+    config.AWS_INVENTORY_SCANNER_MODE === "readonly" ||
+    config.AWS_INVENTORY_SCANNER_MODE === "readonly-scan"
+  ) {
     return "AWS_READONLY_SCAN";
   }
 

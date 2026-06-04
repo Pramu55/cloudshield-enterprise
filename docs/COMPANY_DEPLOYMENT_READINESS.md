@@ -18,7 +18,7 @@ Recommended environment variables checklist:
 | `NODE_ENV` | `production` | Enables production bundler/runtime parameters. |
 | `AWS_REGION_DEFAULT` | e.g. `us-east-1` | Default scanning region for regional services. |
 | `AWS_CONNECTOR_MODE` | `readonly-validation` | Enables STS identity connections. |
-| `AWS_INVENTORY_SCANNER_MODE` | `readonly-scan` | Enables background BullMQ scanner workers. |
+| `AWS_INVENTORY_SCANNER_MODE` | `readonly` | Enables explicit Phase 1 read-only inventory sync. |
 | `AWS_ROLE_ARN` | `arn:aws:iam::...` | Target IAM Role to assume (Production). |
 | `AWS_EXTERNAL_ID` | String | Trust policy external identifier. |
 

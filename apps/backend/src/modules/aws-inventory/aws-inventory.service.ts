@@ -16,12 +16,12 @@ export class AwsInventoryPlanService {
   constructor(private readonly scannerMode: AwsInventoryScannerMode) {}
 
   private getAllowedApis() {
-    const isScannerEnabled = this.scannerMode === "readonly-scan";
+    const isScannerEnabled = isReadonlyInventoryEnabled(this.scannerMode);
     return PlannedAwsReadonlyApiOperations.map(op => ({
       ...op,
-      enabledInCurrentMilestone: op.enabledInCurrentMilestone || (isScannerEnabled && op.service === "ec2"),
+      enabledInCurrentMilestone: op.enabledInCurrentMilestone && isScannerEnabled,
       notes: (isScannerEnabled && op.service === "ec2") 
-        ? "EC2 read-only scanner slice is implemented (but disabled by default)."
+        ? "Phase 1 read-only inventory sync is enabled for this allowlisted API."
         : op.notes
     }));
   }
@@ -30,7 +30,7 @@ export class AwsInventoryPlanService {
 
     return AwsInventoryPlanResponseSchema.parse({
       scannerMode: this.scannerMode,
-      inventoryScanningEnabled: false,
+      inventoryScanningEnabled: isReadonlyInventoryEnabled(this.scannerMode),
       mutationEnabled: false,
       automaticRemediationEnabled: false,
       terraformApplyEnabled: false,
@@ -42,7 +42,9 @@ export class AwsInventoryPlanService {
       sampleDataLabel:
         "Sample/demo planning data - real AWS inventory scanning is disabled.",
       message:
-        "AWS inventory scanner architecture is planned, but scanner execution is disabled in this milestone."
+        isReadonlyInventoryEnabled(this.scannerMode)
+          ? "AWS read-only inventory sync is available only through explicit account-scoped sync."
+          : "AWS inventory sync is disabled. No AWS inventory APIs will execute."
     });
   }
 
@@ -50,7 +52,7 @@ export class AwsInventoryPlanService {
     return AwsAccountInventoryPlanResponseSchema.parse({
       account,
       scannerMode: this.scannerMode,
-      inventoryScanningEnabled: false,
+      inventoryScanningEnabled: isReadonlyInventoryEnabled(this.scannerMode),
       mutationEnabled: false,
       awsApiCallExecuted: false,
       regions: account.regions,
@@ -59,7 +61,9 @@ export class AwsInventoryPlanService {
         (operation) => operation.operation !== "GetCallerIdentity"
       ),
       message:
-        "This account has a read-only inventory plan only. No EC2, S3, IAM, Security Group, EBS, VPC, or subnet inventory APIs were called."
+        isReadonlyInventoryEnabled(this.scannerMode)
+          ? "This account can run explicit Phase 1 read-only inventory sync after STS account match."
+          : "This account has a read-only inventory plan only. No AWS inventory APIs were called."
     });
   }
 
@@ -73,7 +77,11 @@ export class AwsInventoryPlanService {
       blockedReason:
         "AWS inventory scanning is disabled in this CloudShield milestone.",
       message:
-        "Start scan is blocked. CloudShield currently exposes the read-only scanner plan only and does not execute AWS inventory collection."
+        "Start scan is blocked. CloudShield requires AWS_INVENTORY_SCANNER_MODE=readonly before AWS inventory collection."
     });
   }
+}
+
+export function isReadonlyInventoryEnabled(scannerMode: AwsInventoryScannerMode) {
+  return scannerMode === "readonly" || scannerMode === "readonly-scan";
 }

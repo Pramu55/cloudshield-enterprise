@@ -46,3 +46,8 @@ In the default local mode, both `awsApiCallExecuted` and `scannerRun` remain `fa
 The operator only needs to configure safe AWS environment variables when real validation is desired, open CloudShield, and click `Run CloudShield Automated Assessment`.
 
 The generated output remains advisory and approval-based.
+# Inventory Sync Interaction
+
+`Run CloudShield Assessment` remains advisory and governed. It may show an inventory sync step, but the step is blocked unless read-only mode is explicitly enabled. In disabled mode the assessment continues with CloudShield database evaluation and reports `scannerRun=false`.
+
+Automation never runs Terraform apply, never executes remediation, and never mutates AWS resources. Read-only inventory evidence is included in reports only after a successful explicit `/inventory/sync` run.

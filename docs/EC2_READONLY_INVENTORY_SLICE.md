@@ -1,14 +1,14 @@
 # EC2 Read-Only Inventory Slice
 
-CloudShield has implemented an initial EC2 read-only inventory scanner slice.
+CloudShield has implemented an initial Phase 1 AWS read-only inventory sync slice.
 
 ## Overview
-This milestone introduces the technical foundation for AWS EC2 read-only scanning, while ensuring CloudShield's enterprise-grade safety properties remain intact.
+This milestone introduces the technical foundation for AWS read-only inventory sync, while ensuring CloudShield's enterprise-grade safety properties remain intact.
 
 ## Scanner Mode
 The scanner uses `process.env.AWS_INVENTORY_SCANNER_MODE`.
 By default, this is set to `disabled` to ensure no AWS scanning is performed out-of-the-box.
-When configured to `readonly-scan`, the worker will perform read-only API calls to gather EC2, EBS, VPC, Subnet, and Security Group inventory data.
+When configured to `readonly`, CloudShield performs only the allowlisted read-only API calls to gather EC2, EBS, VPC, subnet, and security group inventory data.
 
 ## Allowed APIs
 * `sts:GetCallerIdentity`

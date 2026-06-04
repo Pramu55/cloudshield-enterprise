@@ -344,3 +344,8 @@ CloudShield automation is advisory automation. The deterministic intelligence en
 Credentials remain environment-only. The database stores readiness booleans and mode labels, not secret values.
 
 Default local mode is `EVALUATION`, where AWS execution is blocked and all automation output is generated from CloudShield DB records.
+# Read-only AWS Inventory Safety
+
+AWS inventory sync is allowlisted and disabled by default. Disabled mode returns `BLOCKED_DISABLED` with `awsApiCallExecuted=false` and `scannerRun=false`. Enabled mode validates `sts:GetCallerIdentity` first, checks the registered account match, and only calls the Phase 1 EC2 describe APIs documented in `docs/AWS_READONLY_INVENTORY_SYNC.md`.
+
+CloudShield does not persist AWS credentials, log secret values, run Terraform apply, execute automatic remediation, or call Create/Update/Delete/Put/Attach/Detach/Authorize/Revoke APIs.

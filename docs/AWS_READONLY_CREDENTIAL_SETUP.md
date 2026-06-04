@@ -49,4 +49,16 @@ CloudShield is in the CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FO
 * **Credential Protection**: The platform runs STS connection validations and EC2 describe scans without storing access keys or secret key parameters.
 * **Environment-Based Config**: Deployment setups assume cross-account roles defined in runtime environment values.
 * **Least-Privilege Roles**: Read-only policies limit the connector context to describing basic inventory resources, keeping the credentials safe from mutation risks.
+# Phase 1 Inventory Sync Mode
+
+Read-only inventory sync remains disabled unless both gates are explicit:
+
+```env
+AWS_CONNECTOR_MODE=readonly-validation
+AWS_INVENTORY_SCANNER_MODE=readonly
+```
+
+`sts-validation` is also accepted for the connector gate. Credentials stay environment-only; do not store AWS access keys, secret access keys, or session tokens in CloudShield records. To keep sync disabled, leave `AWS_INVENTORY_SCANNER_MODE=disabled`.
+
+To revoke access, remove the environment credentials or disable the AWS role/trust relationship, then restart the backend and worker.
 

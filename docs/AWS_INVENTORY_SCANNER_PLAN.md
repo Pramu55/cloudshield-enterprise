@@ -7,7 +7,7 @@
 - `AWS_INVENTORY_SCANNER_MODE=disabled` by default.
 - `GET /api/v1/aws/inventory/plan` returns the scanner plan.
 - `POST /api/v1/aws/accounts/:accountId/inventory/plan` returns an organization-scoped account scan plan.
-- `POST /api/v1/aws/accounts/:accountId/inventory/start` is blocked and returns `awsApiCallExecuted=false`.
+- `POST /api/v1/aws/accounts/:accountId/inventory/sync` is blocked unless explicitly enabled and returns `awsApiCallExecuted=false` and `scannerRun=false` in disabled mode.
 - No EC2, S3, IAM, Security Group, EBS, VPC, subnet, RDS, Lambda, CloudTrail, KMS, or billing inventory APIs are called.
 - No AWS mutation, automatic remediation, or Terraform apply is available.
 

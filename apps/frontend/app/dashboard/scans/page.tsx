@@ -115,7 +115,7 @@ export default function ScansPage() {
         "Content-Type": "application/json"
       };
 
-      const res = await fetch(`${API_BASE_URL}/api/v1/aws/accounts/${selectedAccountId}/inventory/start`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/aws/accounts/${selectedAccountId}/inventory/sync`, {
         method: "POST",
         headers
       });
@@ -208,7 +208,7 @@ export default function ScansPage() {
         description="Scanner operations are presented as a lifecycle console: account selection, mode status, capability matrix, blocked states, job history, and confirmation modal."
         icon={<Terminal size={20} />}
         badges={[
-          { label: plan?.scannerMode || "scanner loading", tone: plan?.scannerMode === "readonly-scan" ? "good" : "warning" },
+          { label: plan?.scannerMode || "scanner loading", tone: plan?.inventoryScanningEnabled ? "good" : "warning" },
           { label: "No mutation APIs", tone: "good" },
           { label: "Explicit start required", tone: "warning" }
         ]}
@@ -230,10 +230,10 @@ export default function ScansPage() {
         >
           <ActivityTimeline
             events={[
-              { title: "Queued", description: "Account selected and job accepted.", time: "QUEUED", tone: "info" },
-              { title: "Running", description: "Read-only describe operations collect inventory.", time: "RUNNING", tone: "warning" },
-              { title: "Succeeded", description: "Resources, tags, relationships, and findings update DB records.", time: "SUCCEEDED", tone: "good" },
-              { title: "Failed or blocked", description: "Disabled mode, missing readiness, or read-only failure stops execution.", time: "FAILED / BLOCKED", tone: "danger" }
+              { title: "Queued", description: "Account selected and sync accepted.", time: "QUEUED", tone: "info" },
+              { title: "STS validation", description: "Caller identity must match the registered account before inventory.", time: "VALIDATING_IDENTITY", tone: "warning" },
+              { title: "Read-only sync", description: "Regions, network, compute, and EBS metadata are collected through the allowlist.", time: "SYNCING", tone: "warning" },
+              { title: "Evidence", description: "Resources, relationships, findings, evidence, and report summary update DB records.", time: "GENERATING_EVIDENCE", tone: "good" }
             ]}
           />
         </InsightPanel>
@@ -350,7 +350,7 @@ export default function ScansPage() {
                 <p className="mt-4 text-sm leading-relaxed text-slate-600">
                   {plan.message} The scanner runs only when{" "}
                   <code className="px-1.5 py-0.5 rounded bg-slate-100 text-xs font-mono font-semibold text-slate-700 border border-line">
-                    AWS_INVENTORY_SCANNER_MODE=readonly-scan
+                    AWS_INVENTORY_SCANNER_MODE=readonly
                   </code>.
                   Only read-only resource ingestion is performed. AWS resource modifications or Terraform apply are strictly blocked.
                 </p>
@@ -455,14 +455,14 @@ export default function ScansPage() {
                     background: "linear-gradient(135deg, #4f46e5 0%, #4338ca 50%, #3730a3 100%)",
                     boxShadow: "0 2px 8px rgba(79, 70, 229, 0.35), 0 1px 3px rgba(0,0,0,0.1)",
                   }}
-                  disabled={!selectedAccountId || plan?.scannerMode === "disabled" || plan?.scannerMode === "readonly-plan" || isScanning}
+                  disabled={!selectedAccountId || !plan?.inventoryScanningEnabled || isScanning}
                   onClick={() => setShowConfirm(true)}
                   type="button"
                 >
                   {/* Hover glow overlay */}
                   <span className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-200" />
                   <Play size={16} className="relative z-10 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:scale-110" />
-                  <span className="relative z-10">Run EC2 read-only inventory scan</span>
+                  <span className="relative z-10">Run read-only inventory sync</span>
                 </button>
               </div>
             </div>

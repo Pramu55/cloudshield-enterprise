@@ -5,10 +5,6 @@ import type {
 
 export const PlannedAwsInventoryResourceTypes: AwsInventoryResourceType[] = [
   "EC2_INSTANCE",
-  "S3_BUCKET",
-  "IAM_USER",
-  "IAM_ROLE",
-  "IAM_ACCESS_KEY",
   "SECURITY_GROUP",
   "EBS_VOLUME",
   "VPC",
@@ -28,13 +24,23 @@ export const PlannedAwsReadonlyApiOperations: AwsReadonlyApiOperation[] = [
   },
   {
     service: "ec2",
+    operation: "DescribeRegions",
+    resourceType: "AWS_ACCOUNT",
+    category: "network",
+    riskLevel: "low",
+    mutationAllowed: false,
+    enabledInCurrentMilestone: true,
+    notes: "Read-only region discovery for account-scoped inventory planning."
+  },
+  {
+    service: "ec2",
     operation: "DescribeInstances",
     resourceType: "EC2_INSTANCE",
     category: "compute",
     riskLevel: "low",
     mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future inventory read. Not executed in this milestone."
+    enabledInCurrentMilestone: true,
+    notes: "Read-only compute inventory for explicitly configured Phase 1 sync."
   },
   {
     service: "ec2",
@@ -43,8 +49,8 @@ export const PlannedAwsReadonlyApiOperations: AwsReadonlyApiOperation[] = [
     category: "network",
     riskLevel: "low",
     mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future network posture read. Not executed in this milestone."
+    enabledInCurrentMilestone: true,
+    notes: "Read-only network posture metadata for explicitly configured Phase 1 sync."
   },
   {
     service: "ec2",
@@ -53,8 +59,8 @@ export const PlannedAwsReadonlyApiOperations: AwsReadonlyApiOperation[] = [
     category: "storage",
     riskLevel: "low",
     mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future storage inventory read. Not executed in this milestone."
+    enabledInCurrentMilestone: true,
+    notes: "Read-only EBS volume metadata for explicitly configured Phase 1 sync."
   },
   {
     service: "ec2",
@@ -63,8 +69,8 @@ export const PlannedAwsReadonlyApiOperations: AwsReadonlyApiOperation[] = [
     category: "network",
     riskLevel: "low",
     mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future VPC inventory read. Not executed in this milestone."
+    enabledInCurrentMilestone: true,
+    notes: "Read-only VPC metadata for explicitly configured Phase 1 sync."
   },
   {
     service: "ec2",
@@ -73,88 +79,8 @@ export const PlannedAwsReadonlyApiOperations: AwsReadonlyApiOperation[] = [
     category: "network",
     riskLevel: "low",
     mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future subnet inventory read. Not executed in this milestone."
-  },
-  {
-    service: "s3",
-    operation: "ListBuckets",
-    resourceType: "S3_BUCKET",
-    category: "storage",
-    riskLevel: "low",
-    mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future bucket inventory read. Not executed in this milestone."
-  },
-  {
-    service: "s3",
-    operation: "GetBucketEncryption",
-    resourceType: "S3_BUCKET",
-    category: "storage",
-    riskLevel: "low",
-    mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future bucket posture read. Not executed in this milestone."
-  },
-  {
-    service: "s3",
-    operation: "GetBucketPolicyStatus",
-    resourceType: "S3_BUCKET",
-    category: "storage",
-    riskLevel: "low",
-    mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future public-policy posture read. Not executed in this milestone."
-  },
-  {
-    service: "s3",
-    operation: "GetPublicAccessBlock",
-    resourceType: "S3_BUCKET",
-    category: "storage",
-    riskLevel: "low",
-    mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future public-access posture read. Not executed in this milestone."
-  },
-  {
-    service: "iam",
-    operation: "ListRoles",
-    resourceType: "IAM_ROLE",
-    category: "iam",
-    riskLevel: "medium",
-    mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future IAM inventory read. Not executed in this milestone."
-  },
-  {
-    service: "iam",
-    operation: "ListUsers",
-    resourceType: "IAM_USER",
-    category: "iam",
-    riskLevel: "medium",
-    mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future IAM identity inventory read. Not executed in this milestone."
-  },
-  {
-    service: "iam",
-    operation: "ListAccessKeys",
-    resourceType: "IAM_ACCESS_KEY",
-    category: "iam",
-    riskLevel: "medium",
-    mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future access-key metadata read. Secret key values are never retrievable or stored."
-  },
-  {
-    service: "iam",
-    operation: "GetAccountSummary",
-    resourceType: "AWS_ACCOUNT",
-    category: "iam",
-    riskLevel: "medium",
-    mutationAllowed: false,
-    enabledInCurrentMilestone: false,
-    notes: "Planned future account-level IAM summary read. Not executed in this milestone."
+    enabledInCurrentMilestone: true,
+    notes: "Read-only subnet metadata for explicitly configured Phase 1 sync."
   }
 ];
 
@@ -178,9 +104,10 @@ export const BlockedAwsMutationPatterns = [
 export const PlannedAwsInventoryScanPhases = [
   "Tenant-scoped account selection",
   "STS identity validation gate",
-  "Region planning without inventory API execution",
-  "Future read-only resource family batching",
-  "Future relationship mapping",
-  "Future CIS-inspired and SOC2-inspired evidence staging",
-  "Disabled execution gate for this milestone"
+  "Region allowlist planning",
+  "Read-only EC2 network inventory",
+  "Read-only EC2 compute and EBS inventory",
+  "CloudShield DB normalization",
+  "Resource relationship graph update",
+  "Deterministic posture/evidence evaluation"
 ];

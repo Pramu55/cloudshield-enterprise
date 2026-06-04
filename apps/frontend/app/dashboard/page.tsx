@@ -220,7 +220,7 @@ export default function DashboardHome() {
       status: readiness.credentialReadiness.stsValidationAvailable ? "active" : "planned"
     },
     {
-      label: "EC2 read-only inventory",
+      label: "AWS read-only inventory",
       description: "Read-only inventory ingestion is gated by scanner mode and account selection.",
       status: readiness.credentialReadiness.inventoryScanAvailable ? "active" : "blocked"
     },

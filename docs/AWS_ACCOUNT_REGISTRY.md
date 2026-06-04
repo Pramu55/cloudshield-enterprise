@@ -40,7 +40,7 @@ POST /api/v1/aws/accounts/:accountId/validate
 GET /api/v1/aws/setup-guide
 GET /api/v1/aws/inventory/plan
 POST /api/v1/aws/accounts/:accountId/inventory/plan
-POST /api/v1/aws/accounts/:accountId/inventory/start
+POST /api/v1/aws/accounts/:accountId/inventory/sync
 ```
 
 The `:accountId` parameter may be the internal registry id or AWS account ID, but the backend always combines it with the authenticated organization scope.

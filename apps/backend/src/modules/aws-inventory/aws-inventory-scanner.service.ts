@@ -6,21 +6,23 @@ import {
 } from "@cloudshield/contracts";
 import { cloudScanQueue } from "./aws-inventory.queue.js";
 import { prisma } from "@cloudshield/database";
+import { isReadonlyInventoryEnabled } from "./aws-inventory.service.js";
 
 export class AwsInventoryScannerService {
   constructor(private readonly scannerMode: AwsInventoryScannerMode) {}
 
   async startScan(organizationId: string, accountId: string) {
-    if (this.scannerMode === "disabled" || this.scannerMode === "readonly-plan") {
+    if (!isReadonlyInventoryEnabled(this.scannerMode)) {
       return AwsInventoryStartResponseSchema.parse({
         status: "BLOCKED_DISABLED",
         scannerMode: this.scannerMode,
         awsApiCallExecuted: false,
+        scannerRun: false,
         message: "Start scan is blocked. AWS inventory scanning is disabled in this CloudShield milestone.",
       });
     }
 
-    if (this.scannerMode === "readonly-scan") {
+    if (isReadonlyInventoryEnabled(this.scannerMode)) {
       const scanRun = await prisma.scanRun.create({
         data: {
           organizationId: organizationId,
@@ -42,6 +44,7 @@ export class AwsInventoryScannerService {
         status: "QUEUED",
         scannerMode: this.scannerMode,
         awsApiCallExecuted: false,
+        scannerRun: true,
         scanRunId: scanRun.id,
         message: "Scan job queued successfully.",
         allowedApis: [
@@ -60,6 +63,7 @@ export class AwsInventoryScannerService {
       status: "NOT_CONFIGURED",
       scannerMode: this.scannerMode,
       awsApiCallExecuted: false,
+      scannerRun: false,
       message: "Scanner mode is not configured properly."
     });
   }

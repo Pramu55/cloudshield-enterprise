@@ -211,15 +211,15 @@ export function AccountRegistryClient({
 
   async function startScan(account: AwsAccountDto) {
     if (inventoryPlan.scannerMode === "disabled" || inventoryPlan.scannerMode === "readonly-plan") {
-      setMessage("EC2 read-only scanner is implemented but disabled by default. Scanner execution is blocked.");
+      setMessage("Read-only inventory sync is disabled. Set AWS_INVENTORY_SCANNER_MODE=readonly to enable the explicit sync button.");
       return;
     } else {
-      setMessage("Starting EC2 read-only inventory scan...");
+      setMessage("Starting read-only inventory sync. STS identity will be verified first.");
     }
 
     try {
       const result = await apiRequest<any>(
-        `/api/v1/aws/accounts/${account.id}/inventory/start`,
+        `/api/v1/aws/accounts/${account.id}/inventory/sync`,
         { method: "POST" }
       );
       setMessage(result.message);
@@ -242,7 +242,7 @@ export function AccountRegistryClient({
         <div className="grid gap-4 md:grid-cols-4 border-b border-line pb-4 mb-4">
           <StatusTile label="Connector mode" value={connector.mode} />
           <StatusTile label="Read-only validation" value={connector.status} />
-          <StatusTile label="Inventory scan" value="Disabled plan only" />
+              <StatusTile label="Inventory sync" value={inventoryPlan.inventoryScanningEnabled ? "Read-only enabled" : "Disabled"} />
           <StatusTile
             label="AWS credentials"
             value="No credentials in DB"
@@ -251,7 +251,7 @@ export function AccountRegistryClient({
         <div className="flex gap-2 items-center text-xs text-slate-500 bg-slate-50 border border-line p-3 rounded-lg">
           <HelpCircle size={14} className="text-slate-400 shrink-0" />
           <span>
-            Only STS identity validation is planned or enabled. No inventory scan runs in this milestone, and no AWS resources are changed.
+            STS identity is verified before inventory sync. Inventory remains disabled unless read-only mode is explicitly configured, and no AWS resources are changed.
           </span>
         </div>
         <p className="mt-2 text-xs font-semibold text-indigo-600">
@@ -322,7 +322,7 @@ export function AccountRegistryClient({
               )}
           />
           <GuideList
-              title="Read-only API plan"
+              title="Read-only API allowlist"
               items={inventoryPlan.allowedReadOnlyApis
                   .slice(0, 6)
                   .map(
@@ -336,7 +336,7 @@ export function AccountRegistryClient({
           />
         </div>
         <div className="mt-5 pt-4 border-t border-line text-xs font-semibold text-slate-500">
-          Inventory scanning, automatic remediation, AWS mutation, and Terraform apply remain disabled.
+          Automatic remediation, AWS mutation, and Terraform apply remain disabled.
         </div>
       </section>
 
@@ -440,15 +440,15 @@ export function AccountRegistryClient({
                         <button
                           className="rounded-lg border border-line px-2.5 py-1 text-slate-600 hover:bg-slate-100 hover:text-ink transition-colors min-h-0 disabled:cursor-not-allowed disabled:opacity-40 text-xs font-bold"
                           title={
-                            inventoryPlan.scannerMode === "disabled"
-                              ? "Scanner execution is disabled."
-                              : "Start EC2 Scan"
+                            inventoryPlan.inventoryScanningEnabled
+                              ? "Start read-only inventory sync"
+                              : "Read-only inventory sync is disabled."
                           }
                           type="button"
-                          disabled={inventoryPlan.scannerMode === "disabled" || inventoryPlan.scannerMode === "readonly-plan"}
+                          disabled={!inventoryPlan.inventoryScanningEnabled}
                           onClick={() => setModalOpen({ type: "scan", account })}
                         >
-                          Scan
+                          Start Read-only Inventory Sync
                         </button>
                         <button
                           className="rounded-lg border border-line p-1.5 text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors min-h-0"
@@ -564,7 +564,7 @@ export function AccountRegistryClient({
           <div className="w-full max-w-md rounded-2xl border border-line bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <h4 className="text-base font-bold text-ink border-b border-line pb-3 flex items-center gap-2">
               <ShieldAlert className="text-amber-500" size={18} />
-              {modalOpen.type === "validate" ? "Confirm STS Identity validation" : "Confirm EC2 Scanner Synchronize"}
+              {modalOpen.type === "validate" ? "Confirm STS Identity validation" : "Confirm Read-only Inventory Sync"}
             </h4>
             
             <p className="mt-3 text-xs leading-relaxed text-slate-600">
@@ -574,7 +574,7 @@ export function AccountRegistryClient({
                 </>
               ) : (
                 <>
-                  You are initiating a read-only inventory synchronization. This requests <strong>EC2 Describe APIs</strong> to collect compute instance resources, security configurations, and subnet networks. No Terraform apply or mutations will execute.
+                  You are initiating a read-only inventory synchronization. CloudShield validates STS identity first, then requests only the allowlisted Phase 1 APIs. No Terraform apply or mutations will execute.
                 </>
               )}
             </p>

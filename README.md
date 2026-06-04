@@ -44,7 +44,9 @@ For safety and evaluation purposes, the following are strictly disabled:
 
 ### Safety Model
 - **Read-Only**: The platform operates in a strict read-only mode. Live connections only permit read/identity actions.
-- **Dynamic AWS Connector**: When `AWS_CONNECTOR_MODE=readonly-validation` or `AWS_CONNECTOR_MODE=sts-validation`, and `AWS_INVENTORY_SCANNER_MODE=readonly-scan` are set, the platform executes live `sts:GetCallerIdentity` connection validation and `ec2:Describe*` resource scans.
+- **Dynamic AWS Connector**: When `AWS_CONNECTOR_MODE=readonly-validation` or `AWS_CONNECTOR_MODE=sts-validation`, and `AWS_INVENTORY_SCANNER_MODE=readonly` are explicitly set, the platform validates `sts:GetCallerIdentity` first and can run the Phase 1 account-scoped read-only inventory sync allowlist: `ec2:DescribeRegions`, `ec2:DescribeVpcs`, `ec2:DescribeSubnets`, `ec2:DescribeSecurityGroups`, `ec2:DescribeInstances`, and `ec2:DescribeVolumes`.
+
+Read-only inventory sync is disabled by default. CloudShield does not store AWS credentials, does not call mutation APIs, does not run Terraform apply, and does not execute automatic remediation.
 - **No Secrets Stored**: No real AWS credentials or keys are committed, logged, or saved in the database.
 - **No Secret Exposure**: All API responses hide sensitive strings, returning safe booleans and execution logs.
 - **Deterministic Evaluation**: Scanned assets are evaluated locally inside the Postgres database using security rules, generating linked recommendations dynamically.
@@ -79,7 +81,7 @@ Access the dashboard at `http://localhost:3100/login` with:
 
 ## Important Disclaimers & Design Identity
 * **Original Platform Identity**: CloudShield has its own original visual identity (Indigo/Teal workspace console) and does not copy Microsoft Azure or other cloud provider interfaces.
-* **Evaluator Mode Limits**: Currently in local evaluator mode reading strictly from the CloudShield Postgres DB. The only remaining step to read real AWS data is adding safe credentials via container environment variables and enabling read-only scan mode.
+* **Evaluator Mode Limits**: Local evaluator mode reads from the CloudShield Postgres DB until safe AWS credentials are provided through environment variables and `AWS_INVENTORY_SCANNER_MODE=readonly` is explicitly enabled.
 * **Operational Boundaries**: Governed operations are active inside CloudShield records. AWS mutations, Terraform apply, and automatic remediation remain disabled.
 * **Premium Product Workspaces**: Inner pages use command-center heroes, readiness journeys, timelines, detail blades, status matrices, and richer operator workflows beyond basic dashboard cards.
 * **No Somatic Client Deployments**: CloudShield is client-evaluation ready, but is *not* deployed to Accenture, and Accenture is not a customer.

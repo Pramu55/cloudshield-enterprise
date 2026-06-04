@@ -229,3 +229,8 @@ Delivered:
 
 Automation is advisory and governed. It does not execute AWS mutation, Terraform apply, automatic remediation, or destructive cloud APIs.
 
+# Current Milestone
+
+`CLOUDSHIELD_AWS_READONLY_INVENTORY_SYNC_PHASE_1_GREEN` adds the first safe real AWS read-only inventory synchronization foundation after STS validation. Phase 1 is account-scoped, disabled by default, and limited to STS identity validation plus EC2 region, VPC, subnet, security group, instance, and volume describe APIs.
+
+Future work may add additional read-only services only after explicit allowlist review. IAM and S3 inventory are outside this Phase 1 scope.

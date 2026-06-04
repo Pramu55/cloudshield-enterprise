@@ -1,6 +1,6 @@
 # AWS Read-Only Scanner Runbook
 
-This runbook outlines operational checks, credential configurations, and manual trigger commands for executing the CloudShield AWS EC2 read-only scanner.
+This runbook outlines operational checks, credential configurations, and manual trigger commands for executing the CloudShield AWS Phase 1 read-only inventory sync.
 
 ## 1. Safety Guardrails & Restrictions
 
@@ -26,7 +26,7 @@ The scanner queries only regional endpoints and maps the following resources:
 Before running scans, verify that env parameters are active:
 ```bash
 AWS_CONNECTOR_MODE=readonly-validation
-AWS_INVENTORY_SCANNER_MODE=readonly-scan
+AWS_INVENTORY_SCANNER_MODE=readonly
 AWS_REGION_DEFAULT=us-east-1
 ```
 
@@ -35,7 +35,7 @@ AWS_REGION_DEFAULT=us-east-1
 1. Log into the CloudShield console at `http://localhost:3100`.
 2. Navigate to the **Scans** page (`/dashboard/scans`).
 3. Select the target AWS Account from the dropdown.
-4. Click **Run EC2 read-only inventory scan**.
+4. Click **Run read-only inventory sync**.
 5. Approve the safety warning modal.
 
 The job status will progress: `QUEUED` &rarr; `RUNNING` &rarr; `SUCCEEDED` (or `FAILED` / `BLOCKED_DISABLED` if parameters are missing).

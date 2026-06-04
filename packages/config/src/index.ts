@@ -13,7 +13,7 @@ export const RuntimeEnvSchema = z.object({
     .enum(["disabled", "readonly-validation", "sts-validation"])
     .default("disabled"),
   AWS_INVENTORY_SCANNER_MODE: z
-    .enum(["disabled", "readonly-plan", "readonly-scan"])
+    .enum(["disabled", "readonly-plan", "readonly", "readonly-scan"])
     .default("disabled"),
   AWS_REGION_DEFAULT: z.string().min(1).default("us-east-1"),
   AWS_ROLE_ARN: z.string().optional().default(""),

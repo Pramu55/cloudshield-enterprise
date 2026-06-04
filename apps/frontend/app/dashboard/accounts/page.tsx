@@ -149,10 +149,6 @@ const InstantInventoryPlan: AwsInventoryPlanResponse = {
   awsApiCallExecuted: false,
   supportedResourceTypes: [
     "EC2_INSTANCE",
-    "S3_BUCKET",
-    "IAM_USER",
-    "IAM_ROLE",
-    "IAM_ACCESS_KEY",
     "SECURITY_GROUP",
     "EBS_VOLUME",
     "VPC",
@@ -171,45 +167,35 @@ const InstantInventoryPlan: AwsInventoryPlanResponse = {
     },
     {
       service: "ec2",
+      operation: "DescribeRegions",
+      resourceType: "AWS_ACCOUNT",
+      category: "network",
+      riskLevel: "low",
+      mutationAllowed: false,
+      enabledInCurrentMilestone: false,
+      notes: "Allowed only when read-only inventory sync is explicitly enabled."
+    },
+    {
+      service: "ec2",
       operation: "DescribeInstances",
       resourceType: "EC2_INSTANCE",
       category: "compute",
       riskLevel: "low",
       mutationAllowed: false,
       enabledInCurrentMilestone: false,
-      notes: "Planned future read-only inventory API. Not executed yet."
-    },
-    {
-      service: "s3",
-      operation: "ListBuckets",
-      resourceType: "S3_BUCKET",
-      category: "storage",
-      riskLevel: "low",
-      mutationAllowed: false,
-      enabledInCurrentMilestone: false,
-      notes: "Planned future read-only inventory API. Not executed yet."
-    },
-    {
-      service: "iam",
-      operation: "ListRoles",
-      resourceType: "IAM_ROLE",
-      category: "iam",
-      riskLevel: "medium",
-      mutationAllowed: false,
-      enabledInCurrentMilestone: false,
-      notes: "Planned future read-only inventory API. Not executed yet."
+      notes: "Allowed only when read-only inventory sync is explicitly enabled."
     }
   ],
   blockedMutationPatterns: ["Create*", "Update*", "Delete*", "Put*", "Terraform apply"],
   scanPhases: [
     "Tenant-scoped account selection",
     "STS identity validation gate",
-    "Disabled execution gate for this milestone"
+    "Disabled execution gate by default"
   ],
   sampleDataLabel:
     "Sample/demo planning data - real AWS inventory scanning is disabled.",
   message:
-    "AWS inventory scanner architecture is planned, but scanner execution is disabled in this milestone."
+    "AWS read-only inventory sync is disabled by default and requires explicit readonly mode."
 };
 
 export default function AccountsPage() {

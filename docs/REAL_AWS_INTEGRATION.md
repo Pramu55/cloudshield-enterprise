@@ -52,3 +52,8 @@ Resource relationships are parsed and populated as `ResourceRelationship` record
 ## 4. Automatic Post-Scan Posture Evaluation
 
 Upon successful completion of an inventory scan, the worker triggers `evaluateSecurityRules(organizationId)` automatically. This evaluates all deterministic security group, IP, and volume encryption posture policies against the stored resources, generating new findings and linking them to governance `Recommendation` actions in a single pipeline.
+# Current Phase 1 Read-only Inventory Boundary
+
+CloudShield now supports a controlled account-scoped read-only inventory sync at `POST /api/v1/aws/accounts/:accountId/inventory/sync`. It is disabled by default and requires `AWS_CONNECTOR_MODE=readonly-validation` or `sts-validation` plus `AWS_INVENTORY_SCANNER_MODE=readonly`.
+
+The Phase 1 allowlist is limited to `sts:GetCallerIdentity`, `ec2:DescribeRegions`, `ec2:DescribeVpcs`, `ec2:DescribeSubnets`, `ec2:DescribeSecurityGroups`, `ec2:DescribeInstances`, and `ec2:DescribeVolumes`. No IAM inventory, S3 inventory, mutation API, Terraform apply, or automatic remediation execution is included.

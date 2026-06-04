@@ -9,7 +9,10 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
   const connectorMode = process.env.AWS_CONNECTOR_MODE;
   const scannerMode = process.env.AWS_INVENTORY_SCANNER_MODE;
 
-  if (connectorMode !== "readonly-validation" || scannerMode !== "readonly-scan") {
+  if (
+    !["readonly-validation", "sts-validation"].includes(connectorMode || "") ||
+    !["readonly", "readonly-scan"].includes(scannerMode || "")
+  ) {
     logger.info({ organizationId, awsAccountId, scanRunId }, "Optional real EC2 read-only inventory scan was not run because AWS role/env values are not configured.");
     await updateScanStatus(scanRunId, "BLOCKED_DISABLED", "Optional real EC2 read-only inventory scan was not run because AWS role/env values are not configured.");
     return { status: "BLOCKED_DISABLED", awsApiCallExecuted: false };

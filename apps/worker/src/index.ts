@@ -3,6 +3,7 @@ import { createLogger } from "@cloudshield/logger";
 import { executeEc2Scan } from "./aws-ec2-scanner.js";
 import {
   CLOUD_ASSESSMENT_QUEUE_NAME,
+  CLOUD_INVENTORY_SYNC_QUEUE_NAME,
   CLOUD_SCAN_QUEUE_NAME,
   CloudScanJobTypeSchema,
   type CloudScanJobType
@@ -18,6 +19,10 @@ const connection = {
 };
 
 export const cloudScanQueue = new Queue(CLOUD_SCAN_QUEUE_NAME, {
+  connection
+});
+
+export const cloudInventorySyncQueue = new Queue(CLOUD_INVENTORY_SYNC_QUEUE_NAME, {
   connection
 });
 
@@ -40,7 +45,7 @@ type CloudAssessmentJob = {
 };
 
 const worker = new BullWorker<CloudScanJob>(
-  CLOUD_SCAN_QUEUE_NAME,
+  CLOUD_INVENTORY_SYNC_QUEUE_NAME,
   async (job) => {
     const jobType = CloudScanJobTypeSchema.parse(job.data.type);
 
@@ -127,6 +132,7 @@ assessmentWorker.on("failed", (job, error) => {
 logger.info(
   {
     queue: CLOUD_SCAN_QUEUE_NAME,
+    inventorySyncQueue: CLOUD_INVENTORY_SYNC_QUEUE_NAME,
     assessmentQueue: CLOUD_ASSESSMENT_QUEUE_NAME,
     preparedJobTypes: CloudScanJobTypeSchema.options,
     awsScanning: "EC2 read-only slice available (disabled by default)"

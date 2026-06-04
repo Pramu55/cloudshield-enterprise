@@ -5,6 +5,7 @@ export const PLATFORM_TITLE =
   "CloudShield Enterprise - AWS Security Posture, Cost Governance & Compliance Platform";
 
 export const CLOUD_SCAN_QUEUE_NAME = "cloud-scans";
+export const CLOUD_INVENTORY_SYNC_QUEUE_NAME = "cloud-inventory-sync";
 export const CLOUD_ASSESSMENT_QUEUE_NAME = "cloud-assessment";
 export const REMEDIATION_BLOCKED_REASON =
   "Automatic remediation is disabled in CloudShield v1.";
@@ -71,6 +72,7 @@ export type AwsConnectorMode = z.infer<typeof AwsConnectorModeSchema>;
 export const AwsInventoryScannerModeSchema = z.enum([
   "disabled",
   "readonly-plan",
+  "readonly",
   "readonly-scan"
 ]);
 export type AwsInventoryScannerMode = z.infer<
@@ -148,7 +150,7 @@ export type AwsReadonlyApiOperation = z.infer<
 
 export const AwsInventoryPlanResponseSchema = z.object({
   scannerMode: AwsInventoryScannerModeSchema,
-  inventoryScanningEnabled: z.literal(false),
+  inventoryScanningEnabled: z.boolean(),
   mutationEnabled: z.literal(false),
   automaticRemediationEnabled: z.literal(false),
   terraformApplyEnabled: z.literal(false),
@@ -167,7 +169,7 @@ export type AwsInventoryPlanResponse = z.infer<
 export const AwsAccountInventoryPlanResponseSchema = z.object({
   account: z.lazy(() => AwsAccountDtoSchema),
   scannerMode: AwsInventoryScannerModeSchema,
-  inventoryScanningEnabled: z.literal(false),
+  inventoryScanningEnabled: z.boolean(),
   mutationEnabled: z.literal(false),
   awsApiCallExecuted: z.literal(false),
   regions: z.array(z.string()),
@@ -646,8 +648,11 @@ export const AwsInventoryStartResponseSchema = z.object({
   status: ScanRunStatusSchema,
   scannerMode: AwsInventoryScannerModeSchema,
   awsApiCallExecuted: z.boolean(),
+  scannerRun: z.boolean().optional(),
   scanRunId: z.string().optional(),
   message: z.string(),
+  readiness: z.record(z.string(), z.any()).optional(),
+  summary: z.record(z.string(), z.any()).optional(),
   allowedApis: z.array(z.string()).optional(),
   blockedMutationPatterns: z.array(z.string()).optional()
 });
