@@ -72,8 +72,8 @@ export function WorkspaceHero({
           </p>
           {badges.length ? (
             <div className="mt-5 flex flex-wrap gap-2">
-              {badges.map((badge) => (
-                <StatusBadge key={badge.label} tone={badge.tone || "neutral"}>
+              {badges.map((badge, index) => (
+                <StatusBadge key={`${badge.label}-${index}`} tone={badge.tone || "neutral"}>
                   {badge.label}
                 </StatusBadge>
               ))}
@@ -147,8 +147,8 @@ export function ProgressBars({
 }) {
   return (
     <div className="space-y-3">
-      {items.map((item) => (
-        <div key={item.label}>
+      {items.map((item, index) => (
+        <div key={`${item.label}-${index}`}>
           <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-slate-500">
             <span>{item.label}</span>
             <span>{item.value}%</span>
@@ -180,7 +180,7 @@ export function ReadinessJourney({
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {steps.map((step, index) => (
-        <div className="journey-step" data-status={step.status} key={step.label}>
+        <div className="journey-step" data-status={step.status} key={`${step.label}-${index}`}>
           <div className="flex items-center justify-between">
             <span className="journey-index">{index + 1}</span>
             <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
@@ -259,8 +259,8 @@ export function ActivityTimeline({
 }) {
   return (
     <div className="activity-timeline">
-      {events.map((event) => (
-        <div className="activity-event" data-tone={event.tone || "info"} key={`${event.title}-${event.time || ""}`}>
+      {events.map((event, index) => (
+        <div className="activity-event" data-tone={event.tone || "info"} key={`${event.title}-${event.time || ""}-${index}`}>
           <span className="activity-dot" />
           <div className="activity-card">
             <div className="flex items-start justify-between gap-3">
@@ -300,8 +300,8 @@ export function StatusMatrix({
 }) {
   return (
     <div className="status-matrix">
-      {items.map((item) => (
-        <div className="status-matrix-cell" data-tone={item.tone || "info"} key={item.label}>
+      {items.map((item, index) => (
+        <div className="status-matrix-cell" data-tone={item.tone || "info"} key={`${item.label}-${index}`}>
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{item.label}</p>
           <p className="mt-1 text-sm font-bold text-ink">{String(item.value)}</p>
         </div>
@@ -322,8 +322,8 @@ export function PremiumDataTable({
       <table className="min-w-full text-left text-sm">
         <thead>
           <tr>
-            {columns.map((column) => (
-              <th key={column}>{column}</th>
+            {columns.map((column, index) => (
+              <th key={`${column}-${index}`}>{column}</th>
             ))}
           </tr>
         </thead>

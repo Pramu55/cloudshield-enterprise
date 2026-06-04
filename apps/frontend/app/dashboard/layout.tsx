@@ -194,7 +194,7 @@ export default function DashboardLayout({
           isSidebarCollapsed ? "lg:grid-cols-[60px_1fr]" : "lg:grid-cols-[240px_1fr]"
         }`}
       >
-        <aside className="portal-nav hidden min-w-0 lg:flex flex-col justify-between py-2">
+        <aside className="portal-nav hidden min-w-0 lg:flex flex-col justify-between py-2 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto">
           <div>
             <div className="flex h-11 items-center justify-between border-b border-slate-800 px-4 mb-2">
               {!isSidebarCollapsed ? (
