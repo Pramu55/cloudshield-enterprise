@@ -8,47 +8,81 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 
 type DashboardSummary = {
-  counts: {
-    awsAccounts: number;
-    resources: number;
-    securityFindings: number;
-    highRiskFindings: number;
+  organization: { id: string; name: string; slug: string };
+  accounts: {
+    registered: number;
+    connected: number;
+    requiringAttention: number;
+    items: Array<{ id: string; name: string; accountId: string; environment: string; regions: string[] }>;
+  };
+  inventory: {
+    totalResources: number;
+    bySource: Record<string, number>;
+  };
+  findings: {
+    openSecurityFindings: number;
+    bySeverity: Record<string, number>;
+    unassignedFindings: number;
+    openCostFindings: number;
+  };
+  compliance: {
+    controls: number;
+    passing: number;
+    failing: number;
+    withoutEvidence: number;
+  };
+  workflow: {
     acceptedRisks: number;
-    costFindings: number;
-    complianceControls: number;
-    reportsReady: number;
-    recommendations: number;
+    pendingRecommendations: number;
+    pendingApprovals: number;
+    queuedOperations: number;
   };
-  scannerStatus: {
-    mode: string;
-    awsApiCallExecuted: boolean;
+  platformSafety: {
+    scannerMode: string;
+    connectorMode: string;
+    sampleDataPresent: boolean;
   };
-  connectorStatus: {
-    mode: string;
-    configured: boolean;
-  };
+  awsApiCallExecuted: false;
+  scannerRun: false;
 };
 
 const InstantSummary: DashboardSummary = {
-  counts: {
-    awsAccounts: 2,
-    resources: 18,
-    securityFindings: 5,
-    highRiskFindings: 2,
-    acceptedRisks: 1,
-    costFindings: 2,
-    complianceControls: 12,
-    reportsReady: 6,
-    recommendations: 5
+  organization: { id: "preview", name: "CloudShield", slug: "cloudshield" },
+  accounts: {
+    registered: 0,
+    connected: 0,
+    requiringAttention: 0,
+    items: []
   },
-  scannerStatus: {
-    mode: "disabled",
-    awsApiCallExecuted: false
+  inventory: {
+    totalResources: 0,
+    bySource: {}
   },
-  connectorStatus: {
-    mode: "disabled",
-    configured: false
-  }
+  findings: {
+    openSecurityFindings: 0,
+    bySeverity: {},
+    unassignedFindings: 0,
+    openCostFindings: 0
+  },
+  compliance: {
+    controls: 0,
+    passing: 0,
+    failing: 0,
+    withoutEvidence: 0
+  },
+  workflow: {
+    acceptedRisks: 0,
+    pendingRecommendations: 0,
+    pendingApprovals: 0,
+    queuedOperations: 0
+  },
+  platformSafety: {
+    scannerMode: "disabled",
+    connectorMode: "disabled",
+    sampleDataPresent: true
+  },
+  awsApiCallExecuted: false,
+  scannerRun: false
 };
 
 type PlatformReadiness = {
@@ -134,16 +168,9 @@ type AutomationLatestResponse = {
   scannerRun: false;
 };
 
-// Mock data for Business Units Topology
-const BusinessUnitsMock = [
-  { name: "Retail Operations", center: "CC-1042", accounts: 4, resources: 842, risk: "A", status: "good" as const },
-  { name: "Digital Platform", center: "CC-2911", accounts: 12, resources: 3420, risk: "B-", status: "warning" as const },
-  { name: "Corporate IT", center: "CC-8830", accounts: 2, resources: 156, risk: "A+", status: "good" as const }
-];
-
 export default function DashboardHome() {
   const { data: summary, error, isRefreshing } = useCloudShieldData<DashboardSummary>(
-    "/api/v1/dashboard/summary",
+    "/api/v1/platform/overview",
     InstantSummary
   );
 
@@ -192,10 +219,19 @@ export default function DashboardHome() {
       readiness.credentialReadiness.requiredEnvPresent,
       readiness.credentialReadiness.stsValidationAvailable,
       readiness.credentialReadiness.inventoryScanAvailable,
-      (summary?.counts?.securityFindings ?? 0) > 0,
-      (summary?.counts?.recommendations ?? 0) > 0
+      (summary?.findings?.openSecurityFindings ?? 0) > 0,
+      (summary?.workflow?.pendingRecommendations ?? 0) > 0
     ].filter(Boolean).length / 6 * 100
   );
+
+  const businessUnits = summary.accounts.items.map((account) => ({
+    name: account.name,
+    center: account.accountId,
+    accounts: 1,
+    resources: 0,
+    risk: account.environment,
+    status: account.environment === "prod" ? "warning" as const : "good" as const
+  }));
 
   const journeySteps: Array<{
     label: string;
@@ -204,8 +240,8 @@ export default function DashboardHome() {
   }> = [
     {
       label: "Account registry",
-      description: `${readiness.awsAccountsCount || summary?.counts?.awsAccounts || 0} accounts mapped with owners, environments, and regions.`,
-      status: readiness.awsAccountsCount > 0 ? "done" : "active"
+      description: `${summary.accounts.registered || readiness.awsAccountsCount || 0} accounts mapped with owners, environments, and regions.`,
+      status: summary.accounts.registered > 0 || readiness.awsAccountsCount > 0 ? "done" : "active"
     },
     {
       label: "Credential readiness",
@@ -226,7 +262,7 @@ export default function DashboardHome() {
     },
     {
       label: "Findings and evidence",
-      description: `${summary?.counts?.securityFindings ?? 0} security findings and ${summary?.counts?.complianceControls ?? 0} evidence controls are visible.`,
+      description: `${summary?.findings?.openSecurityFindings ?? 0} security findings and ${summary?.compliance?.controls ?? 0} evidence controls are visible.`,
       status: "done" as const
     },
     {
@@ -271,9 +307,9 @@ export default function DashboardHome() {
         <div className="mt-5">
           <ProgressBars
             items={[
-              { label: "Security posture", value: Math.max(20, 100 - (summary?.counts?.highRiskFindings ?? 0) * 18), tone: "warning" },
-              { label: "Compliance coverage", value: Math.min(100, (summary?.counts?.complianceControls ?? 0) * 8), tone: "info" },
-              { label: "Governance workflow", value: summary?.counts?.recommendations ? 72 : 34, tone: "good" }
+              { label: "Security posture", value: Math.max(20, 100 - (((summary?.findings?.bySeverity?.CRITICAL ?? 0) + (summary?.findings?.bySeverity?.HIGH ?? 0)) * 18)), tone: "warning" },
+              { label: "Compliance coverage", value: Math.min(100, (summary?.compliance?.controls ?? 0) * 8), tone: "info" },
+              { label: "Governance workflow", value: summary?.workflow?.pendingRecommendations ? 72 : 34, tone: "good" }
             ]}
           />
         </div>
@@ -406,7 +442,7 @@ export default function DashboardHome() {
             <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full text-slate-600 font-bold uppercase tracking-wider">Registry</span>
           </div>
           <p className="mt-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">AWS Accounts Registered</p>
-          <p className="mt-1 text-3xl font-extrabold text-ink tracking-tight">{summary?.counts?.awsAccounts ?? 0}</p>
+          <p className="mt-1 text-3xl font-extrabold text-ink tracking-tight">{summary?.accounts?.registered ?? 0}</p>
         </Link>
         
         <Link href="/dashboard/inventory" className="premium-card p-5 group">
@@ -417,7 +453,7 @@ export default function DashboardHome() {
             <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full text-slate-600 font-bold uppercase tracking-wider">Assets</span>
           </div>
           <p className="mt-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Resource Inventory</p>
-          <p className="mt-1 text-3xl font-extrabold text-ink tracking-tight">{summary?.counts?.resources ?? 0}</p>
+          <p className="mt-1 text-3xl font-extrabold text-ink tracking-tight">{summary?.inventory?.totalResources ?? 0}</p>
         </Link>
 
         <Link href="/dashboard/security" className="premium-card p-5 group hover:border-red-400">
@@ -429,7 +465,7 @@ export default function DashboardHome() {
           </div>
           <p className="mt-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">High Risk / Total Findings</p>
           <p className="mt-1 text-3xl font-extrabold text-red-600 tracking-tight">
-            {summary?.counts?.highRiskFindings ?? 0} <span className="text-sm font-normal text-slate-500">/ {summary?.counts?.securityFindings ?? 0}</span>
+            {(summary?.findings?.bySeverity?.CRITICAL ?? 0) + (summary?.findings?.bySeverity?.HIGH ?? 0)} <span className="text-sm font-normal text-slate-500">/ {summary?.findings?.openSecurityFindings ?? 0}</span>
           </p>
         </Link>
 
@@ -441,7 +477,7 @@ export default function DashboardHome() {
             <span className="text-[10px] bg-amber-50 px-2 py-0.5 rounded-full text-amber-600 font-bold uppercase tracking-wider">Risk</span>
           </div>
           <p className="mt-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Accepted Risk Workflow</p>
-          <p className="mt-1 text-3xl font-extrabold text-ink tracking-tight">{summary?.counts?.acceptedRisks ?? 0}</p>
+          <p className="mt-1 text-3xl font-extrabold text-ink tracking-tight">{summary?.workflow?.acceptedRisks ?? 0}</p>
         </Link>
       </div>
 
@@ -452,7 +488,7 @@ export default function DashboardHome() {
           description="Enterprise coverage mapped across logical boundaries and cost centers."
         >
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {BusinessUnitsMock.map((bu, idx) => (
+            {businessUnits.map((bu, idx) => (
               <div key={idx} className="border border-line rounded-xl p-4 bg-white hover:border-indigo-200 hover:shadow-md transition-all group">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
@@ -482,12 +518,12 @@ export default function DashboardHome() {
         >
           <StatusMatrix
             items={[
-              { label: "High risk findings", value: summary?.counts?.highRiskFindings ?? 0, tone: "danger" },
-              { label: "Accepted risks", value: summary?.counts?.acceptedRisks ?? 0, tone: "warning" },
-              { label: "Controls", value: summary?.counts?.complianceControls ?? 0, tone: "info" },
-              { label: "Reports ready", value: summary?.counts?.reportsReady ?? 0, tone: "good" },
+              { label: "High risk findings", value: (summary?.findings?.bySeverity?.CRITICAL ?? 0) + (summary?.findings?.bySeverity?.HIGH ?? 0), tone: "danger" },
+              { label: "Accepted risks", value: summary?.workflow?.acceptedRisks ?? 0, tone: "warning" },
+              { label: "Controls", value: summary?.compliance?.controls ?? 0, tone: "info" },
+              { label: "Pending approvals", value: summary?.workflow?.pendingApprovals ?? 0, tone: "good" },
               { label: "Scanner mode", value: readiness.scannerMode, tone: "warning" },
-              { label: "AWS API executed", value: String(summary?.scannerStatus?.awsApiCallExecuted ?? false), tone: "good" }
+              { label: "AWS API executed", value: String(summary?.awsApiCallExecuted ?? false), tone: "good" }
             ]}
           />
         </InsightPanel>
@@ -592,7 +628,7 @@ export default function DashboardHome() {
           <div>
             <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Compliance Evidence Readiness</p>
             <p className="text-lg font-bold text-ink mt-1 group-hover:text-indigo-600 transition-colors">
-              {summary?.counts?.complianceControls ?? 0} controls audited
+              {summary?.compliance?.controls ?? 0} controls audited
             </p>
           </div>
           <FileCheck2 className="text-slate-400 group-hover:text-indigo-600 transition-colors" size={24} />
@@ -602,7 +638,7 @@ export default function DashboardHome() {
           <div>
             <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Generated Report Records</p>
             <p className="text-lg font-bold text-ink mt-1 group-hover:text-indigo-600 transition-colors">
-              {summary?.counts?.reportsReady ?? 0} exports generated
+              {summary?.workflow?.pendingApprovals ?? 0} approvals pending
             </p>
           </div>
           <FileText className="text-slate-400 group-hover:text-indigo-600 transition-colors" size={24} />
@@ -612,7 +648,7 @@ export default function DashboardHome() {
           <div>
             <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Manual Actions Suggested</p>
             <p className="text-lg font-bold text-ink mt-1 group-hover:text-indigo-600 transition-colors">
-              {summary?.counts?.recommendations ?? 0} recommendations
+              {summary?.workflow?.pendingRecommendations ?? 0} recommendations
             </p>
           </div>
           <WalletCards className="text-slate-400 group-hover:text-indigo-600 transition-colors" size={24} />

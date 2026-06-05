@@ -78,7 +78,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/v1/platform/status", async () => {
-    const milestone = "CLOUDSHIELD_AI_AUTOMATION_AND_INTELLIGENCE_FOUNDATION_GREEN";
+    const milestone = "CLOUDSHIELD_REAL_PLATFORM_CORE_GREEN";
     const payload = PlatformStatusSchema.parse({
       name: PLATFORM_NAME,
       title: PLATFORM_TITLE,

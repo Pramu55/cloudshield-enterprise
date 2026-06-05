@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type {
   AwsAccountDto,
   AwsAccountEnvironment,
@@ -408,6 +409,13 @@ export function AccountRegistryClient({
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex gap-2.5 justify-end">
+                        <Link
+                          className="rounded-lg border border-line px-2 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 transition-colors"
+                          href={`/dashboard/accounts/${account.id}`}
+                          title="Open account record"
+                        >
+                          Open
+                        </Link>
                         <button
                           className="rounded-lg border border-line p-1.5 text-slate-600 hover:bg-slate-100 hover:text-ink transition-colors min-h-0"
                           title="Edit Account Details"

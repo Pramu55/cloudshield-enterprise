@@ -111,3 +111,17 @@ CloudShield now includes an AI-assisted deterministic automation layer called th
 - the `cloud-assessment` worker queue hook is available for future async orchestration
 
 Automation means advisory analysis, evidence generation, report generation, and approval-based remediation planning. It does not mean auto-fixing AWS. In default evaluation mode, AWS execution is blocked and the assessment uses CloudShield database records only.
+
+## Real Platform Core
+
+CloudShield now has a canonical platform core for database-backed enterprise operations:
+
+- `GET /api/v1/platform/overview` is the main tenant-scoped summary API for accounts, inventory, findings, compliance, workflow, scans, safety, and freshness.
+- `GET /api/v1/platform/activity` exposes a safe, paginated activity model from audit events.
+- Account and resource detail APIs power real operational records instead of static dashboard cards.
+- Saved views and internal notifications are organization-scoped foundations for future operator workflows.
+- Source classification distinguishes `SAMPLE`, `AWS_SYNC`, `RULE_ENGINE`, `MANUAL`, `IMPORT`, and `SYSTEM` records.
+- Settings changes are audit-first and do not expose or accept secrets.
+- Platform operations health reports API, Redis/queue state, scan state, scanner mode, and execution mode without infrastructure secrets.
+
+Real AWS sandbox validation is still pending explicit authorization. Production execution, Terraform apply, arbitrary AWS commands, and autonomous remediation remain blocked.

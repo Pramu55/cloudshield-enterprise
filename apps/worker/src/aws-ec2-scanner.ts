@@ -259,6 +259,7 @@ async function saveResource(organizationId: string, awsAccountId: string, resour
       region,
       tags,
       metadata: normalizedMetadata,
+      source: "AWS_SYNC",
       lastSeenAt: new Date()
     },
     create: {
@@ -270,6 +271,7 @@ async function saveResource(organizationId: string, awsAccountId: string, resour
       region,
       tags,
       metadata: normalizedMetadata,
+      source: "AWS_SYNC",
       lastSeenAt: new Date()
     }
   });
