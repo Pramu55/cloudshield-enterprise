@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { AwsAccountDto, AwsInventoryPlanResponse } from "@cloudshield/contracts";
 import { ShieldAlert, RefreshCw, Layers, CheckCircle, XCircle, Play, ChevronRight, ShieldCheck, Lock, Zap, Ban, Clock, AlertTriangle, Server, Eye, ChevronDown, Info, CircleDot, Terminal } from "lucide-react";
 import { ActivityTimeline, InsightPanel, StatusMatrix, WorkspaceHero, DashboardPage } from "../shared";
+import Link from "next/link";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
 
@@ -66,7 +67,7 @@ export default function ScansPage() {
           setPlan(planJson);
         }
 
-        const runsRes = await fetch(`${API_BASE_URL}/api/v1/scans/runs`, { headers });
+        const runsRes = await fetch(`${API_BASE_URL}/api/v1/inventory/scans`, { headers });
         const runsJson = await runsRes.json();
         if (runsRes.ok) {
           setScanOverview(runsJson);
@@ -542,20 +543,13 @@ export default function ScansPage() {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          {run.errorMessage ? (
-                            <span
-                              className="inline-flex items-center gap-1.5 max-w-xs truncate px-2.5 py-1 rounded-md bg-red-50 border border-red-200 text-alert text-[11px] font-semibold"
-                              title={run.errorMessage}
-                            >
-                              <XCircle className="h-3 w-3 flex-shrink-0" />
-                              {run.errorMessage}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-emerald-600 font-semibold text-[11px]">
-                              <CheckCircle className="h-3 w-3" />
-                              No errors
-                            </span>
-                          )}
+                          <Link
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700 transition hover:bg-indigo-100"
+                            href={`/dashboard/scans/${run.id}`}
+                          >
+                            Open
+                            <ChevronRight size={12} />
+                          </Link>
                         </td>
                       </tr>
                     ))}

@@ -245,16 +245,63 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
   app.get("/api/v1/platform/operations-health", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
     const queues = await getQueueHealth();
-    const [lastSuccessfulScan, lastFailedScan] = await Promise.all([
+    const [
+      lastSuccessfulScan,
+      lastFailedScan,
+      activeScans,
+      queuedScans,
+      failedScans,
+      partialScans,
+      staleResourceCount,
+      accounts,
+      recentRegionFailures
+    ] = await Promise.all([
       prisma.scanRun.findFirst({ where: { organizationId: auth.organizationId, status: { in: ["SUCCEEDED", "COMPLETED"] } }, orderBy: { completedAt: "desc" } }),
-      prisma.scanRun.findFirst({ where: { organizationId: auth.organizationId, status: "FAILED" }, orderBy: { completedAt: "desc" } })
+      prisma.scanRun.findFirst({ where: { organizationId: auth.organizationId, status: "FAILED" }, orderBy: { completedAt: "desc" } }),
+      prisma.scanRun.count({ where: { organizationId: auth.organizationId, status: { in: ["REQUESTED", "QUEUED", "RUNNING", "STARTED"] } } }),
+      prisma.scanRun.count({ where: { organizationId: auth.organizationId, status: "QUEUED" } }),
+      prisma.scanRun.count({ where: { organizationId: auth.organizationId, status: "FAILED" } }),
+      prisma.scanRun.count({ where: { organizationId: auth.organizationId, status: "PARTIALLY_SUCCEEDED" } }),
+      prisma.cloudResource.count({ where: { organizationId: auth.organizationId, staleAt: { not: null }, archivedAt: null } }),
+      prisma.awsAccount.findMany({ where: { organizationId: auth.organizationId }, select: { id: true, status: true, connectionStatus: true, archivedAt: true, regions: true } }),
+      prisma.scanRun.findMany({
+        where: { organizationId: auth.organizationId, failureCount: { gt: 0 } },
+        select: { id: true, awsAccountId: true, failedRegions: true, failureClassification: true, completedAt: true },
+        orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+        take: 10
+      })
     ]);
+    const configuredRegions = new Set(accounts.flatMap((account) => account.regions));
     return {
       api: "ok",
       database: "configured",
       redis: queues.redis,
       workerHeartbeat: queues.workerHeartbeat,
       queues: queues.items,
+      inventoryScans: {
+        active: activeScans,
+        queued: queuedScans,
+        failed: failedScans,
+        partial: partialScans,
+        staleResources: staleResourceCount,
+        accountCoverageSummary: {
+          registeredAccounts: accounts.length,
+          connectedAccounts: accounts.filter((account) => account.connectionStatus === "VALIDATION_SUCCEEDED" || account.status === "CONNECTED").length,
+          blockedAccounts: accounts.filter((account) => account.archivedAt || account.connectionStatus === "DISABLED" || account.status === "AUTH_FAILED").length,
+          configuredRegions: configuredRegions.size
+        },
+        regionFailures: recentRegionFailures.flatMap((scan) =>
+          Array.isArray(scan.failedRegions)
+            ? (scan.failedRegions as any[]).map((failure) => ({
+                scanRunId: scan.id,
+                awsAccountId: scan.awsAccountId,
+                region: failure.region,
+                failureClassification: failure.failureClassification ?? scan.failureClassification,
+                completedAt: scan.completedAt?.toISOString() ?? null
+              }))
+            : []
+        )
+      },
       lastSuccessfulScan: lastSuccessfulScan ? { id: lastSuccessfulScan.id, completedAt: lastSuccessfulScan.completedAt?.toISOString() ?? null } : null,
       lastFailedScan: lastFailedScan ? { id: lastFailedScan.id, failureClassification: lastFailedScan.failureClassification ?? lastFailedScan.errorCode, completedAt: lastFailedScan.completedAt?.toISOString() ?? null } : null,
       executionMode: app.config.AWS_CHANGE_EXECUTION_MODE,

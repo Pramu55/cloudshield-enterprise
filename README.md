@@ -125,3 +125,16 @@ CloudShield now has a canonical platform core for database-backed enterprise ope
 - Platform operations health reports API, Redis/queue state, scan state, scanner mode, and execution mode without infrastructure secrets.
 
 Real AWS sandbox validation is still pending explicit authorization. Production execution, Terraform apply, arbitrary AWS commands, and autonomous remediation remain blocked.
+
+## Multi-Account Inventory Engine
+
+CloudShield now includes a worker-driven multi-account, multi-region inventory orchestration engine:
+
+- `POST /api/v1/inventory/scans` queues or dry-runs tenant-scoped inventory scans with account, region, scanner type, and idempotency controls.
+- `GET /api/v1/inventory/scans`, `GET /api/v1/inventory/scans/:scanRunId`, and `GET /api/v1/inventory/coverage` power scan history, scan detail, and coverage workspaces.
+- The EC2 scanner aggregates regional outcomes, supports partial success, tracks created/updated/unchanged/stale/archive counts, and preserves sample/manual/imported resources.
+- Relationship records are tenant-scoped and idempotent for instances, VPCs, subnets, security groups, and EBS volumes.
+
+See `docs/MULTI_ACCOUNT_INVENTORY_ENGINE.md`, `docs/INVENTORY_SCAN_LIFECYCLE.md`, `docs/INVENTORY_RECONCILIATION.md`, and `docs/INVENTORY_COVERAGE_MODEL.md`.
+
+Real AWS sandbox validation remains pending. AWS scanning is still disabled by default and no real AWS validation is performed as part of this milestone.
