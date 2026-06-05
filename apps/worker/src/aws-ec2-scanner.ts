@@ -1,5 +1,12 @@
-import { EC2Client, DescribeInstancesCommand, DescribeSecurityGroupsCommand, DescribeVolumesCommand, DescribeVpcsCommand, DescribeSubnetsCommand } from "@aws-sdk/client-ec2";
-import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
+import {
+  EC2Client,
+  DescribeInstancesCommand,
+  DescribeSecurityGroupsCommand,
+  DescribeVolumesCommand,
+  DescribeVpcsCommand,
+  DescribeSubnetsCommand
+} from "@aws-sdk/client-ec2";
+import { STSClient, AssumeRoleCommand, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import { prisma, evaluateSecurityRules } from "@cloudshield/database";
 import { createLogger } from "@cloudshield/logger";
 
@@ -23,10 +30,35 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
   try {
     await updateScanStatus(scanRunId, "RUNNING", "Running real AWS API queries...", "scanning");
 
-    const sts = new STSClient({ region: process.env.AWS_REGION_DEFAULT || "us-east-1" });
-    await sts.send(new GetCallerIdentityCommand({}));
+    const account = await prisma.awsAccount.findFirst({
+      where: { id: awsAccountId, organizationId }
+    });
+    if (!account) {
+      await updateScanStatus(scanRunId, "FAILED", "AWS account record not found for organization.", "failed");
+      return { status: "FAILED", awsApiCallExecuted: false };
+    }
+
+    const region = process.env.AWS_REGION_DEFAULT || account.regions[0] || "us-east-1";
+    const allowedAccounts = parseCsv(process.env.AWS_ALLOWED_ACCOUNT_IDS);
+    const allowedRegions = parseCsv(process.env.AWS_ALLOWED_REGIONS);
+    if (allowedAccounts.length && !allowedAccounts.includes(account.accountId)) {
+      await updateScanStatus(scanRunId, "PERMISSION_DENIED", "AWS account is not in AWS_ALLOWED_ACCOUNT_IDS.", "blocked");
+      return { status: "PERMISSION_DENIED", awsApiCallExecuted: false };
+    }
+    if (allowedRegions.length && !allowedRegions.includes(region)) {
+      await updateScanStatus(scanRunId, "PERMISSION_DENIED", "AWS region is not in AWS_ALLOWED_REGIONS.", "blocked");
+      return { status: "PERMISSION_DENIED", awsApiCallExecuted: false };
+    }
+
+    const credentials = await assumeScannerRole(region);
+    const sts = new STSClient({ region, credentials });
+    const identity = await sts.send(new GetCallerIdentityCommand({}));
+    if (identity.Account !== account.accountId) {
+      await updateScanStatus(scanRunId, "AUTH_FAILED", "STS identity did not match the registered AWS account.", "failed");
+      return { status: "AUTH_FAILED", awsApiCallExecuted: true };
+    }
     
-    const ec2 = new EC2Client({ region: process.env.AWS_REGION_DEFAULT || "us-east-1" });
+    const ec2 = new EC2Client({ region, credentials });
 
     const resourceIdToDbId = new Map<string, string>();
 
@@ -36,7 +68,7 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     
     for (const instance of instances) {
       if (!instance.InstanceId) continue;
-      const res = await saveResource(organizationId, awsAccountId, "EC2_INSTANCE", instance.InstanceId, getTag(instance.Tags, "Name"), instance);
+      const res = await saveResource(organizationId, awsAccountId, "EC2_INSTANCE", instance.InstanceId, getTag(instance.Tags, "Name"), region, normalizeAwsMetadata("EC2_INSTANCE", instance), tagsToRecord(instance.Tags));
       resourceIdToDbId.set(instance.InstanceId, res.id);
     }
 
@@ -45,7 +77,7 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     const securityGroups = sgRes.SecurityGroups || [];
     for (const sg of securityGroups) {
       if (!sg.GroupId) continue;
-      const res = await saveResource(organizationId, awsAccountId, "SECURITY_GROUP", sg.GroupId, sg.GroupName, sg);
+      const res = await saveResource(organizationId, awsAccountId, "SECURITY_GROUP", sg.GroupId, sg.GroupName, region, normalizeAwsMetadata("SECURITY_GROUP", sg), tagsToRecord(sg.Tags));
       resourceIdToDbId.set(sg.GroupId, res.id);
     }
 
@@ -54,7 +86,7 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     const volumes = volRes.Volumes || [];
     for (const vol of volumes) {
       if (!vol.VolumeId) continue;
-      const res = await saveResource(organizationId, awsAccountId, "EBS_VOLUME", vol.VolumeId, getTag(vol.Tags, "Name"), vol);
+      const res = await saveResource(organizationId, awsAccountId, "EBS_VOLUME", vol.VolumeId, getTag(vol.Tags, "Name"), region, normalizeAwsMetadata("EBS_VOLUME", vol), tagsToRecord(vol.Tags));
       resourceIdToDbId.set(vol.VolumeId, res.id);
     }
 
@@ -63,7 +95,7 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     const vpcs = vpcRes.Vpcs || [];
     for (const vpc of vpcs) {
       if (!vpc.VpcId) continue;
-      const res = await saveResource(organizationId, awsAccountId, "VPC", vpc.VpcId, getTag(vpc.Tags, "Name"), vpc);
+      const res = await saveResource(organizationId, awsAccountId, "VPC", vpc.VpcId, getTag(vpc.Tags, "Name"), region, normalizeAwsMetadata("VPC", vpc), tagsToRecord(vpc.Tags));
       resourceIdToDbId.set(vpc.VpcId, res.id);
     }
 
@@ -72,7 +104,7 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
     const subnets = subnetRes.Subnets || [];
     for (const subnet of subnets) {
       if (!subnet.SubnetId) continue;
-      const res = await saveResource(organizationId, awsAccountId, "SUBNET", subnet.SubnetId, getTag(subnet.Tags, "Name"), subnet);
+      const res = await saveResource(organizationId, awsAccountId, "SUBNET", subnet.SubnetId, getTag(subnet.Tags, "Name"), region, normalizeAwsMetadata("SUBNET", subnet), tagsToRecord(subnet.Tags));
       resourceIdToDbId.set(subnet.SubnetId, res.id);
     }
 
@@ -157,9 +189,29 @@ export async function executeEc2Scan(organizationId: string, awsAccountId: strin
 
   } catch (error: any) {
     logger.error({ error }, "EC2 Scan failed");
-    await updateScanStatus(scanRunId, "FAILED", error.message, "failed");
+    await updateScanStatus(scanRunId, "FAILED", classifyAwsError(error), "failed");
     return { status: "FAILED", awsApiCallExecuted: true };
   }
+}
+
+async function assumeScannerRole(region: string) {
+  if (!process.env.AWS_ROLE_ARN || !process.env.AWS_EXTERNAL_ID) {
+    throw new Error("Scanner role configuration is missing.");
+  }
+  const sts = new STSClient({ region });
+  const assumed = await sts.send(new AssumeRoleCommand({
+    RoleArn: process.env.AWS_ROLE_ARN,
+    ExternalId: process.env.AWS_EXTERNAL_ID,
+    RoleSessionName: "cloudshield-readonly-inventory"
+  }));
+  if (!assumed.Credentials?.AccessKeyId || !assumed.Credentials.SecretAccessKey) {
+    throw new Error("Scanner role did not return temporary credentials.");
+  }
+  return {
+    accessKeyId: assumed.Credentials.AccessKeyId,
+    secretAccessKey: assumed.Credentials.SecretAccessKey,
+    sessionToken: assumed.Credentials.SessionToken
+  };
 }
 
 async function updateScanStatus(scanRunId: string, status: any, message: string, phase?: string) {
@@ -179,7 +231,20 @@ function getTag(tags: any[] | undefined, key: string): string | undefined {
   return tags.find(t => t.Key === key)?.Value;
 }
 
-async function saveResource(organizationId: string, awsAccountId: string, resourceType: string, resourceId: string, name: string | undefined, metadata: any) {
+function tagsToRecord(tags: any[] | undefined) {
+  return Object.fromEntries((tags ?? []).filter((tag) => tag.Key).map((tag) => [String(tag.Key), String(tag.Value ?? "")]));
+}
+
+function parseCsv(value: string | undefined) {
+  return (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+async function saveResource(organizationId: string, awsAccountId: string, resourceType: string, resourceId: string, name: string | undefined, region: string, metadata: any, tags: Record<string, string>) {
+  const normalizedMetadata = JSON.parse(JSON.stringify({
+    source: "AWS_SYNC",
+    syncedAt: new Date().toISOString(),
+    aws: metadata
+  }));
   return await prisma.cloudResource.upsert({
     where: {
       organizationId_awsAccountId_resourceType_resourceId: {
@@ -191,7 +256,9 @@ async function saveResource(organizationId: string, awsAccountId: string, resour
     },
     update: {
       name,
-      metadata: JSON.parse(JSON.stringify(metadata)),
+      region,
+      tags,
+      metadata: normalizedMetadata,
       lastSeenAt: new Date()
     },
     create: {
@@ -200,7 +267,9 @@ async function saveResource(organizationId: string, awsAccountId: string, resour
       resourceType,
       resourceId,
       name,
-      metadata: JSON.parse(JSON.stringify(metadata)),
+      region,
+      tags,
+      metadata: normalizedMetadata,
       lastSeenAt: new Date()
     }
   });
@@ -225,4 +294,70 @@ async function saveRelationship(organizationId: string, sourceId: string, target
       }
     });
   }
+}
+
+function normalizeAwsMetadata(resourceType: string, resource: any) {
+  if (resourceType === "EC2_INSTANCE") {
+    return {
+      instanceType: resource.InstanceType ?? null,
+      state: resource.State?.Name ?? null,
+      vpcId: resource.VpcId ?? null,
+      subnetId: resource.SubnetId ?? null,
+      availabilityZone: resource.Placement?.AvailabilityZone ?? null,
+      securityGroupIds: (resource.SecurityGroups ?? []).map((group: any) => group.GroupId).filter(Boolean),
+      volumeIds: (resource.BlockDeviceMappings ?? [])
+        .map((mapping: any) => mapping.Ebs?.VolumeId)
+        .filter(Boolean)
+    };
+  }
+
+  if (resourceType === "SECURITY_GROUP") {
+    return {
+      groupName: resource.GroupName ?? null,
+      vpcId: resource.VpcId ?? null,
+      ingressRuleCount: resource.IpPermissions?.length ?? 0,
+      egressRuleCount: resource.IpPermissionsEgress?.length ?? 0
+    };
+  }
+
+  if (resourceType === "EBS_VOLUME") {
+    return {
+      state: resource.State ?? null,
+      encrypted: resource.Encrypted ?? null,
+      sizeGiB: resource.Size ?? null,
+      volumeType: resource.VolumeType ?? null,
+      attachmentInstanceIds: (resource.Attachments ?? [])
+        .map((attachment: any) => attachment.InstanceId)
+        .filter(Boolean)
+    };
+  }
+
+  if (resourceType === "VPC") {
+    return {
+      cidrBlock: resource.CidrBlock ?? null,
+      isDefault: resource.IsDefault ?? null,
+      state: resource.State ?? null
+    };
+  }
+
+  if (resourceType === "SUBNET") {
+    return {
+      vpcId: resource.VpcId ?? null,
+      cidrBlock: resource.CidrBlock ?? null,
+      availabilityZone: resource.AvailabilityZone ?? null,
+      mapPublicIpOnLaunch: resource.MapPublicIpOnLaunch ?? null,
+      defaultForAz: resource.DefaultForAz ?? null
+    };
+  }
+
+  return {};
+}
+
+function classifyAwsError(error: any) {
+  const name = String(error?.name ?? "AWS_ERROR");
+  if (name.includes("AccessDenied")) return "ACCESS_DENIED";
+  if (name.includes("Expired")) return "EXPIRED";
+  if (name.includes("Throttl")) return "RATE_LIMITED";
+  if (name.includes("Networking") || name.includes("Timeout")) return "UNREACHABLE";
+  return "AWS_SCAN_FAILED";
 }

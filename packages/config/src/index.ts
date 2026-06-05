@@ -17,7 +17,20 @@ export const RuntimeEnvSchema = z.object({
     .default("disabled"),
   AWS_REGION_DEFAULT: z.string().min(1).default("us-east-1"),
   AWS_ROLE_ARN: z.string().optional().default(""),
-  AWS_EXTERNAL_ID: z.string().optional().default("")
+  AWS_EXTERNAL_ID: z.string().optional().default(""),
+  AWS_EXECUTOR_ROLE_ARN: z.string().optional().default(""),
+  AWS_EXECUTOR_EXTERNAL_ID: z.string().optional().default(""),
+  AWS_ALLOWED_ACCOUNT_IDS: z.string().optional().default(""),
+  AWS_ALLOWED_REGIONS: z.string().optional().default(""),
+  AWS_CHANGE_EXECUTION_MODE: z
+    .enum(["disabled", "simulation", "staging", "production"])
+    .default("disabled"),
+  CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS: z.string().optional().default(
+    "CloudShield:Owner,CloudShield:Environment,CloudShield:CostCenter,CloudShield:Managed,CloudShield:RiskStatus"
+  ),
+  LOG_LEVEL: z.string().optional().default("info"),
+  MONITORING_ENABLED: z.coerce.boolean().default(false),
+  BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(7)
 });
 
 export type RuntimeEnv = z.infer<typeof RuntimeEnvSchema>;

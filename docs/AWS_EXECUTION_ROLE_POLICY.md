@@ -21,12 +21,7 @@ Tagging pilot:
 - `ec2:CreateTags`
 - `ec2:DeleteTags` only for approved rollback of governed tag changes.
 
-Public SSH pilot:
-
-- `ec2:RevokeSecurityGroupIngress`
-- `ec2:AuthorizeSecurityGroupIngress` only for separately approved rollback.
-
-Do not grant `ec2:*`. Do not store secret access keys, session tokens, role credentials, or external ID values in CloudShield logs, seed data, screenshots, Docker images, or frontend environment variables.
+Do not grant `ec2:*`. The security-group mutation pilot remains disabled in this milestone. Do not store secret access keys, session tokens, role credentials, or external ID values in CloudShield logs, seed data, screenshots, Docker images, or frontend environment variables.
 
 ## Trust Requirements
 

@@ -1,0 +1,66 @@
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cloudshield}
+      POSTGRES_USER: ${POSTGRES_USER:-cloudshield}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the secure runtime environment}
+
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  backend:
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cloudshield}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the secure runtime environment}@postgres:5432/${POSTGRES_DB:-cloudshield}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the secure runtime environment}
+      AWS_CONNECTOR_MODE: ${AWS_CONNECTOR_MODE:-disabled}
+      AWS_INVENTORY_SCANNER_MODE: ${AWS_INVENTORY_SCANNER_MODE:-disabled}
+      AWS_REGION_DEFAULT: ${AWS_REGION_DEFAULT:-us-east-1}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:-}
+      AWS_EXTERNAL_ID: ${AWS_EXTERNAL_ID:-}
+      AWS_EXECUTOR_ROLE_ARN: ${AWS_EXECUTOR_ROLE_ARN:-}
+      AWS_EXECUTOR_EXTERNAL_ID: ${AWS_EXECUTOR_EXTERNAL_ID:-}
+      AWS_ALLOWED_ACCOUNT_IDS: ${AWS_ALLOWED_ACCOUNT_IDS:-}
+      AWS_ALLOWED_REGIONS: ${AWS_ALLOWED_REGIONS:-}
+      AWS_CHANGE_EXECUTION_MODE: ${AWS_CHANGE_EXECUTION_MODE:-disabled}
+      CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS: ${CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS:-CloudShield:Owner,CloudShield:Environment,CloudShield:CostCenter,CloudShield:Managed,CloudShield:RiskStatus}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MONITORING_ENABLED: ${MONITORING_ENABLED:-true}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+
+  frontend:
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set public backend URL}
+      BACKEND_INTERNAL_URL: http://backend:4000
+
+  worker:
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cloudshield}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the secure runtime environment}@postgres:5432/${POSTGRES_DB:-cloudshield}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AWS_CONNECTOR_MODE: ${AWS_CONNECTOR_MODE:-disabled}
+      AWS_INVENTORY_SCANNER_MODE: ${AWS_INVENTORY_SCANNER_MODE:-disabled}
+      AWS_REGION_DEFAULT: ${AWS_REGION_DEFAULT:-us-east-1}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:-}
+      AWS_EXTERNAL_ID: ${AWS_EXTERNAL_ID:-}
+      AWS_EXECUTOR_ROLE_ARN: ${AWS_EXECUTOR_ROLE_ARN:-}
+      AWS_EXECUTOR_EXTERNAL_ID: ${AWS_EXECUTOR_EXTERNAL_ID:-}
+      AWS_ALLOWED_ACCOUNT_IDS: ${AWS_ALLOWED_ACCOUNT_IDS:-}
+      AWS_ALLOWED_REGIONS: ${AWS_ALLOWED_REGIONS:-}
+      AWS_CHANGE_EXECUTION_MODE: ${AWS_CHANGE_EXECUTION_MODE:-disabled}
+      CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS: ${CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS:-CloudShield:Owner,CloudShield:Environment,CloudShield:CostCenter,CloudShield:Managed,CloudShield:RiskStatus}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+volumes:
+  redis_data:

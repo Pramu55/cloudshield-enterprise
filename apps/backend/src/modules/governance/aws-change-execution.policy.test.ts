@@ -28,6 +28,30 @@ test("governance tag allowlist accepts CloudShield keys", () => {
   );
 });
 
+test("governance tag allowlist rejects non-allowlisted keys", () => {
+  const violations = validateGovernanceTags({
+    operation: "EC2_APPLY_GOVERNANCE_TAGS",
+    awsAccountId: "account-1",
+    region: "us-east-1",
+    resourceId: "i-123",
+    tags: [{ key: "Owner" as any, value: "platform" }]
+  });
+
+  assert.match(violations.join("\n"), /not allowlisted/);
+});
+
+test("governance tag allowlist rejects aws reserved prefixes", () => {
+  const violations = validateGovernanceTags({
+    operation: "EC2_APPLY_GOVERNANCE_TAGS",
+    awsAccountId: "account-1",
+    region: "us-east-1",
+    resourceId: "i-123",
+    tags: [{ key: "aws:managed" as any, value: "true" }]
+  });
+
+  assert.match(violations.join("\n"), /reserved tag prefixes/);
+});
+
 test("sample resources are blocked", () => {
   assert.equal(
     isSampleResource({
