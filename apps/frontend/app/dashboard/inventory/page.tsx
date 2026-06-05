@@ -8,6 +8,12 @@ import { ChevronDown, ChevronUp, Search, Tag, Network, Layers, ShieldAlert, Cpu,
 import Link from "next/link";
 
 type ResourceResponse = {
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    hasNextPage: boolean;
+  };
   items: Array<{
     id: string;
     resourceType: string;
@@ -15,6 +21,10 @@ type ResourceResponse = {
     name?: string | null;
     region?: string | null;
     status?: string | null;
+    source?: string | null;
+    staleAt?: string | null;
+    archivedAt?: string | null;
+    lastVerifiedAt?: string | null;
     riskCount?: number | null;
     awsAccount: { name: string };
     ownerTeam?: { name: string } | null;
@@ -34,6 +44,20 @@ type ResourceGraphResponse = {
   };
   awsApiCallExecuted: false;
   scannerRun: false;
+};
+
+type CoverageResponse = {
+  totals: {
+    registeredAccounts: number;
+    eligibleAccounts: number;
+    connectedAccounts: number;
+    configuredRegions: number;
+    scannedRegions: number;
+    staleResources: number;
+    archivedResources: number;
+    sampleResources: number;
+    awsSyncedResources: number;
+  };
 };
 
 const InstantResources: ResourceResponse = {
@@ -64,8 +88,31 @@ const InstantResources: ResourceResponse = {
 };
 
 export default function InventoryPage() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState("");
+  const [selectedRegion, setSelectedRegion] = useState("");
+  const [selectedRisk, setSelectedRisk] = useState("");
+  const [selectedSource, setSelectedSource] = useState("");
+  const [selectedLifecycle, setSelectedLifecycle] = useState("");
+  const [selectedType, setSelectedType] = useState("");
+  const [page, setPage] = useState(1);
+
+  const resourcePath = useMemo(() => {
+    const params = new URLSearchParams();
+    if (searchTerm) params.set("search", searchTerm);
+    if (selectedAccount) params.set("account", selectedAccount);
+    if (selectedRegion) params.set("region", selectedRegion);
+    if (selectedRisk) params.set("risk", selectedRisk);
+    if (selectedSource) params.set("source", selectedSource);
+    if (selectedLifecycle) params.set("lifecycle", selectedLifecycle);
+    if (selectedType) params.set("type", selectedType);
+    params.set("page", String(page));
+    params.set("limit", "50");
+    return `/api/v1/inventory/resources?${params.toString()}`;
+  }, [page, searchTerm, selectedAccount, selectedLifecycle, selectedRegion, selectedRisk, selectedSource, selectedType]);
+
   const { data, error, isRefreshing } = useCloudShieldData<ResourceResponse>(
-    "/api/v1/inventory/resources",
+    resourcePath,
     InstantResources
   );
   const { data: graph } = useCloudShieldData<ResourceGraphResponse>(
@@ -85,11 +132,22 @@ export default function InventoryPage() {
       scannerRun: false
     }
   );
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedAccount, setSelectedAccount] = useState("");
-  const [selectedRegion, setSelectedRegion] = useState("");
-  const [selectedRisk, setSelectedRisk] = useState("");
+  const { data: coverage } = useCloudShieldData<CoverageResponse>(
+    "/api/v1/inventory/coverage",
+    {
+      totals: {
+        registeredAccounts: 0,
+        eligibleAccounts: 0,
+        connectedAccounts: 0,
+        configuredRegions: 0,
+        scannedRegions: 0,
+        staleResources: 0,
+        archivedResources: 0,
+        sampleResources: 0,
+        awsSyncedResources: 0
+      }
+    }
+  );
 
   // Dynamically extract unique choices from resources list
   const accountsList = useMemo(() => {
@@ -102,18 +160,12 @@ export default function InventoryPage() {
     return Array.from(new Set(regs));
   }, [data?.items]);
 
-  const filteredItems = data?.items.filter(item => {
-    const matchesSearch = 
-      (item.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.resourceId || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.resourceType || "").toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesAccount = selectedAccount ? item.awsAccount?.name === selectedAccount : true;
-    const matchesRegion = selectedRegion ? (item.region || "global") === selectedRegion : true;
-    const matchesRisk = selectedRisk === "at_risk" ? (item.riskCount && item.riskCount > 0) : true;
+  const typesList = useMemo(() => {
+    const types = data?.items.map(i => i.resourceType).filter(Boolean) || [];
+    return Array.from(new Set(types));
+  }, [data?.items]);
 
-    return matchesSearch && matchesAccount && matchesRegion && matchesRisk;
-  }) || [];
+  const filteredItems = data?.items || [];
 
   const hasRealResources = data?.items.some(r => !r.id.startsWith("instant-resource"));
 
@@ -128,16 +180,16 @@ export default function InventoryPage() {
         description="Inventory is arranged as an operator workspace: filter resources, inspect ownership and region coverage, open detailed metadata, and understand how assets relate to security and compliance evidence."
         icon={<Database size={20} />}
         badges={[
-          { label: `${data?.items.length ?? 0} assets loaded`, tone: "info" },
+          { label: `${data?.pagination?.total ?? data?.items.length ?? 0} assets indexed`, tone: "info" },
           { label: hasRealResources ? "DB records active" : "Sample inventory", tone: hasRealResources ? "good" : "warning" },
           { label: "No scan triggered", tone: "good" }
         ]}
       >
         <StatusMatrix
           items={[
-              { label: "Accounts", value: accountsList.length, tone: "info" },
-              { label: "Regions", value: regionsList.length, tone: "info" },
-              { label: "At risk", value: data?.items.filter((i) => (i.riskCount || 0) > 0).length || 0, tone: "warning" },
+              { label: "Accounts", value: coverage.totals.registeredAccounts || accountsList.length, tone: "info" },
+              { label: "Regions", value: coverage.totals.scannedRegions || regionsList.length, tone: "info" },
+              { label: "Stale", value: coverage.totals.staleResources, tone: coverage.totals.staleResources ? "warning" : "good" },
               { label: "Relationships", value: graph.summary.relationships, tone: "good" }
             ]}
         />
@@ -190,7 +242,7 @@ export default function InventoryPage() {
         </DetailBlade>
       </section>
 
-      <div className="sticky top-[72px] z-10 mb-6 grid gap-4 rounded-xl border border-line bg-white/95 p-3 shadow-sm backdrop-blur md:grid-cols-4">
+      <div className="sticky top-[72px] z-10 mb-6 grid gap-4 rounded-xl border border-line bg-white/95 p-3 shadow-sm backdrop-blur md:grid-cols-4 xl:grid-cols-7">
         <div className="relative md:col-span-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
           <input 
@@ -198,14 +250,14 @@ export default function InventoryPage() {
             placeholder="Search by name, ID, or type..." 
             className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-line text-sm text-ink focus:outline-none focus:border-signal bg-white"
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
           />
         </div>
 
         <select
           className="rounded-lg border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal outline-none"
           value={selectedAccount}
-          onChange={e => setSelectedAccount(e.target.value)}
+          onChange={e => { setSelectedAccount(e.target.value); setPage(1); }}
         >
           <option value="">All Accounts</option>
           {accountsList.map(acc => (
@@ -216,12 +268,46 @@ export default function InventoryPage() {
         <select
           className="rounded-lg border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal outline-none"
           value={selectedRegion}
-          onChange={e => setSelectedRegion(e.target.value)}
+          onChange={e => { setSelectedRegion(e.target.value); setPage(1); }}
         >
           <option value="">All Regions</option>
           {regionsList.map(reg => (
             <option key={reg} value={reg}>{reg}</option>
           ))}
+        </select>
+
+        <select
+          className="rounded-lg border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal outline-none"
+          value={selectedType}
+          onChange={e => { setSelectedType(e.target.value); setPage(1); }}
+        >
+          <option value="">All Types</option>
+          {typesList.map(type => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
+
+        <select
+          className="rounded-lg border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal outline-none"
+          value={selectedSource}
+          onChange={e => { setSelectedSource(e.target.value); setPage(1); }}
+        >
+          <option value="">All Sources</option>
+          <option value="AWS_SYNC">AWS Sync</option>
+          <option value="SAMPLE">Sample</option>
+          <option value="MANUAL">Manual</option>
+          <option value="IMPORT">Import</option>
+        </select>
+
+        <select
+          className="rounded-lg border border-line px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:border-signal outline-none"
+          value={selectedLifecycle}
+          onChange={e => { setSelectedLifecycle(e.target.value); setPage(1); }}
+        >
+          <option value="">Any State</option>
+          <option value="active">Active</option>
+          <option value="stale">Stale</option>
+          <option value="archived">Archived</option>
         </select>
       </div>
 
@@ -235,10 +321,17 @@ export default function InventoryPage() {
         </button>
         <button
           className={`filter-chip ${selectedRisk === "at_risk" ? "active" : ""}`}
-          onClick={() => setSelectedRisk("at_risk")}
+          onClick={() => { setSelectedRisk("at_risk"); setPage(1); }}
           type="button"
         >
           At Risk ({data?.items.filter(i => (i.riskCount || 0) > 0).length || 0})
+        </button>
+        <button
+          className={`filter-chip ${selectedLifecycle === "stale" ? "active" : ""}`}
+          onClick={() => { setSelectedLifecycle(selectedLifecycle === "stale" ? "" : "stale"); setPage(1); }}
+          type="button"
+        >
+          Stale ({coverage.totals.staleResources})
         </button>
       </div>
 
@@ -257,6 +350,13 @@ export default function InventoryPage() {
             {filteredItems.map((resource) => (
               <ResourceRow key={resource.id} resource={resource} />
             ))}
+          </div>
+          <div className="flex items-center justify-between border-t border-line bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+            <span>Page {data.pagination?.page ?? page} / {data.pagination?.total ?? filteredItems.length} total assets</span>
+            <div className="flex gap-2">
+              <button className="rounded-lg border border-line bg-white px-3 py-1.5 disabled:opacity-40" disabled={page <= 1} onClick={() => setPage(page - 1)} type="button">Previous</button>
+              <button className="rounded-lg border border-line bg-white px-3 py-1.5 disabled:opacity-40" disabled={!data.pagination?.hasNextPage} onClick={() => setPage(page + 1)} type="button">Next</button>
+            </div>
           </div>
         </div>
       )}

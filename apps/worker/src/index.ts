@@ -43,6 +43,9 @@ type CloudScanJob = {
   organizationId?: string;
   awsAccountId?: string;
   scanRunId?: string;
+  regions?: string[];
+  scannerType?: string;
+  idempotencyKey?: string | null;
 };
 
 type CloudAssessmentJob = {
@@ -81,7 +84,11 @@ const worker = new BullWorker<CloudScanJob>(
 
     if (jobType === "AWS_EC2_INVENTORY_SCAN") {
       if (job.data.organizationId && job.data.awsAccountId && job.data.scanRunId) {
-        return await executeEc2Scan(job.data.organizationId, job.data.awsAccountId, job.data.scanRunId);
+        return await executeEc2Scan(job.data.organizationId, job.data.awsAccountId, job.data.scanRunId, {
+          regions: job.data.regions,
+          scannerType: job.data.scannerType,
+          idempotencyKey: job.data.idempotencyKey
+        });
       }
       return { status: "FAILED", awsApiCallExecuted: false, reason: "Missing job data for EC2 scan." };
     }

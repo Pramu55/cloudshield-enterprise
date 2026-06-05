@@ -284,6 +284,13 @@ export async function buildAccountDetail(organizationId: string, accountId: stri
     findingCount,
     costFindingCount,
     complianceEvidenceCount,
+    resourcesByType,
+    resourcesByRegion,
+    staleResourceCount,
+    archivedResourceCount,
+    activeScan,
+    lastSuccessfulScan,
+    lastFailedScan,
     activeRisks,
     pendingRecommendations,
     pendingApprovals,
@@ -295,6 +302,13 @@ export async function buildAccountDetail(organizationId: string, accountId: stri
     prisma.securityFinding.count({ where: { ...scope, awsAccountId: account.id } }),
     prisma.costFinding.count({ where: { ...scope, awsAccountId: account.id } }),
     prisma.complianceEvidence.count({ where: { ...scope, resource: { awsAccountId: account.id } } }),
+    groupByField("cloudResource", organizationId, ["resourceType"], { awsAccountId: account.id }),
+    groupByField("cloudResource", organizationId, ["region"], { awsAccountId: account.id }),
+    prisma.cloudResource.count({ where: { ...scope, awsAccountId: account.id, staleAt: { not: null }, archivedAt: null } }),
+    prisma.cloudResource.count({ where: { ...scope, awsAccountId: account.id, archivedAt: { not: null } } }),
+    prisma.scanRun.findFirst({ where: { ...scope, awsAccountId: account.id, status: { in: ["REQUESTED", "QUEUED", "RUNNING", "STARTED"] } }, orderBy: { createdAt: "desc" } }),
+    prisma.scanRun.findFirst({ where: { ...scope, awsAccountId: account.id, status: { in: ["SUCCEEDED", "COMPLETED"] } }, orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }] }),
+    prisma.scanRun.findFirst({ where: { ...scope, awsAccountId: account.id, status: { in: ["FAILED", "AUTH_FAILED", "PERMISSION_DENIED", "RATE_LIMITED"] } }, orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }] }),
     prisma.securityFinding.count({ where: { ...scope, awsAccountId: account.id, status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "REOPENED"] } } }),
     prisma.recommendation.count({ where: { ...scope, OR: [{ securityFinding: { awsAccountId: account.id } }, { costFinding: { awsAccountId: account.id } }] } }),
     prisma.approvalRequest.count({ where: { ...scope, status: "PENDING", remediationPlan: { finding: { awsAccountId: account.id } } } }),
@@ -319,12 +333,37 @@ export async function buildAccountDetail(organizationId: string, accountId: stri
     counts: {
       resources: resourceCount,
       resourcesBySource: normalizeGroupedCounts(sourceCounts, "source"),
+      resourcesByType: normalizeGroupedCounts(resourcesByType, "resourceType"),
+      resourcesByRegion: normalizeGroupedCounts(resourcesByRegion, "region"),
+      staleResources: staleResourceCount,
+      archivedResources: archivedResourceCount,
       securityFindings: findingCount,
       costFindings: costFindingCount,
       complianceEvidence: complianceEvidenceCount,
       activeRisks,
       pendingRecommendations,
       pendingApprovals
+    },
+    inventory: {
+      freshness: {
+        lastSuccessfulScan: lastSuccessfulScan ? toScanDto(lastSuccessfulScan) : null,
+        lastFailedScan: lastFailedScan ? toScanDto(lastFailedScan) : null,
+        activeScan: activeScan ? toScanDto(activeScan) : null,
+        staleResourceCount,
+        archivedResourceCount
+      },
+      regionCoverage: account.regions.map((region) => {
+        const completed = lastSuccessfulScan?.completedRegions?.includes(region) ?? false;
+        const failed = Array.isArray(lastFailedScan?.failedRegions)
+          ? (lastFailedScan.failedRegions as any[]).some((failure) => failure.region === region)
+          : false;
+        return {
+          region,
+          status: completed ? "SCANNED" : failed ? "FAILED" : "NEVER_SCANNED"
+        };
+      }),
+      resourceCountsByType: normalizeGroupedCounts(resourcesByType, "resourceType"),
+      resourceCountsByRegion: normalizeGroupedCounts(resourcesByRegion, "region")
     },
     scans: recentScans.map(toScanDto),
     activity: recentActivity.map((event) => ({
@@ -508,7 +547,16 @@ function toScanDto(scan: any) {
     phase: scan.phase,
     source: scan.source,
     queueJobId: scan.queueJobId,
+    requestedRegions: scan.requestedRegions ?? [],
+    completedRegions: scan.completedRegions ?? [],
+    failedRegions: scan.failedRegions ?? [],
     resourceCount: scan.resourceCount,
+    relationshipCount: scan.relationshipCount ?? 0,
+    createdResourceCount: scan.createdResourceCount ?? 0,
+    updatedResourceCount: scan.updatedResourceCount ?? 0,
+    unchangedResourceCount: scan.unchangedResourceCount ?? 0,
+    staleResourceCount: scan.staleResourceCount ?? 0,
+    archivedResourceCount: scan.archivedResourceCount ?? 0,
     failureCount: scan.failureCount,
     failureClassification: scan.failureClassification,
     startedAt: scan.startedAt.toISOString(),

@@ -226,7 +226,24 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/v1/inventory/resources", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
-    const { accountId, account, region, type, tag, risk } = request.query as any || {};
+    const {
+      accountId,
+      account,
+      region,
+      type,
+      tag,
+      risk,
+      source,
+      freshness,
+      lifecycle,
+      search,
+      sort = "resourceType",
+      direction = "asc",
+      page = "1",
+      limit = String(DEFAULT_LIMIT)
+    } = request.query as any || {};
+    const take = Math.min(Math.max(Number(limit) || DEFAULT_LIMIT, 1), 100);
+    const skip = (Math.max(Number(page) || 1, 1) - 1) * take;
 
     const whereClause: any = {
       ...scopeByOrganization(auth.organizationId)
@@ -235,7 +252,8 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     if (accountId || account) {
       whereClause.OR = [
         { awsAccountId: accountId || account },
-        { awsAccount: { accountId: accountId || account } }
+        { awsAccount: { accountId: accountId || account } },
+        { awsAccount: { name: accountId || account } }
       ];
     }
     if (region) {
@@ -244,6 +262,28 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     if (type) {
       whereClause.resourceType = type;
     }
+    if (source) {
+      whereClause.source = source;
+    }
+    if (freshness === "stale") {
+      whereClause.staleAt = { not: null };
+      whereClause.archivedAt = null;
+    }
+    if (freshness === "fresh") {
+      whereClause.staleAt = null;
+      whereClause.archivedAt = null;
+    }
+    if (lifecycle === "archived") {
+      whereClause.archivedAt = { not: null };
+    }
+    if (lifecycle === "active") {
+      whereClause.archivedAt = null;
+      whereClause.staleAt = null;
+    }
+    if (lifecycle === "stale") {
+      whereClause.archivedAt = null;
+      whereClause.staleAt = { not: null };
+    }
     if (tag) {
       whereClause.OR = [
         ...(whereClause.OR || []),
@@ -251,14 +291,27 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
         { resourceId: { contains: tag, mode: "insensitive" } }
       ];
     }
+    if (search) {
+      whereClause.OR = [
+        ...(whereClause.OR || []),
+        { name: { contains: search, mode: "insensitive" } },
+        { resourceId: { contains: search, mode: "insensitive" } },
+        { resourceType: { contains: search, mode: "insensitive" } },
+        { arn: { contains: search, mode: "insensitive" } }
+      ];
+    }
     if (risk === "at_risk" || risk === "high" || risk === "true") {
       whereClause.riskCount = { gt: 0 };
     }
 
-    const resources = await prisma.cloudResource.findMany({
+    const allowedSorts = new Set(["resourceType", "name", "region", "lastSeenAt", "lastVerifiedAt", "createdAt", "riskCount"]);
+    const orderField = allowedSorts.has(sort) ? sort : "resourceType";
+    const orderDirection = direction === "desc" ? "desc" : "asc";
+    const [resources, total] = await Promise.all([prisma.cloudResource.findMany({
       where: whereClause,
-      take: DEFAULT_LIMIT,
-      orderBy: [{ resourceType: "asc" }, { name: "asc" }],
+      skip,
+      take,
+      orderBy: [{ [orderField]: orderDirection }, { name: "asc" }],
       include: {
         awsAccount: {
           select: {
@@ -273,7 +326,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
           }
         }
       }
-    });
+    }), prisma.cloudResource.count({ where: whereClause })]);
 
     const hasRealResources = resources.some(r => !r.id.startsWith("instant-resource"));
 
@@ -282,7 +335,14 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       sampleDataLabel: hasRealResources
         ? "Dynamic data evaluated from CloudShield database."
         : "Sample demo data - real AWS scanning is not enabled yet.",
-      limit: DEFAULT_LIMIT,
+      pagination: {
+        page: Number(page) || 1,
+        limit: take,
+        total,
+        hasNextPage: skip + resources.length < total
+      },
+      filters: { accountId: accountId || account || null, region: region || null, type: type || null, source: source || null, freshness: freshness || null, lifecycle: lifecycle || null, search: search || tag || null },
+      limit: take,
       items: resources
     };
   });

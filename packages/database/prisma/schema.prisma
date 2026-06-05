@@ -348,6 +348,10 @@ model CloudResource {
   lastSeenAt     DateTime?
   lastVerifiedAt DateTime?
   staleAt        DateTime?
+  archivedAt     DateTime?
+  staleReason    String?
+  successfulMissCount Int      @default(0)
+  lastScanRunId  String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -364,6 +368,10 @@ model CloudResource {
   @@index([organizationId, awsAccountId])
   @@index([organizationId, source])
   @@index([organizationId, lastSeenAt])
+  @@index([organizationId, region])
+  @@index([organizationId, staleAt])
+  @@index([organizationId, archivedAt])
+  @@index([organizationId, lastScanRunId])
 }
 
 model ResourceRelationship {
@@ -376,11 +384,20 @@ model ResourceRelationship {
   targetResource   CloudResource @relation("RelationshipTarget", fields: [targetResourceId], references: [id], onDelete: Cascade)
   relationshipType String
   evidence         Json          @default("{}")
+  sourceClassification DataSourceClassification @default(AWS_SYNC)
+  firstSeenAt      DateTime      @default(now())
+  lastSeenAt       DateTime?
+  staleAt          DateTime?
+  lastScanRunId    String?
   createdAt        DateTime      @default(now())
 
+  @@unique([organizationId, sourceResourceId, targetResourceId, relationshipType])
   @@index([organizationId])
   @@index([organizationId, sourceResourceId])
   @@index([organizationId, targetResourceId])
+  @@index([organizationId, sourceClassification])
+  @@index([organizationId, staleAt])
+  @@index([organizationId, lastScanRunId])
 }
 
 model SecurityFinding {
@@ -607,11 +624,25 @@ model ScanRun {
   requestedByUserId String?
   queueJobId     String?
   requestedRegions String[]    @default([])
+  completedRegions String[]    @default([])
+  failedRegions  Json          @default("[]")
   scannerType    String?
+  idempotencyKey String?
+  dedupeKey      String?
+  queuedAt       DateTime?
   source         DataSourceClassification @default(SYSTEM)
+  connectorMode  String?
+  scannerRoleReady Boolean     @default(false)
   resourceCount  Int           @default(0)
+  relationshipCount Int        @default(0)
+  createdResourceCount Int     @default(0)
+  updatedResourceCount Int     @default(0)
+  unchangedResourceCount Int   @default(0)
+  staleResourceCount Int       @default(0)
+  archivedResourceCount Int    @default(0)
   failureCount   Int           @default(0)
   failureClassification String?
+  retryCount     Int           @default(0)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -620,6 +651,9 @@ model ScanRun {
   @@index([organizationId, awsAccountId])
   @@index([organizationId, source])
   @@index([organizationId, createdAt])
+  @@index([organizationId, scannerType])
+  @@index([organizationId, dedupeKey])
+  @@unique([organizationId, idempotencyKey])
 }
 
 model AuditEvent {
