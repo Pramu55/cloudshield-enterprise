@@ -1,14 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { fetchCloudShieldClient } from "../../lib/client-api";
 
 export function LogoutButton() {
   const router = useRouter();
 
-  function logout() {
-    localStorage.removeItem("cloudshield_access_token");
+  async function logout() {
+    try {
+      await fetchCloudShieldClient("/api/v1/auth/logout", { method: "POST" });
+    } catch (e) {
+      // ignore
+    }
     localStorage.removeItem("cloudshield_current_user");
-    document.cookie = "cloudshield_access_token=; path=/; max-age=0; SameSite=Lax";
     router.replace("/login");
     router.refresh();
   }

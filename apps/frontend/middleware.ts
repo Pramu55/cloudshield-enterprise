@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const token = request.cookies.get("cloudshield_access_token")?.value;
+  const token = request.cookies.get("cloudshield_session")?.value;
   const isDashboardRoute = request.nextUrl.pathname.startsWith("/dashboard");
 
   if (isDashboardRoute && !token) {

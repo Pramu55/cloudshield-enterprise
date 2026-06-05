@@ -9,6 +9,10 @@ const DEMO_PASSWORD = "CloudShieldDemo123!";
 const blockedReason = "Automatic remediation is disabled in CloudShield v1.";
 
 async function main() {
+  if (process.env.CLOUDSHIELD_DATA_MODE === "production") {
+    console.warn("Skipping sample data seed because CLOUDSHIELD_DATA_MODE is production.");
+    return;
+  }
   const organization = await prisma.organization.upsert({
     where: { slug: DEMO_ORG_SLUG },
     update: {

@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+import fastifyCookie from "@fastify/cookie";
 import Fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import { registerEnvPlugin } from "./plugins/env.js";
 import { registerErrorPlugin } from "./plugins/errors.js";
@@ -23,9 +24,17 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   const app = Fastify(opts);
 
   await app.register(helmet);
+  
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3100";
   await app.register(cors, {
-    origin: "*",
+    origin: frontendUrl,
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+  });
+
+  await app.register(fastifyCookie, {
+    secret: process.env.JWT_SECRET || "cloudshield-local-demo-jwt-secret-change-me",
+    hook: "onRequest"
   });
 
   await registerEnvPlugin(app);

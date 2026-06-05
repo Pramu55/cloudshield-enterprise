@@ -553,7 +553,7 @@ export const AuthOrganizationSchema = z.object({
 export type AuthOrganization = z.infer<typeof AuthOrganizationSchema>;
 
 export const LoginResponseSchema = z.object({
-  accessToken: z.string(),
+  accessToken: z.string().optional(),
   user: AuthUserSchema,
   organization: AuthOrganizationSchema
 });

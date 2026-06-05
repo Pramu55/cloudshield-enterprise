@@ -373,9 +373,7 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
     if (expanded && !details && !loading) {
       setLoading(true);
       fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100"}/api/v1/resources/${resource.id}/context`, {
-        headers: {
-          Authorization: `Bearer ${window.localStorage.getItem("cloudshield_access_token") || ""}`
-        }
+        credentials: "include"
       })
         .then(res => res.json())
         .then(data => {

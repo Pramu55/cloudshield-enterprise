@@ -9,6 +9,12 @@ export const RuntimeEnvSchema = z.object({
   REDIS_HOST: z.string().default("localhost"),
   REDIS_PORT: z.coerce.number().int().positive().default(6379),
   JWT_SECRET: z.string().min(16).default("cloudshield-local-demo-jwt-secret-change-me"),
+  CLOUDSHIELD_DATA_MODE: z
+    .enum(["production", "development", "sample"])
+    .default("development"),
+  AUTH_COOKIE_SECURE: z.coerce.boolean().default(false),
+  AUTH_COOKIE_DOMAIN: z.string().optional().default(""),
+  AUTH_SESSION_TTL_HOURS: z.coerce.number().int().positive().default(24),
   AWS_CONNECTOR_MODE: z
     .enum(["disabled", "readonly-validation", "sts-validation"])
     .default("disabled"),

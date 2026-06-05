@@ -74,9 +74,6 @@ export default function DashboardLayout({
   }, []);
 
   useEffect(() => {
-    const token = window.localStorage.getItem("cloudshield_access_token");
-    setAuthState(token ? "authenticated" : "anonymous");
-
     const cachedUser = window.localStorage.getItem("cloudshield_current_user");
     if (cachedUser) {
       try {
@@ -86,26 +83,23 @@ export default function DashboardLayout({
       }
     }
 
-    if (!token) {
-      return;
-    }
-
     fetch(`${API_BASE_URL}/api/v1/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      credentials: "include"
     })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: CurrentUser | null) => {
         if (payload) {
+          setAuthState("authenticated");
           setCurrentUser(payload);
           window.localStorage.setItem(
             "cloudshield_current_user",
             JSON.stringify(payload)
           );
+        } else {
+          setAuthState("anonymous");
         }
       })
-      .catch(() => undefined);
+      .catch(() => setAuthState("anonymous"));
   }, []);
 
   useEffect(() => {
