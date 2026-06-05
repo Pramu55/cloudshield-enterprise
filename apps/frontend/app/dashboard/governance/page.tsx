@@ -32,6 +32,23 @@ type RemediationPlan = {
   implementationMode: string;
   approvalStatus: string;
   executionStatus: string;
+  executionMode?: string;
+  lifecycleState?: string;
+  allowlistedOperation?: string | null;
+  confirmationTokenRequired?: string | null;
+  requestedAction?: Record<string, unknown>;
+  normalizedPayload?: Record<string, unknown>;
+  preflightEvidence?: Record<string, unknown>;
+  beforeState?: Record<string, unknown>;
+  expectedAfterState?: Record<string, unknown>;
+  afterState?: Record<string, unknown>;
+  rollbackPayload?: Record<string, unknown>;
+  executionEvidence?: Record<string, unknown>;
+  blockedReason?: string | null;
+  awsRequestId?: string | null;
+  approvalExpiresAt?: string | null;
+  simulatedAt?: string | null;
+  queuedAt?: string | null;
   findingTitle: string | null;
   resourceName: string | null;
   recommendedSteps: string[];
@@ -179,7 +196,7 @@ export default function GovernancePage() {
         badges={[
           { label: `${pendingApprovals.length} pending approvals`, tone: pendingApprovals.length ? "warning" : "good" },
           { label: `${plans.items.length} remediation plans`, tone: "info" },
-          { label: "AWS execution blocked", tone: "warning" }
+          { label: "Execution disabled by default", tone: "warning" }
         ]}
       >
         <StatusMatrix
@@ -436,13 +453,26 @@ export default function GovernancePage() {
                           )}
                           {plan.executionStatus}
                         </span>
-                        {plan.riskLevel && (
+                        <span className="status-pill border-teal-200 bg-teal-50 text-teal-700">
+                          {plan.lifecycleState ?? "RECOMMENDED"}
+                        </span>
+                        {plan.allowlistedOperation ? (
+                          <span className="status-pill border-indigo-200 bg-indigo-50 text-indigo-700">
+                            {plan.allowlistedOperation}
+                          </span>
+                        ) : null}
+              {plan.riskLevel && (
                           <span className="status-pill border-red-200 bg-red-50 text-red-700">
                             Risk: {plan.riskLevel}
                           </span>
                         )}
                       </div>
-                      
+                      {(plan.blockedReason || isSampleBlocked(plan)) ? (
+                        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-amber-800">
+                          {isSampleBlocked(plan) ? "SAMPLE DATA - EXECUTION NOT ALLOWED" : plan.blockedReason}
+                        </div>
+                      ) : null}
+
                       <h3 className="text-base font-bold text-ink group-hover:text-indigo-600 transition-colors">{plan.title}</h3>
                       <p className="mt-1.5 text-xs leading-relaxed text-slate-500 max-w-2xl">{plan.summary}</p>
                       
@@ -475,7 +505,7 @@ export default function GovernancePage() {
                           onClick={() => mutate(`/api/v1/remediation/plans/${plan.id}/approve`, plan.id, "Approved for manual execution workflow.")}
                           type="button"
                         >
-                          Approve
+                          Approve exact action
                         </button>
                         <button
                           className="flex-1 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-2 text-[11px] font-bold text-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -488,7 +518,7 @@ export default function GovernancePage() {
                       </div>
                       <button
                         className="cs-action-primary px-3 py-2 text-[11px] font-bold flex items-center justify-center gap-1 disabled:opacity-50"
-                        disabled={busyPlanId === plan.id || plan.executionStatus === "COMPLETED_MANUALLY" || plan.approvalStatus !== "APPROVED"}
+                        disabled={busyPlanId === plan.id || plan.executionStatus === "COMPLETED_MANUALLY" || plan.approvalStatus !== "APPROVED" || isSampleBlocked(plan)}
                         onClick={() => mutate(`/api/v1/remediation/plans/${plan.id}/mark-manually-completed`, plan.id, "Manual action completed outside CloudShield and evidence captured.")}
                         type="button"
                       >
@@ -504,6 +534,19 @@ export default function GovernancePage() {
                     <ListPanel title="Recommended steps" items={plan.recommendedSteps} />
                     <ListPanel title="Approval checklist" items={plan.approvalChecklist} />
                     <ListPanel title="Rollback notes" items={plan.rollbackPlan} />
+                  </div>
+
+                  <div className="mt-4 grid gap-3 lg:grid-cols-4">
+                    <EvidencePanel title="Execution mode" value={plan.executionMode ?? "disabled"} />
+                    <EvidencePanel title="Confirmation token" value={plan.confirmationTokenRequired ?? "not prepared"} />
+                    <EvidencePanel title="Plan expires" value={plan.approvalExpiresAt ? new Date(plan.approvalExpiresAt).toLocaleString() : "not requested"} />
+                    <EvidencePanel title="AWS request ID" value={plan.awsRequestId ?? "not executed"} />
+                  </div>
+
+                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                    <JsonPanel title="Before state" value={plan.beforeState} />
+                    <JsonPanel title="Expected after state" value={plan.expectedAfterState} />
+                    <JsonPanel title="Rollback payload" value={plan.rollbackPayload} />
                   </div>
 
                   <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -665,4 +708,41 @@ function CodePanel({ title, value }: { title: string; value: string | null }) {
       </pre>
     </div>
   );
+}
+
+function EvidencePanel({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-white p-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
+      <p className="mt-1 break-words text-xs font-bold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function JsonPanel({
+  title,
+  value
+}: {
+  title: string;
+  value?: Record<string, unknown>;
+}) {
+  const content = value && Object.keys(value).length ? JSON.stringify(value, null, 2) : "{}";
+  return (
+    <div className="rounded-xl border border-line bg-white p-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
+      <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 font-mono text-[10px] leading-4 text-emerald-300">
+        {content}
+      </pre>
+    </div>
+  );
+}
+
+function isSampleBlocked(plan: RemediationPlan) {
+  const blob = JSON.stringify({
+    blockedReason: plan.blockedReason,
+    beforeState: plan.beforeState,
+    normalizedPayload: plan.normalizedPayload,
+    requestedAction: plan.requestedAction
+  }).toLowerCase();
+  return blob.includes("sample") || blob.includes("demo");
 }

@@ -2,6 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   CreateRemediationPlanRequestSchema,
+  GovernedApprovalRequestSchema,
+  GovernedExecuteRequestSchema,
+  GovernedExecutionEvidenceResponseSchema,
+  GovernedSimulationRequestSchema,
   GovernanceActivityResponseSchema,
   GovernanceApprovalsResponseSchema,
   GovernanceDecisionRequestSchema,
@@ -21,6 +25,14 @@ import {
   rejectPlan,
   requestApproval
 } from "../modules/governance/remediation.service.js";
+import {
+  approveGovernedAwsChange,
+  getGovernedExecutionEvidence,
+  queueGovernedAwsChangeExecution,
+  rejectGovernedAwsChange,
+  requestGovernedAwsChangeApproval,
+  simulateGovernedAwsChange
+} from "../modules/governance/aws-change-execution.service.js";
 
 const FindingParamsSchema = z.object({
   findingId: z.string().min(1)
@@ -132,6 +144,96 @@ export async function registerRemediationGovernanceRoutes(
           GovernanceDecisionRequestSchema.parse(request.body ?? {})
         )
       )
+  );
+
+  app.post(
+    "/api/v1/governance/remediation-plans/:planId/simulate",
+    { preHandler: requireAuth },
+    async (request, reply) =>
+      sendPlanMutation(
+        reply,
+        await simulateGovernedAwsChange(
+          getAuthContext(request),
+          PlanParamsSchema.parse(request.params).planId,
+          GovernedSimulationRequestSchema.parse(request.body ?? {})
+        )
+      )
+  );
+
+  app.post(
+    "/api/v1/governance/remediation-plans/:planId/request-approval",
+    { preHandler: requireAuth },
+    async (request, reply) =>
+      sendPlanMutation(
+        reply,
+        await requestGovernedAwsChangeApproval(
+          getAuthContext(request),
+          PlanParamsSchema.parse(request.params).planId,
+          GovernedApprovalRequestSchema.parse(request.body ?? {})
+        )
+      )
+  );
+
+  app.post(
+    "/api/v1/governance/remediation-plans/:planId/approve",
+    { preHandler: requireAuth },
+    async (request, reply) =>
+      sendPlanMutation(
+        reply,
+        await approveGovernedAwsChange(
+          getAuthContext(request),
+          PlanParamsSchema.parse(request.params).planId,
+          GovernedApprovalRequestSchema.parse(request.body ?? {})
+        )
+      )
+  );
+
+  app.post(
+    "/api/v1/governance/remediation-plans/:planId/reject",
+    { preHandler: requireAuth },
+    async (request, reply) =>
+      sendPlanMutation(
+        reply,
+        await rejectGovernedAwsChange(
+          getAuthContext(request),
+          PlanParamsSchema.parse(request.params).planId,
+          GovernedApprovalRequestSchema.parse(request.body ?? {})
+        )
+      )
+  );
+
+  app.post(
+    "/api/v1/governance/remediation-plans/:planId/execute",
+    { preHandler: requireAuth },
+    async (request, reply) =>
+      sendPlanMutation(
+        reply,
+        await queueGovernedAwsChangeExecution(
+          getAuthContext(request),
+          PlanParamsSchema.parse(request.params).planId,
+          GovernedExecuteRequestSchema.parse(request.body ?? {})
+        )
+      )
+  );
+
+  app.get(
+    "/api/v1/governance/remediation-plans/:planId/execution-evidence",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      const result = await getGovernedExecutionEvidence(
+        auth.organizationId,
+        PlanParamsSchema.parse(request.params).planId
+      );
+      if (!result) {
+        reply.status(404).send({
+          error: "remediation_plan_not_found",
+          message: "Remediation plan was not found for this organization."
+        });
+        return;
+      }
+      return GovernedExecutionEvidenceResponseSchema.parse(result);
+    }
   );
 
   app.get("/api/v1/governance/approvals", { preHandler: requireAuth }, async (request) => {
