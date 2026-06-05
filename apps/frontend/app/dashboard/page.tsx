@@ -246,15 +246,15 @@ export default function DashboardHome() {
 
   return (
     <DashboardPage
-      title="CloudShield Governance Hub"
-      description="Enterprise control plane for cloud security posture, risk workflow, and compliance evidence. Evaluator mode uses safe DB-backed records."
+      title="CloudShield Command Center"
+      description="Executive and operator view for cloud security posture, risk workflow, compliance evidence, and governed operations. Evaluator mode uses safe DB-backed records."
     >
       <SampleDataNotice />
       <RefreshBadge error={error} isRefreshing={isRefreshing} />
 
       <WorkspaceHero
         eyebrow="Executive cloud governance workspace"
-        title="CloudShield command center for posture, evidence, and governed operations."
+        title="Premium command center for posture, evidence, and governed operations."
         description="Track readiness, account coverage, security exposure, compliance evidence, and approval-based remediation from one operations-grade workspace."
         icon={<ShieldCheck size={20} />}
         badges={[

@@ -154,13 +154,13 @@ export default function DashboardLayout({
           </div>
           <Link className="flex flex-col text-[16px] font-bold tracking-tight text-white" href="/dashboard">
             <span>CloudShield</span>
-            <span className="text-[10px] text-slate-400 font-medium tracking-normal -mt-1">Enterprise Console</span>
+            <span className="text-[10px] text-slate-400 font-medium tracking-normal -mt-1">Command Center</span>
           </Link>
         </div>
 
         <div className="mx-8 hidden h-9 max-w-xl flex-1 items-center gap-3 px-3 text-sm lg:flex portal-search">
           <Search size={16} className="text-slate-400" />
-          <span className="text-slate-400 text-xs">Search accounts, compliance controls, and resources (Press ⌘K)</span>
+          <span className="text-slate-400 text-xs">Search accounts, compliance controls, and resources</span>
         </div>
 
         <div className="ml-auto flex h-full items-center gap-1">
@@ -245,7 +245,7 @@ export default function DashboardLayout({
           <div className="px-3 py-2 border-t border-slate-800 mt-2">
             {!isSidebarCollapsed ? (
               <div className="rounded-lg bg-slate-900/60 p-3 border border-slate-800">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[#ff9900] mb-1">
+                <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
                   Safety Guardrails
                 </p>
                 <p className="text-[10px] leading-relaxed text-slate-400">
@@ -254,7 +254,7 @@ export default function DashboardLayout({
               </div>
             ) : (
               <div className="flex justify-center text-slate-500" title="Safety active">
-                <ShieldAlert size={16} className="text-[#ff9900]" />
+                <ShieldAlert size={16} className="text-emerald-300" />
               </div>
             )}
           </div>
@@ -269,7 +269,7 @@ export default function DashboardLayout({
               <div className="min-w-0">
                 <p className="text-sm font-bold text-ink leading-tight">{activeItem.label}</p>
                 <p className="truncate text-[11px] text-slate-500 mt-0.5">
-                  CloudShield Governance Hub &bull; Stored DB records mode
+                  CloudShield workspace / Stored DB records mode
                 </p>
               </div>
             </div>

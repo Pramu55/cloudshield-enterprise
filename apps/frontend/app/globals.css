@@ -710,7 +710,7 @@ button:disabled {
   }
 }
 
-/* Manual AWS-console-inspired CloudShield theme */
+/* Legacy public/auth class compatibility */
 :root {
   --aws-navy: #16191f;
   --aws-navy-2: #232f3e;
@@ -1614,4 +1614,507 @@ body {
 .portal-app button:not(.portal-icon-button):not(.cs-action-signal):not(.cs-action-primary),
 .portal-auth button:not(.cs-action-primary) {
   border-radius: 3px !important;
+}
+
+/* CloudShield original premium command center theme */
+:root {
+  --cs-void: #071111;
+  --cs-navy: #0b1718;
+  --cs-nav: #0d1d1d;
+  --cs-nav-elevated: #102827;
+  --cs-canvas: #eef3f1;
+  --cs-canvas-strong: #e5eeeb;
+  --cs-panel: #ffffff;
+  --cs-panel-soft: #f7fbf9;
+  --cs-line: #d3ded9;
+  --cs-line-strong: #b7c8c1;
+  --cs-text: #10201f;
+  --cs-muted: #5d6f6b;
+  --cs-faint: #7f918b;
+  --cs-primary: #08795f;
+  --cs-primary-strong: #075f4c;
+  --cs-primary-soft: #e4f7f1;
+  --cs-mint: #19b98f;
+  --cs-cyan: #168f9f;
+  --cs-gold: #c88a12;
+  --cs-red: #c73535;
+  --cs-indigo: #4057b8;
+  --cs-shadow-sm: 0 1px 2px rgba(8, 27, 25, 0.06);
+  --cs-shadow-md: 0 12px 28px -22px rgba(8, 27, 25, 0.46);
+  --cs-shadow-lg: 0 24px 48px -34px rgba(8, 27, 25, 0.58);
+}
+
+html {
+  background: var(--cs-canvas);
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% -12%, rgba(25, 185, 143, 0.14), transparent 34rem),
+    linear-gradient(180deg, #f7faf8 0%, var(--cs-canvas) 38%, #e8efec 100%);
+  color: var(--cs-text);
+  text-rendering: optimizeLegibility;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(8, 121, 95, 0.72);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(25, 185, 143, 0.24);
+}
+
+.portal-app,
+.aws-marketing-page,
+.aws-auth-page {
+  background:
+    radial-gradient(circle at 22% -14%, rgba(25, 185, 143, 0.16), transparent 32rem),
+    linear-gradient(180deg, #f8fbf9 0%, var(--cs-canvas) 45%, #e7eeeb 100%) !important;
+  color: var(--cs-text);
+}
+
+.portal-topbar,
+.aws-public-topbar {
+  min-height: 60px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background:
+    linear-gradient(90deg, rgba(25, 185, 143, 0.16), transparent 34%),
+    linear-gradient(180deg, #0d1f1f 0%, var(--cs-void) 100%) !important;
+  color: #f7fffc;
+  box-shadow: 0 16px 38px -30px rgba(0, 0, 0, 0.9);
+}
+
+.aws-public-brand span,
+.portal-topbar .flex.h-10.w-10,
+.portal-commandbar .flex.h-8.w-8 {
+  border: 1px solid rgba(38, 219, 169, 0.28) !important;
+  background:
+    linear-gradient(145deg, rgba(25, 185, 143, 0.24), rgba(22, 143, 159, 0.14)) !important;
+  color: #61e8c3 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.portal-search {
+  min-height: 38px;
+  border: 1px solid rgba(139, 167, 158, 0.24);
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #e6f7f0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.portal-search:focus-within {
+  border-color: rgba(97, 232, 195, 0.56);
+  background: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 0 0 3px rgba(25, 185, 143, 0.14);
+}
+
+.portal-nav {
+  background:
+    linear-gradient(180deg, var(--cs-nav) 0%, #091414 100%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 18px 0 44px -38px rgba(0, 0, 0, 0.9);
+}
+
+.portal-nav-link {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 8px !important;
+  color: #b7cbc4 !important;
+}
+
+.portal-nav-link:hover {
+  border-color: rgba(97, 232, 195, 0.12);
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
+}
+
+.portal-nav-link[data-active="true"] {
+  border-color: rgba(97, 232, 195, 0.26);
+  background:
+    linear-gradient(90deg, rgba(25, 185, 143, 0.22), rgba(255, 255, 255, 0.04)) !important;
+  color: #f7fffc !important;
+  box-shadow: inset 3px 0 0 var(--cs-mint), 0 10px 24px -22px rgba(25, 185, 143, 0.9) !important;
+}
+
+.portal-commandbar {
+  min-height: 58px;
+  border-bottom: 1px solid rgba(183, 200, 193, 0.72) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--cs-shadow-sm);
+}
+
+.portal-content {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 22rem),
+    var(--cs-canvas) !important;
+}
+
+.portal-page {
+  padding: 26px 30px 52px;
+}
+
+.portal-page > div:first-child {
+  margin-bottom: 22px;
+  border-bottom: 0 !important;
+  padding-bottom: 0;
+}
+
+.portal-page-title {
+  color: var(--cs-text) !important;
+  font-size: clamp(24px, 2vw, 32px);
+  line-height: 1.12;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.portal-page-description {
+  color: var(--cs-muted) !important;
+  font-size: 13.5px;
+  line-height: 22px;
+}
+
+.portal-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgba(183, 200, 193, 0.72);
+  border-radius: 10px;
+  background:
+    linear-gradient(110deg, rgba(255, 255, 255, 0.92), rgba(247, 251, 249, 0.82)),
+    radial-gradient(circle at 8% 0%, rgba(25, 185, 143, 0.14), transparent 22rem);
+  padding: 18px 20px;
+  box-shadow: var(--cs-shadow-sm);
+}
+
+.portal-page-kicker {
+  margin-bottom: 7px;
+  color: var(--cs-primary);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.premium-card,
+.portal-blade,
+.journey-step,
+.command-card,
+.insight-panel,
+.detail-blade,
+.status-matrix-cell,
+.evidence-card,
+.premium-data-table,
+.activity-card,
+.empty-workspace-state,
+.aws-capability-card,
+.aws-workflow-panel,
+.aws-safety-panel,
+.aws-final-cta,
+.aws-console-mock,
+.aws-auth-card,
+.aws-mock-header,
+.aws-mock-metrics div {
+  border: 1px solid rgba(183, 200, 193, 0.78) !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, #ffffff 0%, var(--cs-panel-soft) 100%) !important;
+  box-shadow: var(--cs-shadow-sm) !important;
+}
+
+.premium-card:hover,
+.journey-step:hover,
+.command-card:hover,
+.evidence-card:hover,
+.aws-capability-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(8, 121, 95, 0.34) !important;
+  box-shadow: var(--cs-shadow-md) !important;
+}
+
+.insight-panel {
+  overflow: hidden;
+}
+
+.insight-panel > div:first-child {
+  background:
+    linear-gradient(90deg, rgba(228, 247, 241, 0.72), transparent 58%),
+    rgba(255, 255, 255, 0.62) !important;
+}
+
+.workspace-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(44, 78, 73, 0.86) !important;
+  border-radius: 10px !important;
+  background:
+    linear-gradient(135deg, rgba(8, 28, 27, 0.98), rgba(8, 48, 42, 0.96) 52%, rgba(14, 92, 75, 0.94)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 56px) !important;
+  box-shadow: var(--cs-shadow-lg) !important;
+}
+
+.workspace-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -12% -36% 28%;
+  height: 280px;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(25, 185, 143, 0.22), transparent 62%);
+}
+
+.workspace-hero-grid,
+.workspace-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.portal-app .workspace-hero h1,
+.portal-app .workspace-hero [class*="text-white"] {
+  color: #f7fffc !important;
+}
+
+.portal-app .workspace-hero p,
+.portal-app .workspace-hero [class*="text-slate-300"] {
+  color: #bfd4cd !important;
+}
+
+.workspace-hero-side {
+  border: 1px solid rgba(204, 232, 222, 0.14) !important;
+  background: rgba(255, 255, 255, 0.065) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(10px);
+}
+
+.workspace-eyebrow,
+.status-pill,
+.workspace-hero .inline-flex.rounded-full {
+  border-color: rgba(8, 121, 95, 0.2) !important;
+  background: rgba(228, 247, 241, 0.88) !important;
+  color: var(--cs-primary-strong) !important;
+}
+
+.workspace-hero .workspace-eyebrow,
+.workspace-hero .inline-flex.rounded-full {
+  border-color: rgba(97, 232, 195, 0.24) !important;
+  background: rgba(6, 22, 21, 0.5) !important;
+  color: #c9f7e8 !important;
+}
+
+.workspace-hero-icon,
+.workspace-icon-soft,
+.journey-index {
+  border: 1px solid rgba(8, 121, 95, 0.18) !important;
+  border-radius: 8px !important;
+  background: var(--cs-primary-soft) !important;
+  color: var(--cs-primary) !important;
+}
+
+.workspace-hero-icon {
+  border-color: rgba(97, 232, 195, 0.28) !important;
+  background: rgba(25, 185, 143, 0.16) !important;
+  color: #7ef1cc !important;
+}
+
+.cs-action-primary,
+.cs-action-signal,
+.aws-cta-primary {
+  border: 1px solid var(--cs-primary-strong) !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, var(--cs-primary) 0%, var(--cs-primary-strong) 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px -18px rgba(8, 121, 95, 0.82) !important;
+}
+
+.cs-action-primary:hover,
+.cs-action-signal:hover,
+.aws-cta-primary:hover {
+  background: linear-gradient(180deg, #0a8d70 0%, #064f40 100%) !important;
+  color: #ffffff !important;
+}
+
+.aws-cta-secondary,
+.portal-app button:not(.portal-icon-button):not(.cs-action-signal):not(.cs-action-primary):not([class*="text-white"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-teal"]):not([class*="bg-signal"]),
+.portal-auth button:not(.cs-action-primary):not([class*="text-white"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-teal"]):not([class*="bg-signal"]) {
+  border: 1px solid var(--cs-line-strong) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: var(--cs-text) !important;
+  box-shadow: var(--cs-shadow-sm);
+}
+
+.portal-app input,
+.portal-app select,
+.portal-app textarea,
+.portal-auth input {
+  border-color: var(--cs-line-strong) !important;
+  border-radius: 8px !important;
+  background: #ffffff;
+}
+
+.portal-app input:focus,
+.portal-app select:focus,
+.portal-app textarea:focus,
+.portal-auth input:focus {
+  border-color: var(--cs-primary) !important;
+  box-shadow: 0 0 0 3px rgba(8, 121, 95, 0.14) !important;
+}
+
+.portal-app thead,
+.premium-data-table thead {
+  background: #edf5f1 !important;
+  color: var(--cs-muted) !important;
+}
+
+.portal-app th {
+  border-bottom-color: var(--cs-line) !important;
+  color: var(--cs-muted) !important;
+}
+
+.portal-app td {
+  border-bottom-color: rgba(211, 222, 217, 0.78) !important;
+}
+
+.portal-app tr:hover td,
+.premium-data-table tbody tr:hover td {
+  background: #f4faf7 !important;
+}
+
+.status-matrix-cell {
+  border-top: 3px solid var(--cs-cyan) !important;
+}
+
+.status-matrix-cell[data-tone="good"] { border-top-color: var(--cs-primary) !important; }
+.status-matrix-cell[data-tone="warning"] { border-top-color: var(--cs-gold) !important; }
+.status-matrix-cell[data-tone="danger"] { border-top-color: var(--cs-red) !important; }
+
+.activity-dot {
+  background: var(--cs-primary);
+  box-shadow: 0 0 0 4px var(--cs-primary-soft);
+}
+
+.progress-ring {
+  background: conic-gradient(var(--cs-mint) var(--progress), rgba(204, 232, 222, 0.18) 0deg);
+}
+
+.progress-ring-core {
+  background: rgba(6, 22, 21, 0.72);
+  border-color: rgba(204, 232, 222, 0.18);
+}
+
+.progress-ring-core span {
+  color: #f7fffc;
+}
+
+.safety-banner {
+  border-color: rgba(200, 138, 18, 0.32) !important;
+  background: #fff8e7 !important;
+  color: #79510b !important;
+}
+
+.aws-public-hero {
+  max-width: 1220px;
+  padding-top: 60px;
+}
+
+.aws-kicker {
+  border-color: rgba(8, 121, 95, 0.18);
+  background: var(--cs-primary-soft);
+  color: var(--cs-primary-strong);
+}
+
+.aws-public-hero h1 {
+  color: var(--cs-text);
+  letter-spacing: 0;
+}
+
+.aws-public-hero p,
+.aws-section-heading p,
+.aws-safety-panel p,
+.aws-final-cta p,
+.aws-auth-summary p,
+.aws-auth-form-panel p {
+  color: var(--cs-muted);
+}
+
+.aws-console-mock {
+  border-color: rgba(16, 32, 31, 0.18) !important;
+  box-shadow: var(--cs-shadow-lg) !important;
+}
+
+.aws-console-mock-top {
+  border-bottom-color: rgba(183, 200, 193, 0.7);
+  background: #f6fbf8;
+}
+
+.aws-console-mock-nav {
+  background: var(--cs-nav);
+}
+
+.aws-console-mock-nav span[data-active="true"] {
+  background: rgba(25, 185, 143, 0.16);
+  box-shadow: inset 3px 0 0 var(--cs-mint);
+}
+
+.aws-auth-shell {
+  background:
+    radial-gradient(circle at 24% 12%, rgba(25, 185, 143, 0.16), transparent 30rem),
+    linear-gradient(180deg, var(--cs-nav) 0, var(--cs-nav) 220px, var(--cs-canvas) 220px) !important;
+}
+
+.aws-auth-summary {
+  background:
+    linear-gradient(180deg, rgba(228, 247, 241, 0.8), rgba(255, 255, 255, 0.92)) !important;
+}
+
+.aws-auth-alert,
+.aws-auth-notice {
+  border-left-color: var(--cs-gold);
+}
+
+.aws-trust-row span,
+.aws-safety-list span,
+.aws-auth-badges span {
+  border-color: rgba(8, 121, 95, 0.16);
+  background: var(--cs-primary-soft);
+  color: var(--cs-primary-strong);
+}
+
+@media (max-width: 1023px) {
+  .portal-page {
+    padding: 18px 16px 40px;
+  }
+
+  .portal-commandbar {
+    position: static;
+  }
+
+  .aws-public-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 14px 18px;
+  }
+
+  .aws-public-topbar nav {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace-hero-grid {
+    padding: 18px;
+  }
+
+  .aws-public-hero {
+    padding: 34px 18px 28px;
+  }
+
+  .aws-mock-metrics {
+    grid-template-columns: 1fr;
+  }
 }
