@@ -384,7 +384,7 @@ model ResourceRelationship {
   targetResource   CloudResource @relation("RelationshipTarget", fields: [targetResourceId], references: [id], onDelete: Cascade)
   relationshipType String
   evidence         Json          @default("{}")
-  sourceClassification DataSourceClassification @default(AWS_SYNC)
+  sourceClassification DataSourceClassification @default(SYSTEM)
   firstSeenAt      DateTime      @default(now())
   lastSeenAt       DateTime?
   staleAt          DateTime?

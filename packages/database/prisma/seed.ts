@@ -870,6 +870,7 @@ async function createRelationship(
       sourceResourceId,
       targetResourceId,
       relationshipType,
+      sourceClassification: "SAMPLE",
       evidence: { sampleData: true }
     }
   });

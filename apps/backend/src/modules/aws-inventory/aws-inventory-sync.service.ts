@@ -467,13 +467,15 @@ export class AwsInventorySyncService {
     });
     if (existing) return 0;
     const source = await prisma.cloudResource.findUnique({ where: { id: sourceResourceId }, select: { organizationId: true } });
-    if (!source) return 0;
+    const target = await prisma.cloudResource.findUnique({ where: { id: targetResourceId }, select: { organizationId: true } });
+    if (!source || !target || source.organizationId !== target.organizationId) return 0;
     await prisma.resourceRelationship.create({
       data: {
         organizationId: source.organizationId,
         sourceResourceId,
         targetResourceId,
         relationshipType,
+        sourceClassification: "AWS_SYNC",
         evidence: {
           source: "aws-readonly-inventory-sync",
           mutationExecuted: false

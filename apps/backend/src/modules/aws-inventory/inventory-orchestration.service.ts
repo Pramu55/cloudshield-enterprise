@@ -504,6 +504,36 @@ export function shouldMarkResourceStale(resource: { source: string }, regionSucc
   return regionSucceeded && resource.source === "AWS_SYNC";
 }
 
+export function classifyRelationshipSource(
+  sourceResource: { source: string },
+  targetResource: { source: string },
+  requestedClassification: string = "SYSTEM"
+) {
+  if (sourceResource.source === "SAMPLE" || targetResource.source === "SAMPLE") return "SAMPLE";
+  if (sourceResource.source === "MANUAL" || targetResource.source === "MANUAL") return "MANUAL";
+  if (sourceResource.source === "IMPORT" || targetResource.source === "IMPORT") return "IMPORT";
+  if (sourceResource.source === "AWS_SYNC" && targetResource.source === "AWS_SYNC") return requestedClassification === "AWS_SYNC" ? "AWS_SYNC" : "SYSTEM";
+  return "SYSTEM";
+}
+
+export function relationshipCountsTowardAwsCoverage(relationship: { sourceClassification: string }) {
+  return relationship.sourceClassification === "AWS_SYNC";
+}
+
+export function relationshipExecutionEligibility(relationship: { sourceClassification: string }) {
+  return relationship.sourceClassification === "AWS_SYNC"
+    ? { eligible: true, blockedReason: null }
+    : { eligible: false, blockedReason: "Relationship is not sourced from verified AWS_SYNC inventory." };
+}
+
+export function canCreateTenantRelationship(
+  organizationId: string,
+  sourceResource: { organizationId: string },
+  targetResource: { organizationId: string }
+) {
+  return sourceResource.organizationId === organizationId && targetResource.organizationId === organizationId;
+}
+
 function toScanRunDto(run: any) {
   return {
     id: run.id,
