@@ -7,8 +7,158 @@ export const PLATFORM_TITLE =
 export const CLOUD_SCAN_QUEUE_NAME = "cloud-scans";
 export const CLOUD_INVENTORY_SYNC_QUEUE_NAME = "cloud-inventory-sync";
 export const CLOUD_ASSESSMENT_QUEUE_NAME = "cloud-assessment";
+export const GOVERNED_AWS_CHANGE_QUEUE_NAME = "governed-aws-changes";
 export const REMEDIATION_BLOCKED_REASON =
   "Automatic remediation is disabled in CloudShield v1.";
+
+export const AwsChangeExecutionModeSchema = z.enum([
+  "disabled",
+  "simulation",
+  "staging",
+  "production"
+]);
+export type AwsChangeExecutionMode = z.infer<
+  typeof AwsChangeExecutionModeSchema
+>;
+
+export const GovernedAwsOperationSchema = z.enum([
+  "EC2_APPLY_GOVERNANCE_TAGS",
+  "EC2_REMOVE_PUBLIC_SSH_INGRESS"
+]);
+export type GovernedAwsOperation = z.infer<typeof GovernedAwsOperationSchema>;
+
+export const GovernedLifecycleStateSchema = z.enum([
+  "RECOMMENDED",
+  "PREPARED",
+  "SIMULATED",
+  "PENDING_APPROVAL",
+  "APPROVED",
+  "QUEUED",
+  "PREFLIGHT_VALIDATING",
+  "EXECUTING",
+  "SUCCEEDED",
+  "FAILED",
+  "BLOCKED",
+  "ROLLBACK_AVAILABLE",
+  "ROLLBACK_PENDING_APPROVAL",
+  "ROLLED_BACK"
+]);
+export type GovernedLifecycleState = z.infer<
+  typeof GovernedLifecycleStateSchema
+>;
+
+export const GOVERNED_CONFIRMATION_TOKENS = {
+  EC2_APPLY_GOVERNANCE_TAGS: "APPLY_GOVERNANCE_TAGS",
+  EC2_REMOVE_PUBLIC_SSH_INGRESS: "REMOVE_PUBLIC_SSH_RULE"
+} as const;
+
+export const GovernanceTagKeySchema = z.enum([
+  "CloudShield:Owner",
+  "CloudShield:Environment",
+  "CloudShield:CostCenter",
+  "CloudShield:Managed",
+  "CloudShield:RiskStatus"
+]);
+export type GovernanceTagKey = z.infer<typeof GovernanceTagKeySchema>;
+
+export const GovernanceTagSchema = z.object({
+  key: GovernanceTagKeySchema,
+  value: z.string().min(0).max(256)
+}).refine((tag) => !tag.key.toLowerCase().startsWith("aws:"), {
+  message: "AWS reserved tag prefixes are not allowed."
+});
+export type GovernanceTag = z.infer<typeof GovernanceTagSchema>;
+
+export const GovernedTaggingPayloadSchema = z.object({
+  operation: z.literal("EC2_APPLY_GOVERNANCE_TAGS"),
+  awsAccountId: z.string().min(1),
+  region: z.string().min(2).max(32),
+  resourceId: z.string().min(1),
+  resourceArn: z.string().min(1).optional(),
+  tags: z.array(GovernanceTagSchema).min(1).max(10)
+});
+export type GovernedTaggingPayload = z.infer<
+  typeof GovernedTaggingPayloadSchema
+>;
+
+export const GovernedSshRulePayloadSchema = z.object({
+  operation: z.literal("EC2_REMOVE_PUBLIC_SSH_INGRESS"),
+  awsAccountId: z.string().min(1),
+  region: z.string().min(2).max(32),
+  securityGroupId: z.string().min(3),
+  protocol: z.enum(["tcp"]),
+  fromPort: z.literal(22),
+  toPort: z.literal(22),
+  cidr: z.literal("0.0.0.0/0"),
+  impactAcknowledged: z.literal(true)
+});
+export type GovernedSshRulePayload = z.infer<
+  typeof GovernedSshRulePayloadSchema
+>;
+
+export const GovernedAwsChangePayloadSchema = z.discriminatedUnion("operation", [
+  GovernedTaggingPayloadSchema,
+  GovernedSshRulePayloadSchema
+]);
+export type GovernedAwsChangePayload = z.infer<
+  typeof GovernedAwsChangePayloadSchema
+>;
+
+export const GovernedSimulationRequestSchema = z.object({
+  operation: GovernedAwsOperationSchema,
+  payload: GovernedAwsChangePayloadSchema,
+  expectedImpact: z.string().trim().min(3).max(2000),
+  idempotencyKey: z.string().trim().min(8).max(160).optional()
+});
+export type GovernedSimulationRequest = z.infer<
+  typeof GovernedSimulationRequestSchema
+>;
+
+export const GovernedApprovalRequestSchema = z.object({
+  reason: z.string().trim().min(3).max(2000),
+  expectedImpact: z.string().trim().min(3).max(2000),
+  confirmationToken: z.string().trim().min(3).max(80)
+});
+export type GovernedApprovalRequest = z.infer<
+  typeof GovernedApprovalRequestSchema
+>;
+
+export const GovernedExecuteRequestSchema = z.object({
+  confirmationToken: z.string().trim().min(3).max(80),
+  idempotencyKey: z.string().trim().min(8).max(160)
+});
+export type GovernedExecuteRequest = z.infer<
+  typeof GovernedExecuteRequestSchema
+>;
+
+export const GovernedExecutionEvidenceResponseSchema = z.object({
+  executionMode: AwsChangeExecutionModeSchema,
+  lifecycleState: GovernedLifecycleStateSchema,
+  allowlistedOperation: GovernedAwsOperationSchema.nullable(),
+  confirmationTokenRequired: z.string().nullable(),
+  blockedReason: z.string().nullable(),
+  requestedAction: z.record(z.string(), z.any()),
+  normalizedPayload: z.record(z.string(), z.any()),
+  preflightEvidence: z.record(z.string(), z.any()),
+  beforeState: z.record(z.string(), z.any()),
+  expectedAfterState: z.record(z.string(), z.any()),
+  afterState: z.record(z.string(), z.any()),
+  rollbackPayload: z.record(z.string(), z.any()),
+  executionEvidence: z.record(z.string(), z.any()),
+  awsRequestId: z.string().nullable(),
+  idempotencyKey: z.string().nullable(),
+  approvalExpiresAt: z.string().nullable(),
+  simulatedAt: z.string().nullable(),
+  queuedAt: z.string().nullable(),
+  executionStartedAt: z.string().nullable(),
+  executionCompletedAt: z.string().nullable(),
+  awsApiCallExecuted: z.boolean(),
+  mutationExecuted: z.boolean(),
+  message: z.string()
+});
+export type GovernedExecutionEvidenceResponse = z.infer<
+  typeof GovernedExecutionEvidenceResponseSchema
+>;
 
 export const EnvironmentSchema = z.enum([
   "dev",
@@ -1026,6 +1176,26 @@ export const RemediationPlanDtoSchema = z.object({
   terraformPatch: z.string().nullable(),
   approvalStatus: RemediationApprovalStatusSchema,
   executionStatus: RemediationExecutionStatusSchema,
+  executionMode: AwsChangeExecutionModeSchema.default("disabled"),
+  lifecycleState: GovernedLifecycleStateSchema.default("RECOMMENDED"),
+  allowlistedOperation: GovernedAwsOperationSchema.nullable().default(null),
+  confirmationTokenRequired: z.string().nullable().default(null),
+  requestedAction: z.record(z.string(), z.any()).default({}),
+  normalizedPayload: z.record(z.string(), z.any()).default({}),
+  preflightEvidence: z.record(z.string(), z.any()).default({}),
+  beforeState: z.record(z.string(), z.any()).default({}),
+  expectedAfterState: z.record(z.string(), z.any()).default({}),
+  afterState: z.record(z.string(), z.any()).default({}),
+  rollbackPayload: z.record(z.string(), z.any()).default({}),
+  executionEvidence: z.record(z.string(), z.any()).default({}),
+  blockedReason: z.string().nullable().default(null),
+  idempotencyKey: z.string().nullable().default(null),
+  awsRequestId: z.string().nullable().default(null),
+  approvalExpiresAt: z.string().nullable().default(null),
+  simulatedAt: z.string().nullable().default(null),
+  queuedAt: z.string().nullable().default(null),
+  executionStartedAt: z.string().nullable().default(null),
+  executionCompletedAt: z.string().nullable().default(null),
   createdById: z.string(),
   createdByEmail: z.string().nullable(),
   approvedById: z.string().nullable(),
@@ -1050,6 +1220,9 @@ export const ApprovalRequestDtoSchema = z.object({
   approvedByEmail: z.string().nullable(),
   status: ApprovalRequestStatusSchema,
   decisionReason: z.string().nullable(),
+  expectedImpact: z.string().nullable().default(null),
+  confirmationToken: z.string().nullable().default(null),
+  expiresAt: z.string().nullable().default(null),
   createdAt: z.string(),
   decidedAt: z.string().nullable()
 });

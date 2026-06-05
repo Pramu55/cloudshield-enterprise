@@ -201,6 +201,7 @@ model Organization {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+  awsChangeExecutionEnabled Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -270,6 +271,9 @@ model AwsAccount {
   criticality    AccountCriticality @default(MEDIUM)
   organizationalUnit String?
   setupInstructionsViewedAt DateTime?
+  changeExecutionEnabled Boolean @default(false)
+  executionRoleArnPlaceholder String?
+  executionExternalIdPlaceholder String?
   archivedAt     DateTime?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -590,6 +594,28 @@ model RemediationPlan {
   terraformPatch     String?
   approvalStatus     RemediationApprovalStatus      @default(DRAFT)
   executionStatus    RemediationExecutionStatus     @default(EXECUTION_BLOCKED)
+  executionMode       String                         @default("disabled")
+  lifecycleState      String                         @default("RECOMMENDED")
+  allowlistedOperation String?
+  confirmationTokenRequired String?
+  requestedAction     Json                           @default("{}")
+  normalizedPayload   Json                           @default("{}")
+  preflightEvidence   Json                           @default("{}")
+  beforeState         Json                           @default("{}")
+  expectedAfterState  Json                           @default("{}")
+  afterState          Json                           @default("{}")
+  rollbackPayload     Json                           @default("{}")
+  executionEvidence   Json                           @default("{}")
+  blockedReason       String?
+  failureClassification String?
+  idempotencyKey      String?
+  awsRequestId        String?
+  approvalExpiresAt   DateTime?
+  simulatedAt         DateTime?
+  queuedAt            DateTime?
+  executionStartedAt  DateTime?
+  executionCompletedAt DateTime?
+  rollbackAvailableAt DateTime?
   createdById        String
   createdBy          User                           @relation("RemediationPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
   approvedById       String?
@@ -603,6 +629,8 @@ model RemediationPlan {
   @@index([organizationId, findingId])
   @@index([organizationId, approvalStatus])
   @@index([organizationId, executionStatus])
+  @@index([organizationId, lifecycleState])
+  @@unique([organizationId, idempotencyKey])
 }
 
 model ApprovalRequest {
@@ -617,6 +645,10 @@ model ApprovalRequest {
   approvedBy        User?                 @relation("ApprovalRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   status            ApprovalRequestStatus @default(PENDING)
   decisionReason    String?
+  expectedImpact     String?
+  confirmationToken  String?
+  evidenceSnapshot   Json                 @default("{}")
+  expiresAt          DateTime?
   createdAt         DateTime              @default(now())
   decidedAt         DateTime?
 
