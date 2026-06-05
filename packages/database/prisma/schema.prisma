@@ -84,11 +84,15 @@ enum AccountCriticality {
 }
 
 enum ScanRunStatus {
+  REQUESTED
   QUEUED
   RUNNING
   STARTED
+  PARTIALLY_SUCCEEDED
   SUCCEEDED
   COMPLETED
+  CANCELLED
+  BLOCKED
   BLOCKED_DISABLED
   NOT_CONFIGURED
   AUTH_FAILED
@@ -174,6 +178,31 @@ enum AutomationAssessmentMode {
   AWS_READONLY_SCAN
 }
 
+enum DataSourceClassification {
+  SAMPLE
+  AWS_SYNC
+  RULE_ENGINE
+  MANUAL
+  IMPORT
+  SYSTEM
+}
+
+enum SavedViewWorkspace {
+  INVENTORY
+  SECURITY_FINDINGS
+  COST_FINDINGS
+  COMPLIANCE_RESULTS
+  RISKS
+  SCANS
+  OPERATIONS
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
 model User {
   id             String       @id @default(cuid())
   organizationId String
@@ -192,6 +221,8 @@ model User {
   requestedApprovalRequests    ApprovalRequest[] @relation("ApprovalRequestRequester")
   approvalDecisions            ApprovalRequest[] @relation("ApprovalRequestApprover")
   requestedAutomationAssessments AutomationAssessment[] @relation("AutomationAssessmentRequester")
+  savedViews                    SavedView[]
+  notifications                 Notification[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -224,6 +255,8 @@ model Organization {
   automationAssessments AutomationAssessment[]
   automationEvents      AutomationEvent[]
   intelligenceSummaries IntelligenceSummary[]
+  savedViews           SavedView[]
+  notifications        Notification[]
 }
 
 model Team {
@@ -308,9 +341,13 @@ model CloudResource {
   ownerTeam      Team?        @relation(fields: [ownerTeamId], references: [id], onDelete: SetNull)
   tags           Json         @default("{}")
   metadata       Json         @default("{}")
+  source         DataSourceClassification @default(SAMPLE)
   riskCount      Int          @default(0)
   costSignal     String?
+  firstSeenAt     DateTime     @default(now())
   lastSeenAt     DateTime?
+  lastVerifiedAt DateTime?
+  staleAt        DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -325,6 +362,8 @@ model CloudResource {
   @@index([organizationId])
   @@index([organizationId, resourceType])
   @@index([organizationId, awsAccountId])
+  @@index([organizationId, source])
+  @@index([organizationId, lastSeenAt])
 }
 
 model ResourceRelationship {
@@ -359,6 +398,7 @@ model SecurityFinding {
   status          RiskStatus      @default(OPEN)
   workflowStatus  RiskStatus      @default(OPEN)
   evidence        Json            @default("{}")
+  source          DataSourceClassification @default(RULE_ENGINE)
   businessImpact  String?
   recommendation  String?
   complianceRefs  Json            @default("[]")
@@ -379,7 +419,9 @@ model SecurityFinding {
   dueAt           DateTime?
   firstSeenAt     DateTime        @default(now())
   lastSeenAt      DateTime        @default(now())
+  lastEvaluatedAt DateTime?
   resolvedAt      DateTime?
+  reopenedAt      DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -394,6 +436,9 @@ model SecurityFinding {
   @@index([organizationId, assignedToUserId])
   @@index([organizationId, archivedAt])
   @@index([organizationId, severity])
+  @@index([organizationId, source])
+  @@index([organizationId, awsAccountId])
+  @@index([organizationId, resourceId])
 }
 
 model CostFinding {
@@ -413,6 +458,7 @@ model CostFinding {
   currency              String          @default("USD")
   confidence            String
   evidence              Json            @default("{}")
+  source                DataSourceClassification @default(RULE_ENGINE)
   recommendation        String?
   status                RiskStatus      @default(OPEN)
   ownerTeamId           String?
@@ -426,6 +472,9 @@ model CostFinding {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, severity])
+  @@index([organizationId, source])
+  @@index([organizationId, awsAccountId])
+  @@index([organizationId, resourceId])
 }
 
 model ComplianceControl {
@@ -478,6 +527,7 @@ model ComplianceEvidence {
   summary        String?
   evidenceJson   Json              @default("{}")
   sampleData     Boolean           @default(true)
+  sourceClassification DataSourceClassification @default(SAMPLE)
   confidence     String            @default("medium")
   notes          String?
   collectedAt    DateTime          @default(now())
@@ -486,6 +536,7 @@ model ComplianceEvidence {
   @@index([organizationId])
   @@index([organizationId, controlId])
   @@index([organizationId, sourceType])
+  @@index([organizationId, sourceClassification])
 }
 
 model Recommendation {
@@ -508,11 +559,13 @@ model Recommendation {
   rollbackNote      String?
   canExecute        Boolean          @default(false)
   blockedReason     String           @default("Automatic remediation is disabled in CloudShield v1.")
+  source             DataSourceClassification @default(RULE_ENGINE)
   createdAt         DateTime         @default(now())
 
   @@index([organizationId])
   @@index([organizationId, securityFindingId])
   @@index([organizationId, costFindingId])
+  @@index([organizationId, source])
 }
 
 model RiskAcceptance {
@@ -551,11 +604,22 @@ model ScanRun {
   errorCode      String?
   errorMessage   String?
   metadata       Json          @default("{}")
+  requestedByUserId String?
+  queueJobId     String?
+  requestedRegions String[]    @default([])
+  scannerType    String?
+  source         DataSourceClassification @default(SYSTEM)
+  resourceCount  Int           @default(0)
+  failureCount   Int           @default(0)
+  failureClassification String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([organizationId])
   @@index([organizationId, status])
+  @@index([organizationId, awsAccountId])
+  @@index([organizationId, source])
+  @@index([organizationId, createdAt])
 }
 
 model AuditEvent {
@@ -571,6 +635,9 @@ model AuditEvent {
 
   @@index([organizationId])
   @@index([organizationId, targetType, targetId])
+  @@index([organizationId, action])
+  @@index([organizationId, actorUserId])
+  @@index([organizationId, createdAt])
 }
 
 model RemediationPlan {
@@ -743,5 +810,46 @@ model IntelligenceSummary {
   createdAt              DateTime             @default(now())
 
   @@index([organizationId])
+  @@index([organizationId, createdAt])
+}
+
+model SavedView {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace      SavedViewWorkspace
+  name           String
+  filters        Json               @default("{}")
+  sort           Json               @default("{}")
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([organizationId, userId, workspace, name])
+  @@index([organizationId, workspace])
+  @@index([organizationId, userId])
+}
+
+model Notification {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId         String?
+  severity       NotificationSeverity @default(INFO)
+  source         DataSourceClassification @default(SYSTEM)
+  type           String
+  title          String
+  message        String
+  targetType     String?
+  targetId       String?
+  readAt         DateTime?
+  createdAt      DateTime             @default(now())
+
+  @@index([organizationId, userId, readAt])
+  @@index([organizationId, teamId, readAt])
+  @@index([organizationId, type])
   @@index([organizationId, createdAt])
 }

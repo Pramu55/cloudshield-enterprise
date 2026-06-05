@@ -5,6 +5,7 @@ import { EmptyState } from "../../../lib/ui";
 import { RefreshBadge, useCloudShieldData } from "../../../lib/client-api";
 import { useState, useEffect, useMemo } from "react";
 import { ChevronDown, ChevronUp, Search, Tag, Network, Layers, ShieldAlert, Cpu, Database, GitBranch, RadioTower } from "lucide-react";
+import Link from "next/link";
 
 type ResourceResponse = {
   items: Array<{
@@ -306,6 +307,13 @@ function ResourceRow({ resource }: { resource: ResourceResponse["items"][0] }) {
         <p className="text-xs text-slate-600 font-semibold truncate" title={resource.awsAccount?.name}>{resource.awsAccount?.name}</p>
         <p className="text-xs text-slate-500 uppercase font-bold">{resource.region || "global"}</p>
         <div className="text-right pr-2 text-slate-400">
+          <Link
+            className="mr-3 inline-flex rounded-lg border border-line px-2 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-50"
+            href={`/dashboard/inventory/${resource.id}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            Open
+          </Link>
           {expanded ? <ChevronUp className="inline" size={16} /> : <ChevronDown className="inline" size={16} />}
         </div>
       </div>
