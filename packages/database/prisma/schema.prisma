@@ -203,14 +203,23 @@ enum NotificationSeverity {
   CRITICAL
 }
 
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
 model User {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   email          String
+  emailNormalized String?     @unique
   name           String?
   passwordHash   String?
+  status         UserStatus   @default(ACTIVE)
   role           String       @default("member")
+  lastLoginAt    DateTime?
+  passwordChangedAt DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -223,6 +232,9 @@ model User {
   requestedAutomationAssessments AutomationAssessment[] @relation("AutomationAssessmentRequester")
   savedViews                    SavedView[]
   notifications                 Notification[]
+  authSessions                  AuthSession[]
+  passwordResetTokens           PasswordResetToken[]
+  organizationMemberships       OrganizationMembership[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -232,6 +244,7 @@ model Organization {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+  onboardingState String @default("PENDING_INVITES")
   awsChangeExecutionEnabled Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -257,6 +270,57 @@ model Organization {
   intelligenceSummaries IntelligenceSummary[]
   savedViews           SavedView[]
   notifications        Notification[]
+  authSessions         AuthSession[]
+  memberships          OrganizationMembership[]
+  settings             OrganizationSettings?
+  onboarding           OrganizationOnboarding?
+}
+
+enum OrganizationMembershipStatus {
+  ACTIVE
+  REMOVED
+}
+
+model OrganizationMembership {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("member")
+  status         OrganizationMembershipStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([organizationId, status])
+}
+
+model OrganizationSettings {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dataMode       String       @default("development")
+  sampleDataVisible Boolean   @default(false)
+  allowedRegions String[]     @default([])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model OrganizationOnboarding {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  state          String       @default("REGISTERED")
+  checklist      Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
 }
 
 model Team {
@@ -886,4 +950,37 @@ model Notification {
   @@index([organizationId, teamId, readAt])
   @@index([organizationId, type])
   @@index([organizationId, createdAt])
+}
+
+model AuthSession {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tokenHash      String       @unique
+  userAgent      String?
+  ipAddress      String?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  lastUsedAt     DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([tokenHash])
+}
+
+model PasswordResetToken {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String       @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
 }

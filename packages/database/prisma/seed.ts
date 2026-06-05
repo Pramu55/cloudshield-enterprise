@@ -9,6 +9,10 @@ const DEMO_PASSWORD = "CloudShieldDemo123!";
 const blockedReason = "Automatic remediation is disabled in CloudShield v1.";
 
 async function main() {
+  if (process.env.CLOUDSHIELD_DATA_MODE === "production") {
+    console.warn("Skipping sample data seed because CLOUDSHIELD_DATA_MODE is production.");
+    return;
+  }
   const organization = await prisma.organization.upsert({
     where: { slug: DEMO_ORG_SLUG },
     update: {
@@ -80,16 +84,60 @@ async function main() {
     update: {
       name: "CloudShield Demo User",
       role: "admin",
+      emailNormalized: DEMO_EMAIL,
       passwordHash
     },
     create: {
       organizationId: organization.id,
       email: DEMO_EMAIL,
+      emailNormalized: DEMO_EMAIL,
       name: "CloudShield Demo User",
       passwordHash,
       role: "admin"
     }
   });
+
+  await Promise.all([
+    prisma.organizationMembership.upsert({
+      where: {
+        organizationId_userId: {
+          organizationId: organization.id,
+          userId: demoUser.id
+        }
+      },
+      update: { role: "admin", status: "ACTIVE" },
+      create: {
+        organizationId: organization.id,
+        userId: demoUser.id,
+        role: "admin",
+        status: "ACTIVE"
+      }
+    }),
+    prisma.organizationSettings.upsert({
+      where: { organizationId: organization.id },
+      update: {
+        dataMode: "sample",
+        sampleDataVisible: true
+      },
+      create: {
+        organizationId: organization.id,
+        dataMode: "sample",
+        sampleDataVisible: true
+      }
+    }),
+    prisma.organizationOnboarding.upsert({
+      where: { organizationId: organization.id },
+      update: { state: "SAMPLE_READY" },
+      create: {
+        organizationId: organization.id,
+        state: "SAMPLE_READY",
+        checklist: {
+          sampleDataImported: true,
+          awsValidationCompleted: false
+        }
+      }
+    })
+  ]);
 
   const [productionAccount, developmentAccount] = await Promise.all([
     prisma.awsAccount.upsert({

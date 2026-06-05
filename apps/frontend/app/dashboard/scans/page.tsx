@@ -47,11 +47,10 @@ export default function ScansPage() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const token = window.localStorage.getItem("cloudshield_access_token");
-        const headers = { Authorization: `Bearer ${token || ""}` };
+        const fetchOpts = { credentials: "include" as RequestCredentials };
 
         // Load accounts
-        const accountsRes = await fetch(`${API_BASE_URL}/api/v1/aws/accounts`, { headers });
+        const accountsRes = await fetch(`${API_BASE_URL}/api/v1/aws/accounts`, fetchOpts);
         const accountsJson = await accountsRes.json();
         if (accountsRes.ok && accountsJson.items) {
           setAccounts(accountsJson.items);
@@ -61,13 +60,13 @@ export default function ScansPage() {
         }
 
         // Load inventory scanner plan
-        const planRes = await fetch(`${API_BASE_URL}/api/v1/aws/inventory/plan`, { headers });
+        const planRes = await fetch(`${API_BASE_URL}/api/v1/aws/inventory/plan`, fetchOpts);
         const planJson = await planRes.json();
         if (planRes.ok) {
           setPlan(planJson);
         }
 
-        const runsRes = await fetch(`${API_BASE_URL}/api/v1/inventory/scans`, { headers });
+        const runsRes = await fetch(`${API_BASE_URL}/api/v1/inventory/scans`, fetchOpts);
         const runsJson = await runsRes.json();
         if (runsRes.ok) {
           setScanOverview(runsJson);
@@ -89,10 +88,9 @@ export default function ScansPage() {
     async function loadHistory() {
       setHistoryLoading(true);
       try {
-        const token = window.localStorage.getItem("cloudshield_access_token");
-        const headers = { Authorization: `Bearer ${token || ""}` };
+        const fetchOpts = { credentials: "include" as RequestCredentials };
 
-        const statusRes = await fetch(`${API_BASE_URL}/api/v1/aws/accounts/${selectedAccountId}/inventory/status`, { headers });
+        const statusRes = await fetch(`${API_BASE_URL}/api/v1/aws/accounts/${selectedAccountId}/inventory/status`, fetchOpts);
         const statusJson = await statusRes.json();
         if (statusRes.ok && statusJson.runs) {
           setScanRuns(statusJson.runs.length ? statusJson.runs : scanOverview?.items || []);
@@ -110,15 +108,14 @@ export default function ScansPage() {
     if (!selectedAccountId) return;
     setIsScanning(true);
     try {
-      const token = window.localStorage.getItem("cloudshield_access_token");
-      const headers = { 
-        Authorization: `Bearer ${token || ""}`,
-        "Content-Type": "application/json"
+      const fetchOpts = { 
+        credentials: "include" as RequestCredentials,
+        headers: { "Content-Type": "application/json" }
       };
 
       const res = await fetch(`${API_BASE_URL}/api/v1/aws/accounts/${selectedAccountId}/inventory/sync`, {
         method: "POST",
-        headers
+        ...fetchOpts
       });
       const data = await res.json();
       
@@ -128,7 +125,7 @@ export default function ScansPage() {
 
       setErrorMessage("");
       // Reload history
-      const statusRes = await fetch(`${API_BASE_URL}/api/v1/aws/accounts/${selectedAccountId}/inventory/status`, { headers });
+      const statusRes = await fetch(`${API_BASE_URL}/api/v1/aws/accounts/${selectedAccountId}/inventory/status`, { credentials: "include" });
       const statusJson = await statusRes.json();
       if (statusRes.ok && statusJson.runs) {
         setScanRuns(statusJson.runs);

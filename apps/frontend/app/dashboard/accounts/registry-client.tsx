@@ -714,10 +714,7 @@ function scoreLabel(score: number | null) {
 }
 
 async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
-  const token = window.localStorage.getItem("cloudshield_access_token");
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token || ""}`
-  };
+  const headers: Record<string, string> = {};
 
   if (init.body) {
     headers["Content-Type"] = "application/json";
@@ -725,6 +722,7 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       ...headers,
       ...(init.headers || {})

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Info, Loader2, Lock, ShieldAlert, ShieldCheck } from "lucide-react";
+import { getCsrfToken, clearCsrfToken } from "../../lib/client-api";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
@@ -12,6 +13,7 @@ export default function RegisterPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [organization, setOrganization] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,7 +27,7 @@ export default function RegisterPage() {
     setError(null);
     setSuccessMsg(null);
 
-    if (!email.trim() || !organization.trim() || !password || !confirmPassword) {
+    if (!email.trim() || !name.trim() || !organization.trim() || !password || !confirmPassword) {
       setError("All fields are required.");
       return;
     }
@@ -49,18 +51,23 @@ export default function RegisterPage() {
     setIsSubmitting(true);
 
     try {
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
+        credentials: "include",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
         },
         body: JSON.stringify({
+          name: name.trim(),
           email: email.trim(),
           organization: organization.trim(),
           password,
           confirmPassword
         })
       });
+      clearCsrfToken();
 
       if (response.status === 409) {
         setError("This email already has access. Please sign in instead.");
@@ -75,9 +82,7 @@ export default function RegisterPage() {
 
       setSuccessMsg("Workspace request created.");
 
-      setTimeout(() => {
-        router.push(`/login?email=${encodeURIComponent(email.trim())}`);
-      }, 1500);
+      router.replace("/dashboard");
     } catch {
       setError("Server unavailable. Please try again.");
     } finally {
@@ -104,10 +109,10 @@ export default function RegisterPage() {
               <ShieldAlert size={14} />
               Workspace onboarding
             </span>
-            <h1>Create evaluation workspace</h1>
+            <h1>Create workspace</h1>
             <p>
-              Register a local CloudShield tenant for cloud governance review,
-              evidence tracking, reports, and safe readiness planning.
+              Register your CloudShield tenant for cloud governance review,
+              evidence tracking, reports, and readiness planning.
             </p>
             <div className="aws-auth-badges">
               <span><CheckCircle2 size={14} /> Tenant-scoped records</span>
@@ -122,8 +127,19 @@ export default function RegisterPage() {
 
           <div className="aws-auth-form-panel">
             <h2>Request workspace</h2>
-            <p>Deploy a sandboxed governance demo for your organization.</p>
+            <p>Deploy CloudShield for your organization.</p>
             <form className="aws-auth-form" onSubmit={onSubmit}>
+              <label>
+                <span>Full name</span>
+                <input
+                  disabled={isSubmitting}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Jane Doe"
+                  type="text"
+                  value={name}
+                />
+              </label>
+
               <label>
                 <span>Work email</span>
                 <input

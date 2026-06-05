@@ -41,10 +41,10 @@ export default function LoginPage() {
           </div>
           <div className="aws-auth-form-panel">
             <h2>Sign in to console</h2>
-            <p>Use the local demo credentials or your workspace account.</p>
+            <p>Use your workspace account.</p>
             <LoginForm />
             <div className="aws-auth-switch">
-              New evaluator? <Link href="/register">Create evaluation workspace</Link>
+              New workspace? <Link href="/register">Create workspace</Link>
             </div>
           </div>
         </div>

@@ -11,21 +11,63 @@ type ClientDataState<T> = {
   isRefreshing: boolean;
 };
 
+let cachedCsrfToken: string | null = null;
+let fetchingCsrfPromise: Promise<string> | null = null;
+
+export function clearCsrfToken(): void {
+  cachedCsrfToken = null;
+  fetchingCsrfPromise = null;
+}
+
+export async function getCsrfToken(): Promise<string> {
+  if (cachedCsrfToken) return cachedCsrfToken;
+  if (fetchingCsrfPromise) return fetchingCsrfPromise;
+
+  fetchingCsrfPromise = fetch(`${API_BASE_URL}/api/v1/auth/csrf`, { credentials: "include" })
+    .then(res => res.json())
+    .then(data => {
+      cachedCsrfToken = data.token;
+      return cachedCsrfToken as string;
+    })
+    .catch(() => "")
+    .finally(() => {
+      fetchingCsrfPromise = null;
+    });
+
+  return fetchingCsrfPromise;
+}
+
+
 export async function fetchCloudShieldClient<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
-  const token = window.localStorage.getItem("cloudshield_access_token");
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token || ""}`
+  const init: RequestInit = {
+    credentials: "include"
   };
-  const init: RequestInit = { headers };
+  const method = options?.method ?? "GET";
+  const isMutation = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+
+  const headers: Record<string, string> = {};
+
   if (options?.method) {
-    init.method = options.method;
+    init.method = method;
   }
   if (options?.body) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(options.body);
   }
 
+  if (isMutation) {
+    const csrfToken = await getCsrfToken();
+    if (csrfToken) {
+      headers["x-csrf-token"] = csrfToken;
+    }
+  }
+
+  init.headers = headers;
+
   const response = await fetch(`${API_BASE_URL}${path}`, init);
+  if (isMutation) {
+    clearCsrfToken();
+  }
 
   if (!response.ok) {
     throw new Error("CloudShield API request failed.");
@@ -54,7 +96,7 @@ export function useCloudShieldData<T>(
       })
       .catch(() => {
         if (isActive) {
-          setError("Showing instant sample/demo data while the API refresh is unavailable.");
+          setError("Showing locally bundled fallback data while the API refresh is unavailable.");
         }
       })
       .finally(() => {

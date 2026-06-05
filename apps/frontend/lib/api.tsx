@@ -7,15 +7,17 @@ const API_BASE_URL =
 
 export async function fetchCloudShield<T>(path: string): Promise<T | null> {
   try {
-    const token = await getAccessToken();
-    if (!token) {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("cloudshield_session")?.value;
+
+    if (!sessionCookie) {
       return null;
     }
 
     const response = await fetch(`${API_BASE_URL}${path}`, {
       cache: "no-store",
       headers: {
-        Authorization: `Bearer ${token}`
+        Cookie: `cloudshield_session=${sessionCookie}`
       }
     });
 
@@ -30,13 +32,8 @@ export async function fetchCloudShield<T>(path: string): Promise<T | null> {
 }
 
 export async function fetchCurrentUser(): Promise<{
-  user: { email: string; name: string | null; role: string };
-  organization: { name: string };
+  user: { email: string; name: string | null; role: string; organizationId: string };
+  organization: { name: string; slug: string; id: string };
 } | null> {
   return fetchCloudShield("/api/v1/auth/me");
-}
-
-async function getAccessToken(): Promise<string | undefined> {
-  const cookieStore = await cookies();
-  return cookieStore.get("cloudshield_access_token")?.value;
 }

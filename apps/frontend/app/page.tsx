@@ -49,7 +49,7 @@ const capabilities = [
 ];
 
 const workflow = [
-  "Create evaluation workspace",
+  "Create workspace",
   "Review account readiness",
   "Connect read-only credentials only when configured",
   "Inspect inventory, findings, graph, and reports",
@@ -80,7 +80,7 @@ export default function LandingPage() {
         <div className="aws-public-hero-copy">
           <span className="aws-kicker">
             <ShieldCheck size={14} />
-            Local evaluation mode
+            Local workspace mode
           </span>
           <h1>{PLATFORM_TITLE}</h1>
           <p>
@@ -94,7 +94,7 @@ export default function LandingPage() {
               <ArrowRight size={16} />
             </Link>
             <Link className="aws-cta-secondary" href="/register">
-              Create Evaluation Workspace
+              Create Workspace
             </Link>
           </div>
           <div className="aws-trust-row">
@@ -107,7 +107,7 @@ export default function LandingPage() {
         <aside className="aws-console-mock" aria-label="CloudShield console preview">
           <div className="aws-console-mock-top">
             <strong>CloudShield Command Center</strong>
-            <span>Evaluation</span>
+            <span>Workspace</span>
           </div>
           <div className="aws-console-mock-body">
             <div className="aws-console-mock-nav">

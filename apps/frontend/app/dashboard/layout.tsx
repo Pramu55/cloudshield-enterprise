@@ -74,38 +74,19 @@ export default function DashboardLayout({
   }, []);
 
   useEffect(() => {
-    const token = window.localStorage.getItem("cloudshield_access_token");
-    setAuthState(token ? "authenticated" : "anonymous");
-
-    const cachedUser = window.localStorage.getItem("cloudshield_current_user");
-    if (cachedUser) {
-      try {
-        setCurrentUser(JSON.parse(cachedUser) as CurrentUser);
-      } catch {
-        window.localStorage.removeItem("cloudshield_current_user");
-      }
-    }
-
-    if (!token) {
-      return;
-    }
-
     fetch(`${API_BASE_URL}/api/v1/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      credentials: "include"
     })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: CurrentUser | null) => {
         if (payload) {
+          setAuthState("authenticated");
           setCurrentUser(payload);
-          window.localStorage.setItem(
-            "cloudshield_current_user",
-            JSON.stringify(payload)
-          );
+        } else {
+          setAuthState("anonymous");
         }
       })
-      .catch(() => undefined);
+      .catch(() => setAuthState("anonymous"));
   }, []);
 
   useEffect(() => {
@@ -166,7 +147,7 @@ export default function DashboardLayout({
         <div className="ml-auto flex h-full items-center gap-1">
           <span className="status-pill mr-2 border-indigo-500/30 bg-indigo-950/40 text-indigo-400 text-[11px] font-semibold py-1">
             <span className="status-dot-pulse bg-indigo-400" />
-            Evaluation Mode
+            Tenant Mode
           </span>
           <TopbarButton label="Activity" icon={<Activity size={17} />} />
           <TopbarButton label="Notifications" icon={<Bell size={17} />} />
@@ -181,7 +162,7 @@ export default function DashboardLayout({
                 {currentUser?.user.name || "CloudShield User"}
               </span>
               <span className="text-[10px] text-slate-400">
-                {currentUser?.organization.name || "Demo Tenant"}
+                {currentUser?.organization.name || "Workspace"}
               </span>
             </div>
           </div>
