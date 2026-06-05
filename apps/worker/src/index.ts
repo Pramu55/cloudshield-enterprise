@@ -1,4 +1,6 @@
 import { Queue, Worker as BullWorker } from "bullmq";
+import { CreateTagsCommand, DescribeInstancesCommand, EC2Client } from "@aws-sdk/client-ec2";
+import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { createLogger } from "@cloudshield/logger";
 import { executeEc2Scan } from "./aws-ec2-scanner.js";
 import {
@@ -55,6 +57,11 @@ type GovernedAwsChangeJob = {
   planId: string;
   requestedById: string;
   idempotencyKey: string;
+};
+
+type AwsTag = {
+  Key: string;
+  Value: string;
 };
 
 const worker = new BullWorker<CloudScanJob>(
@@ -202,10 +209,7 @@ const governedAwsChangeWorker = new BullWorker<GovernedAwsChangeJob>(
       return { status: updated.lifecycleState, mutationExecuted: false };
     }
 
-    return await blockGovernedPlan(
-      plan.id,
-      "Staging mutation adapter is intentionally not activated without validated executor role credentials in this pilot."
-    );
+    return await executeGovernedEc2Tagging(plan, job.data, mode);
   },
   { connection, concurrency: 1 }
 );
@@ -284,8 +288,160 @@ function validateWorkerGate(
     return "Staging mode allows only staging or sandbox accounts.";
   }
   if (!plan.finding.awsAccount.executionRoleArnPlaceholder) return "Execution role is not configured.";
+  if (!process.env.AWS_EXECUTOR_ROLE_ARN || !process.env.AWS_EXECUTOR_EXTERNAL_ID) return "Executor role environment configuration is missing.";
+  if (plan.allowlistedOperation !== "EC2_APPLY_GOVERNANCE_TAGS") return "Only EC2_APPLY_GOVERNANCE_TAGS is enabled for sandbox validation.";
+  if (plan.normalizedPayload?.operation !== "EC2_APPLY_GOVERNANCE_TAGS") return "Normalized payload is not an EC2 tagging action.";
+  if (plan.resource?.resourceType !== "EC2_INSTANCE") return "Governed tagging pilot requires a verified EC2 instance.";
+  if (!String(plan.resource?.resourceId ?? "").startsWith("i-")) return "Target resource is not a valid EC2 instance ID.";
+  if (plan.resource?.metadata?.source !== "AWS_SYNC") return "Target resource must come from AWS_SYNC inventory.";
   if (isSampleResource(plan.resource)) return "SAMPLE DATA - EXECUTION NOT ALLOWED.";
   return null;
+}
+
+async function executeGovernedEc2Tagging(
+  plan: any,
+  jobData: GovernedAwsChangeJob,
+  mode: string
+) {
+  const payload = plan.normalizedPayload;
+  const region = payload.region || plan.resource.region;
+  const instanceId = payload.resourceId || plan.resource.resourceId;
+  const tags: AwsTag[] = (payload.tags ?? []).map((tag: any) => ({
+    Key: String(tag.key),
+    Value: String(tag.value)
+  }));
+
+  await prisma.remediationPlan.update({
+    where: { id: plan.id },
+    data: { lifecycleState: "EXECUTING" }
+  });
+
+  try {
+    const credentials = await assumeExecutorRole(region);
+    const ec2 = new EC2Client({ region, credentials });
+    const before = await fetchInstanceTags(ec2, instanceId);
+
+    const requestedTagsAlreadyPresent = tags.every(
+      (tag) => before[tag.Key] === tag.Value
+    );
+
+    let requestId: string | undefined;
+    if (!requestedTagsAlreadyPresent) {
+      const response = await ec2.send(
+        new CreateTagsCommand({
+          Resources: [instanceId],
+          Tags: tags
+        })
+      );
+      requestId = response.$metadata.requestId;
+    }
+
+    const after = await fetchInstanceTags(ec2, instanceId);
+    const verified = tags.every((tag) => after[tag.Key] === tag.Value);
+    if (!verified) {
+      return await failGovernedPlan(plan.id, "After-state verification failed.");
+    }
+
+    const updated = await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        lifecycleState: "ROLLBACK_AVAILABLE",
+        executionStatus: "READY_FOR_EXECUTION",
+        beforeState: {
+          ...(typeof plan.beforeState === "object" && plan.beforeState ? plan.beforeState : {}),
+          currentAwsTags: filterCloudShieldTags(before),
+          verifiedAt: new Date().toISOString()
+        },
+        afterState: {
+          currentAwsTags: filterCloudShieldTags(after),
+          verifiedAt: new Date().toISOString(),
+          requestedTagsVerified: true
+        },
+        executionEvidence: {
+          workerJobId: jobData.idempotencyKey,
+          mode,
+          idempotentNoop: requestedTagsAlreadyPresent,
+          awsApiCallExecuted: true,
+          mutationExecuted: !requestedTagsAlreadyPresent,
+          action: "ec2:CreateTags",
+          result: "SUCCEEDED"
+        },
+        awsRequestId: requestId ?? null,
+        executionCompletedAt: new Date(),
+        rollbackAvailableAt: new Date()
+      }
+    });
+    await audit(plan.organizationId, jobData.requestedById, plan.id, "governance.aws_change.tagging_succeeded", {
+      mode,
+      awsApiCallExecuted: true,
+      mutationExecuted: !requestedTagsAlreadyPresent,
+      awsRequestId: requestId ?? null
+    });
+    return { status: updated.lifecycleState, mutationExecuted: !requestedTagsAlreadyPresent };
+  } catch (error: any) {
+    return await failGovernedPlan(plan.id, classifyAwsError(error));
+  }
+}
+
+async function assumeExecutorRole(region: string) {
+  const sts = new STSClient({ region });
+  const assumed = await sts.send(new AssumeRoleCommand({
+    RoleArn: process.env.AWS_EXECUTOR_ROLE_ARN,
+    ExternalId: process.env.AWS_EXECUTOR_EXTERNAL_ID,
+    RoleSessionName: "cloudshield-governed-executor"
+  }));
+  if (!assumed.Credentials?.AccessKeyId || !assumed.Credentials.SecretAccessKey) {
+    throw new Error("Executor role did not return temporary credentials.");
+  }
+  return {
+    accessKeyId: assumed.Credentials.AccessKeyId,
+    secretAccessKey: assumed.Credentials.SecretAccessKey,
+    sessionToken: assumed.Credentials.SessionToken
+  };
+}
+
+async function fetchInstanceTags(ec2: EC2Client, instanceId: string) {
+  const response = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
+  const instance = response.Reservations?.flatMap((reservation) => reservation.Instances ?? [])[0];
+  if (!instance?.InstanceId) {
+    throw new Error("EC2 instance was not found during preflight.");
+  }
+  return Object.fromEntries((instance.Tags ?? []).filter((tag) => tag.Key).map((tag) => [String(tag.Key), String(tag.Value ?? "")]));
+}
+
+function filterCloudShieldTags(tags: Record<string, string>) {
+  return Object.fromEntries(Object.entries(tags).filter(([key]) => key.startsWith("CloudShield:")));
+}
+
+async function failGovernedPlan(planId: string, failureClassification: string) {
+  const updated = await prisma.remediationPlan.update({
+    where: { id: planId },
+    data: {
+      lifecycleState: "FAILED",
+      executionStatus: "EXECUTION_BLOCKED",
+      failureClassification,
+      executionCompletedAt: new Date(),
+      executionEvidence: {
+        failureClassification,
+        awsApiCallExecuted: true,
+        mutationExecuted: false
+      }
+    }
+  });
+  await audit(updated.organizationId, null, updated.id, "governance.aws_change.worker_failed", {
+    failureClassification,
+    awsApiCallExecuted: true,
+    mutationExecuted: false
+  });
+  return { status: "FAILED", failureClassification, mutationExecuted: false };
+}
+
+function classifyAwsError(error: any) {
+  const name = String(error?.name ?? "AWS_ERROR");
+  if (name.includes("AccessDenied")) return "ACCESS_DENIED";
+  if (name.includes("InvalidInstanceID") || name.includes("NotFound")) return "RESOURCE_NOT_FOUND";
+  if (name.includes("Throttl")) return "TRANSIENT_THROTTLE";
+  return "AWS_EXECUTION_FAILED";
 }
 
 async function blockGovernedPlan(planId: string, blockedReason: string) {

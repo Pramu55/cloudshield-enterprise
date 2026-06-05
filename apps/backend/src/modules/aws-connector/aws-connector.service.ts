@@ -1,4 +1,5 @@
 import {
+  AssumeRoleCommand,
   GetCallerIdentityCommand,
   STSClient,
   type STSServiceException
@@ -71,9 +72,7 @@ export class AwsConnectorService {
     }
 
     try {
-      const client = new STSClient({
-        region: this.config.region
-      });
+      const client = await this.createScannerRoleStsClient();
       const identity = await client.send(new GetCallerIdentityCommand({}));
 
       return {
@@ -86,7 +85,7 @@ export class AwsConnectorService {
           userId: identity.UserId ?? null
         },
         message:
-          "STS GetCallerIdentity succeeded. No AWS inventory APIs were called, no AWS role assumption was attempted, and no AWS resources were changed."
+          "STS GetCallerIdentity succeeded through the configured scanner role. No AWS inventory APIs were called and no AWS resources were changed."
       };
     } catch (error) {
       const status = mapAwsErrorToStatus(error);
@@ -96,7 +95,7 @@ export class AwsConnectorService {
         awsApiCallExecuted: true,
         callerIdentity: null,
         message:
-          "STS GetCallerIdentity failed. No AWS inventory APIs were called, no AWS role assumption was attempted, and no AWS resources were changed."
+          "STS GetCallerIdentity failed through the configured scanner role. No AWS inventory APIs were called and no AWS resources were changed."
       };
     }
   }
@@ -141,9 +140,7 @@ export class AwsConnectorService {
     }
 
     try {
-      const client = new STSClient({
-        region: this.config.region
-      });
+      const client = await this.createScannerRoleStsClient();
       const identity = await client.send(new GetCallerIdentityCommand({}));
 
       const returnedAccount = identity.Account ?? null;
@@ -152,7 +149,7 @@ export class AwsConnectorService {
       const accountIdMatched = returnedAccount === expectedAccountId;
 
       return {
-        status: accountIdMatched ? "VALIDATION_SUCCEEDED" : "VALIDATION_FAILED",
+        status: accountIdMatched ? "VALIDATION_SUCCEEDED" : "IDENTITY_MISMATCH",
         message: accountIdMatched 
           ? "STS GetCallerIdentity succeeded and matched the registered AWS account." 
           : `STS GetCallerIdentity succeeded but returned account ${returnedAccount} does not match expected account ${expectedAccountId}.`,
@@ -191,16 +188,52 @@ export class AwsConnectorService {
   private isConfigured() {
     return Boolean(this.config.roleArn && this.config.externalId);
   }
+
+  private async createScannerRoleStsClient() {
+    const bootstrap = new STSClient({ region: this.config.region });
+    const assumed = await bootstrap.send(
+      new AssumeRoleCommand({
+        RoleArn: this.config.roleArn,
+        ExternalId: this.config.externalId,
+        RoleSessionName: "cloudshield-scanner-validation"
+      })
+    );
+
+    if (
+      !assumed.Credentials?.AccessKeyId ||
+      !assumed.Credentials.SecretAccessKey
+    ) {
+      throw new Error("AssumeRole did not return temporary credentials.");
+    }
+
+    return new STSClient({
+      region: this.config.region,
+      credentials: {
+        accessKeyId: assumed.Credentials.AccessKeyId,
+        secretAccessKey: assumed.Credentials.SecretAccessKey,
+        sessionToken: assumed.Credentials.SessionToken
+      }
+    });
+  }
 }
 
 function mapAwsErrorToStatus(
   error: unknown
-): "AUTH_FAILED" | "PERMISSION_DENIED" | "VALIDATION_FAILED" {
+): "AUTH_FAILED" | "PERMISSION_DENIED" | "VALIDATION_FAILED" | "UNREACHABLE" {
   const awsError = error as Partial<STSServiceException>;
   const name = awsError.name || "";
+  const message = String((awsError as any).message ?? "");
 
   if (name.includes("AccessDenied")) {
     return "PERMISSION_DENIED";
+  }
+
+  if (name.includes("Expired") || message.includes("expired")) {
+    return "AUTH_FAILED";
+  }
+
+  if (name.includes("Timeout") || name.includes("Networking") || message.includes("ENOTFOUND")) {
+    return "UNREACHABLE";
   }
 
   if (

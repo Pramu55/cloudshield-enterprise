@@ -136,16 +136,22 @@ function mapValidationStatusToConnectionStatus(
       return "DISABLED";
     case "NOT_CONFIGURED":
       return "NOT_CONFIGURED";
+    case "VALIDATING":
     case "READY_FOR_VALIDATION":
       return "READY_FOR_VALIDATION";
+    case "CONNECTED":
     case "VALIDATION_SUCCEEDED":
       return "VALIDATION_SUCCEEDED";
+    case "EXPIRED":
     case "AUTH_FAILED":
       return "AUTH_FAILED";
+    case "ACCESS_DENIED":
     case "PERMISSION_DENIED":
       return "PERMISSION_DENIED";
     case "VALIDATION_NOT_IMPLEMENTED":
       return "VALIDATION_NOT_IMPLEMENTED";
+    case "IDENTITY_MISMATCH":
+    case "UNREACHABLE":
     case "VALIDATION_FAILED":
     default:
       return "VALIDATION_FAILED";
@@ -161,16 +167,22 @@ function mapIdentityValidationStatusToConnectionStatus(
       return "DISABLED";
     case "NOT_CONFIGURED":
       return "NOT_CONFIGURED";
+    case "VALIDATING":
     case "READY_FOR_VALIDATION":
       return "READY_FOR_VALIDATION";
+    case "CONNECTED":
     case "VALIDATION_SUCCEEDED":
       return "VALIDATION_SUCCEEDED";
+    case "EXPIRED":
     case "AUTH_FAILED":
       return "AUTH_FAILED";
+    case "ACCESS_DENIED":
     case "PERMISSION_DENIED":
       return "PERMISSION_DENIED";
     case "VALIDATION_NOT_IMPLEMENTED":
       return "VALIDATION_NOT_IMPLEMENTED";
+    case "IDENTITY_MISMATCH":
+    case "UNREACHABLE":
     case "VALIDATION_FAILED":
     default:
       return "VALIDATION_FAILED";
