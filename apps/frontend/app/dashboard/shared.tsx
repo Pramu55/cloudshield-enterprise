@@ -13,11 +13,14 @@ export function DashboardPage({
 }: DashboardPageProps) {
   return (
     <div className="portal-page">
-      <div className="mb-5 border-b border-line pb-4">
-        <h2 className="portal-page-title">{title}</h2>
-        <p className="portal-page-description mt-1">
-          {description}
-        </p>
+      <div className="portal-page-header mb-5">
+        <div>
+          <p className="portal-page-kicker">CloudShield workspace</p>
+          <h2 className="portal-page-title">{title}</h2>
+          <p className="portal-page-description mt-2">
+            {description}
+          </p>
+        </div>
       </div>
       {children || <FoundationPanel />}
     </div>

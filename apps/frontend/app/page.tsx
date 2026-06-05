@@ -84,7 +84,7 @@ export default function LandingPage() {
           </span>
           <h1>{PLATFORM_TITLE}</h1>
           <p>
-            A CloudShield-branded, AWS-console-inspired enterprise workspace for account
+            An original enterprise command center for account
             readiness, read-only inventory posture, security findings, compliance evidence,
             reports, and governed remediation planning.
           </p>
@@ -106,7 +106,7 @@ export default function LandingPage() {
 
         <aside className="aws-console-mock" aria-label="CloudShield console preview">
           <div className="aws-console-mock-top">
-            <strong>CloudShield Console</strong>
+            <strong>CloudShield Command Center</strong>
             <span>Evaluation</span>
           </div>
           <div className="aws-console-mock-body">
@@ -145,7 +145,7 @@ export default function LandingPage() {
       <section className="aws-public-section" id="capabilities">
         <div className="aws-section-heading">
           <span>Capabilities</span>
-          <h2>Enterprise cloud-console workflows, branded for CloudShield.</h2>
+          <h2>Enterprise cloud governance workflows, designed for CloudShield.</h2>
           <p>Compact navigation, clear statuses, crisp tables, evidence panels, and safety banners across every major module.</p>
         </div>
         <div className="aws-capability-grid">
