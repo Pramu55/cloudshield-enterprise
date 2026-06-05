@@ -213,7 +213,7 @@ model User {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   email          String
-  emailNormalized String?
+  emailNormalized String?     @unique
   name           String?
   passwordHash   String?
   status         UserStatus   @default(ACTIVE)
@@ -234,10 +234,10 @@ model User {
   notifications                 Notification[]
   authSessions                  AuthSession[]
   passwordResetTokens           PasswordResetToken[]
+  organizationMemberships       OrganizationMembership[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
-  @@index([organizationId, emailNormalized])
 }
 
 model Organization {
@@ -271,6 +271,56 @@ model Organization {
   savedViews           SavedView[]
   notifications        Notification[]
   authSessions         AuthSession[]
+  memberships          OrganizationMembership[]
+  settings             OrganizationSettings?
+  onboarding           OrganizationOnboarding?
+}
+
+enum OrganizationMembershipStatus {
+  ACTIVE
+  REMOVED
+}
+
+model OrganizationMembership {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("member")
+  status         OrganizationMembershipStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([organizationId, status])
+}
+
+model OrganizationSettings {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dataMode       String       @default("development")
+  sampleDataVisible Boolean   @default(false)
+  allowedRegions String[]     @default([])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model OrganizationOnboarding {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  state          String       @default("REGISTERED")
+  checklist      Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
 }
 
 model Team {

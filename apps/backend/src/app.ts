@@ -1,6 +1,8 @@
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import fastifyCookie from "@fastify/cookie";
+import fastifyCsrfProtection from "@fastify/csrf-protection";
+import rateLimit from "@fastify/rate-limit";
 import Fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import { registerEnvPlugin } from "./plugins/env.js";
 import { registerErrorPlugin } from "./plugins/errors.js";
@@ -24,7 +26,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   const app = Fastify(opts);
 
   await app.register(helmet);
-  
+
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3100";
   await app.register(cors, {
     origin: frontendUrl,
@@ -32,9 +34,41 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
   });
 
+  app.addHook("onRequest", async (request, reply) => {
+    if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
+    const origin = request.headers.origin;
+    if (origin && origin !== frontendUrl) {
+      return reply.status(403).send({
+        error: "unexpected_origin",
+        message: "Request origin is not allowed."
+      });
+    }
+  });
+
   await app.register(fastifyCookie, {
     secret: process.env.JWT_SECRET || "cloudshield-local-demo-jwt-secret-change-me",
     hook: "onRequest"
+  });
+
+  await app.register(fastifyCsrfProtection, {
+    sessionPlugin: "@fastify/cookie",
+    csrfOpts: {
+      userInfo: true,
+      hmacKey: process.env.CSRF_HMAC_KEY || "cloudshield-local-demo-csrf-hmac-key-change-me"
+    },
+    cookieOpts: {
+      signed: false,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.AUTH_COOKIE_SECURE === "true"
+    },
+    getUserInfo: (req) => req.cookies.cloudshield_session || "guest"
+  });
+
+  await app.register(rateLimit, {
+    global: false,
+    max: 100,
+    timeWindow: "1 minute"
   });
 
   await registerEnvPlugin(app);

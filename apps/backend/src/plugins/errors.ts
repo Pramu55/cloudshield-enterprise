@@ -11,9 +11,6 @@ export function registerErrorPlugin(app: FastifyInstance): void {
       return;
     }
 
-    app.log.error(error);
-    console.error(error);
-
     if (hasStatusCode(error)) {
       reply.status(error.statusCode).send({
         error: "request_error",
@@ -21,6 +18,9 @@ export function registerErrorPlugin(app: FastifyInstance): void {
       });
       return;
     }
+
+    app.log.error(error);
+    console.error(error);
 
     reply.status(500).send({
       error: "internal_server_error",

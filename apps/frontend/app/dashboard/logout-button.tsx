@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { fetchCloudShieldClient } from "../../lib/client-api";
+import { fetchCloudShieldClient, clearCsrfToken } from "../../lib/client-api";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -12,7 +12,7 @@ export function LogoutButton() {
     } catch (e) {
       // ignore
     }
-    localStorage.removeItem("cloudshield_current_user");
+    clearCsrfToken();
     router.replace("/login");
     router.refresh();
   }

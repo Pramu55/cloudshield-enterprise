@@ -553,7 +553,6 @@ export const AuthOrganizationSchema = z.object({
 export type AuthOrganization = z.infer<typeof AuthOrganizationSchema>;
 
 export const LoginResponseSchema = z.object({
-  accessToken: z.string().optional(),
   user: AuthUserSchema,
   organization: AuthOrganizationSchema
 });
@@ -566,6 +565,7 @@ export const CurrentUserResponseSchema = z.object({
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
 
 export const RegisterRequestSchema = z.object({
+  name: z.string().min(1, "Full name is required."),
   email: z.string().email("Please enter a valid work email."),
   organization: z.string().min(1, "Organization name is required."),
   password: z.string().min(8, "Password must be at least 8 characters."),
@@ -573,11 +573,24 @@ export const RegisterRequestSchema = z.object({
 });
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 
+export const ForgotPasswordRequestSchema = z.object({
+  email: z.string().email("Please enter a valid work email.")
+});
+export type ForgotPasswordRequest = z.infer<typeof ForgotPasswordRequestSchema>;
+
+export const ResetPasswordRequestSchema = z.object({
+  token: z.string().min(1, "Token is required."),
+  newPassword: z.string().min(8, "Password must be at least 8 characters."),
+  confirmNewPassword: z.string().min(8, "Confirm password must be at least 8 characters.")
+});
+export type ResetPasswordRequest = z.infer<typeof ResetPasswordRequestSchema>;
+
 export const RegisterResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   user: z.object({
     id: z.string(),
+    name: z.string().nullable(),
     email: z.string(),
     role: z.string(),
     organizationId: z.string()

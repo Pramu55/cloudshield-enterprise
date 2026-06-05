@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ArrowRight, KeyRound, Info } from "lucide-react";
+import { getCsrfToken, clearCsrfToken } from "../../lib/client-api";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
@@ -35,14 +36,17 @@ export function LoginForm() {
     setIsSubmitting(true);
 
     try {
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
         method: "POST",
         credentials: "include",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
         },
         body: JSON.stringify({ email: email.trim(), password })
       });
+      clearCsrfToken();
 
       if (response.status === 401) {
         setError("Invalid email or password.");
@@ -54,21 +58,9 @@ export function LoginForm() {
         return;
       }
 
-      const data = (await response.json()) as {
-        accessToken: string;
-        user: { email: string };
-        organization: { name: string };
-      };
+      await response.json();
 
       setSuccessMsg("Login successful. Redirecting...");
-
-      localStorage.setItem(
-        "cloudshield_current_user",
-        JSON.stringify({
-          user: data.user,
-          organization: data.organization
-        })
-      );
       
       const nextPath = new URLSearchParams(window.location.search).get("next");
       const destination = nextPath?.startsWith("/dashboard")
@@ -146,20 +138,6 @@ export function LoginForm() {
       </button>
 
       <div className="aws-auth-support">
-        {process.env.NEXT_PUBLIC_CLOUDSHIELD_DATA_MODE !== "production" && (
-          <div className="aws-demo-credentials">
-            <div>
-              <KeyRound size={13} className="text-indigo-600" />
-              <p>Local demo credentials</p>
-            </div>
-            <div>
-              <span className="text-slate-500">Email</span>
-              <code>demo@cloudshield.local</code>
-              <span className="text-slate-500">Password</span>
-              <code>CloudShieldDemo123!</code>
-            </div>
-          </div>
-        )}
 
         <div className="aws-auth-notice">
           <Info size={13} className="shrink-0 mt-0.5 text-slate-400" />

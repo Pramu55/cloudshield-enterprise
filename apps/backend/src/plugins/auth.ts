@@ -35,7 +35,17 @@ export async function requireAuth(
       where: { tokenHash },
       include: {
         user: {
-          select: { id: true, organizationId: true, email: true, role: true, status: true }
+          select: {
+            id: true,
+            organizationId: true,
+            email: true,
+            role: true,
+            status: true,
+            organizationMemberships: {
+              where: { status: "ACTIVE" },
+              select: { organizationId: true, role: true, status: true }
+            }
+          }
         }
       }
     });
@@ -56,11 +66,36 @@ export async function requireAuth(
       return;
     }
 
+    if (session.organizationId !== session.user.organizationId) {
+      reply.status(401).send({
+        error: "unauthorized",
+        message: "Session organization is no longer valid."
+      });
+      return;
+    }
+
+    const membership = session.user.organizationMemberships.find(
+      (item) => item.organizationId === session.organizationId && item.status === "ACTIVE"
+    );
+
+    if (!membership) {
+      reply.status(401).send({
+        error: "unauthorized",
+        message: "Active organization membership is required."
+      });
+      return;
+    }
+
+    await prisma.authSession.update({
+      where: { id: session.id },
+      data: { lastUsedAt: new Date() }
+    });
+
     request.auth = {
       userId: session.user.id,
-      organizationId: session.user.organizationId,
+      organizationId: session.organizationId,
       email: session.user.email,
-      role: session.user.role,
+      role: membership.role || session.user.role,
       sessionId: session.id
     };
   } catch (error) {

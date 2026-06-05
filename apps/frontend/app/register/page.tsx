@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Info, Loader2, Lock, ShieldAlert, ShieldCheck } from "lucide-react";
+import { getCsrfToken, clearCsrfToken } from "../../lib/client-api";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
@@ -12,6 +13,7 @@ export default function RegisterPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [organization, setOrganization] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,7 +27,7 @@ export default function RegisterPage() {
     setError(null);
     setSuccessMsg(null);
 
-    if (!email.trim() || !organization.trim() || !password || !confirmPassword) {
+    if (!email.trim() || !name.trim() || !organization.trim() || !password || !confirmPassword) {
       setError("All fields are required.");
       return;
     }
@@ -49,19 +51,23 @@ export default function RegisterPage() {
     setIsSubmitting(true);
 
     try {
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
         credentials: "include",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
         },
         body: JSON.stringify({
+          name: name.trim(),
           email: email.trim(),
           organization: organization.trim(),
           password,
           confirmPassword
         })
       });
+      clearCsrfToken();
 
       if (response.status === 409) {
         setError("This email already has access. Please sign in instead.");
@@ -123,6 +129,17 @@ export default function RegisterPage() {
             <h2>Request workspace</h2>
             <p>Deploy CloudShield for your organization.</p>
             <form className="aws-auth-form" onSubmit={onSubmit}>
+              <label>
+                <span>Full name</span>
+                <input
+                  disabled={isSubmitting}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Jane Doe"
+                  type="text"
+                  value={name}
+                />
+              </label>
+
               <label>
                 <span>Work email</span>
                 <input
