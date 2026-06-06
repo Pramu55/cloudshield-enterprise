@@ -26,6 +26,7 @@ import {
   Wallet
 } from "lucide-react";
 import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
+import { AccountDetailWorkspace, AccountsWorkspace } from "./account-workflows";
 import {
   DataTable,
   DetailList,
@@ -218,87 +219,11 @@ export function OverviewView() {
 }
 
 export function AccountsView() {
-  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/aws/accounts", { accounts: [] });
-  const accounts = pickArray(data, ["accounts", "items"]);
-
-  return (
-    <>
-      <PageHeader
-        breadcrumbs={["Cloud", "Accounts"]}
-        title="AWS accounts"
-        description="Manage registered AWS account records and validation status from one account registry."
-        primaryAction={<PrimaryLink href="/dashboard/settings">Connector settings</PrimaryLink>}
-      />
-      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
-      <StatGroup>
-        <MetricTile label="Registered accounts" value={accounts.length} tone="info" />
-        <MetricTile label="Connected" value={accounts.filter((account: AnyRecord) => String(account.status ?? account.connectionStatus).includes("CONNECTED")).length} tone="success" />
-        <MetricTile label="Pending validation" value={accounts.filter((account: AnyRecord) => String(account.status ?? account.connectionStatus).includes("PENDING")).length} tone="warning" />
-      </StatGroup>
-      <Section title="Account registry" description="Only records returned by the CloudShield API are shown.">
-        <DataTable
-          columns={["Account", "Account ID", "Region", "Status", "Source", "Updated"]}
-          rows={accounts.map((account: AnyRecord) => [
-            <ConsoleLink key="name" href={`/dashboard/accounts/${account.id ?? account.accountId}`}>{text(account.name ?? account.alias ?? account.accountName, "AWS account")}</ConsoleLink>,
-            <span key="id" className="font-mono text-xs">{text(account.accountId ?? account.awsAccountId ?? account.id)}</span>,
-            text(account.region ?? account.defaultRegion),
-            <StatusBadge key="status" status={account.status ?? account.connectionStatus ?? account.validationStatus} />,
-            <SourceBadge key="source" source={sourceFor(account, data)} />,
-            formatDate(account.updatedAt ?? account.lastValidatedAt)
-          ])}
-        />
-      </Section>
-    </>
-  );
+  return <AccountsWorkspace />;
 }
 
 export function AccountDetailView({ accountId }: { accountId: string }) {
-  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>(`/api/v1/aws/accounts/${accountId}`, emptyObject);
-  const account = data.account ?? data;
-  const inventory = data.inventory ?? {};
-  const findings = pickArray(data, ["findings", "securityFindings"]).slice(0, 8);
-
-  return (
-    <>
-      <PageHeader
-        breadcrumbs={["Cloud", "Accounts", text(account.accountId ?? accountId)]}
-        title={text(account.name ?? account.alias ?? account.accountName, "AWS account")}
-        description="Account metadata, validation status, and related operational records."
-        status={<StatusBadge status={account.status ?? account.connectionStatus ?? account.validationStatus} />}
-      />
-      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
-      <div className="cs-two-column">
-        <Section title="Account details">
-          <DetailList
-            items={[
-              { label: "Cloud account ID", value: <span className="font-mono text-xs">{text(account.accountId ?? account.awsAccountId ?? accountId)}</span> },
-              { label: "Region", value: text(account.region ?? account.defaultRegion) },
-              { label: "Provider", value: text(account.provider ?? "AWS") },
-              { label: "Source", value: <SourceBadge source={sourceFor(account, data)} /> },
-              { label: "Last validation", value: formatDate(account.lastValidatedAt ?? account.updatedAt) }
-            ]}
-          />
-        </Section>
-        <Section title="Inventory freshness">
-          <StatGroup>
-            <MetricTile label="Resources" value={pickNumber(inventory, ["resourceCount", "resources"])} />
-            <MetricTile label="Last scan" value={formatDate(inventory.lastScanAt ?? inventory.lastSuccessfulScanAt)} />
-          </StatGroup>
-        </Section>
-      </div>
-      <Section title="Related findings">
-        <DataTable
-          columns={["Finding", "Severity", "Status", "Updated"]}
-          rows={findings.map((finding: AnyRecord) => [
-            text(finding.title ?? finding.name),
-            <StatusBadge key="severity" status={finding.severity} />,
-            <StatusBadge key="status" status={finding.status ?? finding.workflowStatus} />,
-            formatDate(finding.updatedAt ?? finding.createdAt)
-          ])}
-        />
-      </Section>
-    </>
-  );
+  return <AccountDetailWorkspace accountId={accountId} />;
 }
 
 export function InventoryView() {

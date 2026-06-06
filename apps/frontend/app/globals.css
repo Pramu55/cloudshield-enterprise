@@ -762,6 +762,162 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   gap: 10px;
   padding: 14px 16px;
 }
+.cs-account-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, .42fr);
+  gap: 16px;
+}
+.cs-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 360px;
+}
+.cs-account-actions .cs-button-secondary,
+.cs-account-actions .cs-action-danger {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.cs-action-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid #f7b8ad;
+  border-radius: 6px;
+  background: #fff;
+  color: #b42318;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.cs-action-danger:hover { background: #fff4f2; }
+.cs-muted-mono {
+  margin: 4px 0 0;
+  color: #667085;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+.cs-row-description {
+  margin: 4px 0 0;
+  max-width: 320px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.cs-account-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+.cs-account-form label span {
+  display: block;
+  margin-bottom: 6px;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.cs-account-form input,
+.cs-account-form select,
+.cs-account-form textarea {
+  width: 100%;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  padding: 9px 10px;
+  font-size: 13px;
+  outline: 0;
+}
+.cs-account-form textarea { min-height: 86px; resize: vertical; }
+.cs-account-form input:focus,
+.cs-account-form select:focus,
+.cs-account-form textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,.14);
+}
+.cs-form-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.cs-guardrail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+.cs-guardrail-grid article {
+  border: 1px solid #e6e9ef;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fff, #f8fafc);
+  padding: 14px;
+}
+.cs-guardrail-grid strong { color: #111827; font-size: 13px; }
+.cs-guardrail-grid p { margin: 6px 0 0; color: #667085; font-size: 12px; line-height: 1.5; }
+.cs-detail-actions { padding: 14px; }
+.cs-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, .58);
+  padding: 18px;
+  backdrop-filter: blur(8px);
+}
+.cs-modal {
+  position: relative;
+  width: min(520px, 100%);
+  border: 1px solid #d9dee7;
+  border-radius: 14px;
+  background: #fff;
+  padding: 22px;
+  box-shadow: 0 36px 90px -38px rgba(15,23,42,.86);
+}
+.cs-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d9dee7;
+  border-radius: 7px;
+  background: #fff;
+}
+.cs-modal-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+}
+.cs-modal h2 { margin: 12px 0 0; font-size: 19px; letter-spacing: 0; }
+.cs-modal p { color: #475467; line-height: 1.55; }
+.cs-modal-account {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #e6e9ef;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px;
+}
+.cs-modal-account span {
+  color: #667085;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+.cs-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 18px;
+}
 
 .portal-desktop-sidebar { min-width: 0; transition: width .22s ease; }
 .portal-sidebar {
@@ -1072,6 +1228,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .portal-content { padding: 16px; }
   .cs-stat-group { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cs-two-column { grid-template-columns: 1fr; }
+  .cs-account-workspace,
+  .cs-guardrail-grid { grid-template-columns: 1fr; }
+  .cs-account-actions { justify-content: flex-start; min-width: 0; }
   .public-hero, .auth-shell { grid-template-columns: 1fr; }
   .public-feature-band { grid-template-columns: 1fr; }
   .auth-brand { min-height: auto; }
