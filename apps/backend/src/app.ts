@@ -21,7 +21,8 @@ import { registerPlatformDynamicRoutes } from "./routes/platform-dynamic.routes.
 import { registerOperationsRoutes } from "./routes/operations.routes.js";
 import { registerAutomationRoutes } from "./routes/automation.routes.js";
 import { registerPlatformCoreRoutes } from "./routes/platform-core.routes.js";
-
+import { registerMembersRoutes } from "./routes/members.routes.js";
+import { registerTeamsRoutes } from "./routes/teams.routes.js";
 export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify(opts);
 
@@ -78,12 +79,14 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
 
   await registerPlatformRoutes(app);
   await registerAuthRoutes(app);
-  await registerAwsAccountRoutes(app);
+  await registerMembersRoutes(app);
+  await registerTeamsRoutes(app);
   await registerAwsConnectorRoutes(app);
   await registerAwsInventoryRoutes(app);
   await registerSecurityPostureRoutes(app);
   await registerRiskWorkflowRoutes(app);
   await registerComplianceEvidenceRoutes(app);
+  await registerAwsAccountRoutes(app);
   await registerReportRoutes(app);
   await registerRemediationGovernanceRoutes(app);
   await registerDataRoutes(app);

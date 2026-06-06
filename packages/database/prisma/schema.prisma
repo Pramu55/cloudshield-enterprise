@@ -235,6 +235,7 @@ model User {
   authSessions                  AuthSession[]
   passwordResetTokens           PasswordResetToken[]
   organizationMemberships       OrganizationMembership[]
+  invitationsSent               Invitation[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -272,6 +273,8 @@ model Organization {
   notifications        Notification[]
   authSessions         AuthSession[]
   memberships          OrganizationMembership[]
+  invitations          Invitation[]
+  teamMemberships      TeamMembership[]
   settings             OrganizationSettings?
   onboarding           OrganizationOnboarding?
 }
@@ -287,10 +290,12 @@ model OrganizationMembership {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role           String       @default("member")
+  role           String       @default("VIEWER")
   status         OrganizationMembershipStatus @default(ACTIVE)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  teamMemberships TeamMembership[]
 
   @@unique([organizationId, userId])
   @@index([organizationId])
@@ -332,6 +337,7 @@ model Team {
   businessUnit   String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  archivedAt     DateTime?
 
   awsAccounts      AwsAccount[]
   cloudResources   CloudResource[]
@@ -339,9 +345,29 @@ model Team {
   costFindings     CostFinding[]
   controls         ComplianceControl[]
   acceptances      RiskAcceptance[]
+  memberships      TeamMembership[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
+}
+
+model TeamMembership {
+  id                       String                 @id @default(cuid())
+  organizationId           String
+  organization             Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  teamId                   String
+  team                     Team                   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  organizationMembershipId String
+  organizationMembership   OrganizationMembership @relation(fields: [organizationMembershipId], references: [id], onDelete: Cascade)
+  isLead                   Boolean                @default(false)
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  archivedAt               DateTime?
+
+  @@unique([teamId, organizationMembershipId])
+  @@index([organizationId])
+  @@index([teamId])
+  @@index([organizationMembershipId])
 }
 
 model AwsAccount {
@@ -982,5 +1008,28 @@ model PasswordResetToken {
   createdAt      DateTime     @default(now())
 
   @@index([userId])
+  @@index([tokenHash])
+}
+
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String       @default("VIEWER")
+  tokenHash      String       @unique
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  expiresAt      DateTime
+  sendCount      Int          @default(1)
+  lastSentAt     DateTime     @default(now())
+  inviterId      String
+  inviter        User         @relation(fields: [inviterId], references: [id], onDelete: Restrict)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([email])
   @@index([tokenHash])
 }

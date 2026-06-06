@@ -89,7 +89,7 @@ test("Authentication Endpoints", async (t) => {
       prisma.authSession.findFirst({ where: { userId: registeredUserId, organizationId: registeredOrgId } })
     ]);
     assert.equal(membership?.status, "ACTIVE");
-    assert.equal(membership?.role, "admin");
+    assert.equal(membership?.role, "OWNER");
     assert.equal(settings?.sampleDataVisible, false);
     assert.ok(settings?.dataMode === "development" || settings?.dataMode === "production");
     assert.equal(onboarding?.state, "REGISTERED");

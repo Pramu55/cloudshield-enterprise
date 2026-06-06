@@ -142,7 +142,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: membership.role || user.role,
+      role: membership.role === "admin" ? "OWNER" : (membership.role || "VIEWER"),
       organizationId: user.organizationId
     };
 
@@ -170,7 +170,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return CurrentUserResponseSchema.parse({
-        user: { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId },
+        user: { id: user.id, email: user.email, name: user.name, role: "OWNER", organizationId: user.organizationId }, // Role will be pulled from membership dynamically later if needed, or we query membership
         organization: user.organization
       });
     }
@@ -196,20 +196,44 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const passwordHash = await bcrypt.hash(body.password, 12);
-    const slug = body.organization.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-
+    const orgName = body.organization || "My Workspace";
+    const slug = orgName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const existingOrg = await prisma.organization.findUnique({ where: { slug } });
     const finalSlug = existingOrg ? `${slug}-${Math.random().toString(36).substring(2, 7)}` : slug;
 
-    const result = await prisma.$transaction(async (tx) => {
-      const org = await tx.organization.create({
-        data: {
-          name: body.organization,
-          slug: finalSlug,
-          onboardingState: "REGISTERED",
-          awsChangeExecutionEnabled: false
-        }
+    let invitation: any = null;
+    if (body.invitationToken) {
+      const tokenHash = hashToken(body.invitationToken);
+      invitation = await prisma.invitation.findUnique({
+        where: { tokenHash },
+        include: { organization: true }
       });
+
+      if (!invitation || invitation.revokedAt || invitation.expiresAt < new Date() || invitation.acceptedAt) {
+        reply.status(400).send({ error: "invalid_invitation", message: "Invitation is invalid or expired." });
+        return;
+      }
+
+      if (normalizeEmail(body.email) !== normalizeEmail(invitation.email)) {
+        reply.status(403).send({ error: "email_mismatch", message: "This invitation is for a different email address." });
+        return;
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      let org;
+      if (invitation) {
+        org = invitation.organization;
+      } else {
+        org = await tx.organization.create({
+          data: {
+            name: body.organization || "My Workspace",
+            slug: finalSlug,
+            onboardingState: "REGISTERED",
+            awsChangeExecutionEnabled: false
+          }
+        });
+      }
 
       const user = await tx.user.create({
         data: {
@@ -218,7 +242,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           emailNormalized,
           name: body.name,
           passwordHash,
-          role: "admin",
+          role: "VIEWER",
           lastLoginAt: new Date()
         }
       });
@@ -227,31 +251,49 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         data: {
           organizationId: org.id,
           userId: user.id,
-          role: "admin",
+          role: invitation ? invitation.role : "OWNER",
           status: "ACTIVE"
         }
       });
 
-      await tx.organizationSettings.create({
-        data: {
-          organizationId: org.id,
-          dataMode: process.env.CLOUDSHIELD_DATA_MODE === "production" ? "production" : "development",
-          sampleDataVisible: false,
-          allowedRegions: []
-        }
-      });
-
-      await tx.organizationOnboarding.create({
-        data: {
-          organizationId: org.id,
-          state: "REGISTERED",
-          checklist: {
-            accountRegistryCreated: false,
-            awsValidationCompleted: false,
-            sampleDataImported: false
+      if (invitation) {
+        await tx.invitation.update({
+          where: { id: invitation.id },
+          data: { acceptedAt: new Date() }
+        });
+        
+        await tx.auditEvent.create({
+          data: {
+            organizationId: org.id,
+            actorUserId: user.id,
+            action: "members.invitation_accepted",
+            targetType: "invitation",
+            targetId: invitation.id,
+            metadata: {}
           }
-        }
-      });
+        });
+      } else {
+        await tx.organizationSettings.create({
+          data: {
+            organizationId: org.id,
+            dataMode: process.env.CLOUDSHIELD_DATA_MODE === "production" ? "production" : "development",
+            sampleDataVisible: false,
+            allowedRegions: []
+          }
+        });
+
+        await tx.organizationOnboarding.create({
+          data: {
+            organizationId: org.id,
+            state: "REGISTERED",
+            checklist: {
+              accountRegistryCreated: false,
+              awsValidationCompleted: false,
+              sampleDataImported: false
+            }
+          }
+        });
+      }
 
       const sessionId = newRawToken();
       const tokenHash = hashToken(sessionId);
@@ -276,11 +318,11 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           action: "auth.register",
           targetType: "user",
           targetId: user.id,
-          metadata: { sessionId: session.id, orgSlug: org.slug }
+          metadata: { sessionId: session.id, orgSlug: org.slug, invitationId: invitation?.id }
         }
       });
 
-      return { org, user, sessionId };
+      return { org, user, sessionId, role: invitation ? invitation.role : "OWNER" };
     });
 
     reply.setCookie("cloudshield_session", result.sessionId, getCookieOptions());
@@ -288,7 +330,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     return RegisterResponseSchema.parse({
       success: true,
       message: "Workspace created.",
-      user: { id: result.user.id, name: result.user.name, email: result.user.email, role: result.user.role, organizationId: result.user.organizationId },
+      user: { id: result.user.id, name: result.user.name, email: result.user.email, role: result.role, organizationId: result.user.organizationId },
       organization: { id: result.org.id, name: result.org.name, slug: result.org.slug }
     });
   });

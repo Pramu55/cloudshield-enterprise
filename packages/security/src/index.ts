@@ -87,3 +87,5 @@ function constantTimeEqual(a: string, b: string): boolean {
 
   return timingSafeEqual(left, right);
 }
+
+export * from "./rbac.js";
