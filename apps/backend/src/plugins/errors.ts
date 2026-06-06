@@ -11,6 +11,14 @@ export function registerErrorPlugin(app: FastifyInstance): void {
       return;
     }
 
+    if (error instanceof Error && error.name === "PermissionDeniedError") {
+      reply.status(403).send({
+        error: "permission_denied",
+        message: error.message
+      });
+      return;
+    }
+
     if (hasStatusCode(error)) {
       reply.status(error.statusCode).send({
         error: "request_error",

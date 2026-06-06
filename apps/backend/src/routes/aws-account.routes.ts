@@ -7,6 +7,7 @@ import {
 } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 
 const VALIDATION_NOT_IMPLEMENTED_MESSAGE =
   "Real AWS read-only validation will be added in the AWS read-only connector milestone. No AWS API calls were executed.";
@@ -36,6 +37,7 @@ export async function registerAwsAccountRoutes(
 ): Promise<void> {
   app.get("/api/v1/aws/accounts", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
     const accounts = await prisma.awsAccount.findMany({
       where: {
         organizationId: auth.organizationId,
@@ -61,6 +63,7 @@ export async function registerAwsAccountRoutes(
 
   app.post("/api/v1/aws/accounts", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
     const body = CreateAwsAccountRequestSchema.parse(request.body);
 
     const existing = await prisma.awsAccount.findFirst({
@@ -128,6 +131,7 @@ export async function registerAwsAccountRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
       const { accountId } = accountParamsSchema.parse(request.params);
       const account = await findAccountForOrganization(
         auth.organizationId,
@@ -153,6 +157,7 @@ export async function registerAwsAccountRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
       const { accountId } = accountParamsSchema.parse(request.params);
       const body = UpdateAwsAccountRequestSchema.parse(request.body);
       const existing = await findAccountForOrganization(
@@ -225,6 +230,7 @@ export async function registerAwsAccountRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
       const { accountId } = accountParamsSchema.parse(request.params);
       const existing = await findAccountForOrganization(
         auth.organizationId,
@@ -268,6 +274,7 @@ export async function registerAwsAccountRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
       const { accountId } = accountParamsSchema.parse(request.params);
       const existing = await findAccountForOrganization(
         auth.organizationId,
@@ -309,6 +316,7 @@ export async function registerAwsAccountRoutes(
 
   app.get("/api/v1/accounts/grouped", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
     const query = request.query as any;
     const groupBy = query.groupBy === "organizationalUnit" ? "organizationalUnit" : "businessUnit";
     
@@ -341,6 +349,7 @@ export async function registerAwsAccountRoutes(
 
   app.get("/api/v1/accounts/topology", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
     
     const accounts = await prisma.awsAccount.findMany({
       where: {
@@ -373,7 +382,9 @@ export async function registerAwsAccountRoutes(
     };
   });
 
-  app.get("/api/v1/aws/setup-guide", { preHandler: requireAuth }, async () => {
+  app.get("/api/v1/aws/setup-guide", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
     return AwsSetupGuideResponseSchema.parse({
       title: "AWS read-only connection plan",
       safetyMode: "read_only_planned",
