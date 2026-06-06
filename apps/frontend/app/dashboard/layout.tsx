@@ -17,8 +17,7 @@ import {
 } from "lucide-react";
 import { clearCsrfToken, fetchCloudShieldClient, useCloudShieldData } from "../../lib/client-api";
 import { RouteIcon } from "./route-views";
-import { GlobalSearchTrigger } from "../../components/search/GlobalSearchTrigger";
-import { GlobalSearchDialog } from "../../components/search/GlobalSearchDialog";
+import { GlobalSearchBar } from "../../components/search/GlobalSearchBar";
 
 type CurrentUserPayload = {
   user?: {
@@ -95,7 +94,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
 
   useEffect(() => {
@@ -205,11 +203,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <div className="portal-main">
         <header className="portal-topbar">
-          <div className="portal-topbar-left">
+          <div className="portal-topbar-left flex-1 flex items-center">
             <button className="portal-icon-button portal-sidebar-toggle" onClick={toggleMenu} type="button" aria-label="Toggle navigation">
               <Menu size={18} />
             </button>
-            <GlobalSearchTrigger onOpen={() => setSearchOpen(true)} />
+            <GlobalSearchBar />
           </div>
           <div className="portal-topbar-right">
             <button className="portal-icon-button" onClick={() => setNotificationsOpen((value) => !value)} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
@@ -257,7 +255,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
         <main className="portal-content">{children}</main>
       </div>
-      <GlobalSearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

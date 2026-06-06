@@ -37,10 +37,10 @@ export async function getCsrfToken(): Promise<string> {
   return fetchingCsrfPromise;
 }
 
-
-export async function fetchCloudShieldClient<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
+export async function fetchCloudShieldClient<T>(path: string, options?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
   const init: RequestInit = {
-    credentials: "include"
+    credentials: "include",
+    signal: options?.signal
   };
   const method = options?.method ?? "GET";
   const isMutation = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
