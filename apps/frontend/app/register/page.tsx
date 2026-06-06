@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Info, Loader2, Lock, ShieldAlert, ShieldCheck } from "lucide-react";
 import { getCsrfToken, clearCsrfToken } from "../../lib/client-api";
@@ -9,10 +9,14 @@ import { getCsrfToken, clearCsrfToken } from "../../lib/client-api";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const searchParams = useSearchParams();
+  const invitationToken = searchParams.get("invitationToken");
+  const defaultEmail = searchParams.get("email") || "";
+
+  const [email, setEmail] = useState(defaultEmail);
   const [name, setName] = useState("");
   const [organization, setOrganization] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +31,7 @@ export default function RegisterPage() {
     setError(null);
     setSuccessMsg(null);
 
-    if (!email.trim() || !name.trim() || !organization.trim() || !password || !confirmPassword) {
+    if (!email.trim() || !name.trim() || (!organization.trim() && !invitationToken) || !password || !confirmPassword) {
       setError("All fields are required.");
       return;
     }
@@ -64,7 +68,8 @@ export default function RegisterPage() {
           email: email.trim(),
           organization: organization.trim(),
           password,
-          confirmPassword
+          confirmPassword,
+          invitationToken: invitationToken || undefined
         })
       });
       clearCsrfToken();
@@ -120,14 +125,15 @@ export default function RegisterPage() {
               <span><CheckCircle2 size={14} /> Credential-ready later</span>
             </div>
             <div className="aws-auth-alert">
-              Registration does not run AWS validation, inventory sync, AWS APIs,
-              mutation, Terraform apply, or automatic remediation.
+              {invitationToken 
+                ? "You are registering with an invitation. Your workspace is already set up."
+                : "Registration does not run AWS validation, inventory sync, AWS APIs, mutation, Terraform apply, or automatic remediation."}
             </div>
           </div>
 
           <div className="aws-auth-form-panel">
-            <h2>Request workspace</h2>
-            <p>Deploy CloudShield for your organization.</p>
+            <h2>{invitationToken ? "Accept Invitation" : "Request workspace"}</h2>
+            <p>{invitationToken ? "Create your account to join the team." : "Deploy CloudShield for your organization."}</p>
             <form className="aws-auth-form" onSubmit={onSubmit}>
               <label>
                 <span>Full name</span>
@@ -151,16 +157,18 @@ export default function RegisterPage() {
                 />
               </label>
 
-              <label>
-                <span>Organization / workspace name</span>
-                <input
-                  disabled={isSubmitting}
-                  onChange={(event) => setOrganization(event.target.value)}
-                  placeholder="Acme Corp"
-                  type="text"
-                  value={organization}
-                />
-              </label>
+              {!invitationToken && (
+                <label>
+                  <span>Organization / workspace name</span>
+                  <input
+                    disabled={isSubmitting}
+                    onChange={(event) => setOrganization(event.target.value)}
+                    placeholder="Acme Corp"
+                    type="text"
+                    value={organization}
+                  />
+                </label>
+              )}
 
               <label>
                 <span>Password</span>
@@ -228,5 +236,13 @@ export default function RegisterPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center">Loading...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

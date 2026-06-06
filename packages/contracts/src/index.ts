@@ -566,9 +566,10 @@ export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
 export const RegisterRequestSchema = z.object({
   name: z.string().min(1, "Full name is required."),
   email: z.string().email("Please enter a valid work email."),
-  organization: z.string().min(1, "Organization name is required."),
+  organization: z.string().optional(),
   password: z.string().min(8, "Password must be at least 8 characters."),
-  confirmPassword: z.string().min(8, "Confirm password must be at least 8 characters.")
+  confirmPassword: z.string().min(8, "Confirm password must be at least 8 characters."),
+  invitationToken: z.string().optional()
 });
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 
@@ -601,6 +602,113 @@ export const RegisterResponseSchema = z.object({
   })
 });
 export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
+
+export const InvitationRoleSchema = z.enum([
+  "OWNER",
+  "ADMIN",
+  "SECURITY_OPERATOR",
+  "CLOUD_OPERATOR",
+  "AUDITOR",
+  "VIEWER"
+]);
+export type InvitationRole = z.infer<typeof InvitationRoleSchema>;
+
+export const CreateInvitationRequestSchema = z.object({
+  email: z.string().email("Please enter a valid email."),
+  role: InvitationRoleSchema
+});
+export type CreateInvitationRequest = z.infer<typeof CreateInvitationRequestSchema>;
+
+export const AcceptInvitationRequestSchema = z.object({
+  token: z.string()
+});
+export type AcceptInvitationRequest = z.infer<typeof AcceptInvitationRequestSchema>;
+
+export const UpdateMemberRoleRequestSchema = z.object({
+  role: InvitationRoleSchema
+});
+export type UpdateMemberRoleRequest = z.infer<typeof UpdateMemberRoleRequestSchema>;
+
+export const InvitationDtoSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  role: z.string(),
+  status: z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]),
+  expiresAt: z.string(),
+  createdAt: z.string()
+});
+export type InvitationDto = z.infer<typeof InvitationDtoSchema>;
+
+export const MemberDtoSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  name: z.string().nullable(),
+  email: z.string(),
+  role: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+  isFinalOwner: z.boolean().optional()
+});
+export type MemberDto = z.infer<typeof MemberDtoSchema>;
+
+export const MembersListResponseSchema = z.object({
+  members: z.array(MemberDtoSchema),
+  invitations: z.array(InvitationDtoSchema)
+});
+export type MembersListResponse = z.infer<typeof MembersListResponseSchema>;
+
+export const TeamDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  name: z.string(),
+  email: z.string().nullable(),
+  businessUnit: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  archivedAt: z.string().nullable()
+});
+export type TeamDto = z.infer<typeof TeamDtoSchema>;
+
+export const TeamMembershipDtoSchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  organizationMembershipId: z.string(),
+  userId: z.string().optional(),
+  name: z.string().nullable().optional(),
+  email: z.string().optional(),
+  isLead: z.boolean(),
+  createdAt: z.string()
+});
+export type TeamMembershipDto = z.infer<typeof TeamMembershipDtoSchema>;
+
+export const TeamDetailsDtoSchema = TeamDtoSchema.extend({
+  members: z.array(TeamMembershipDtoSchema)
+});
+export type TeamDetailsDto = z.infer<typeof TeamDetailsDtoSchema>;
+
+export const CreateTeamRequestSchema = z.object({
+  name: z.string().min(1, "Team name is required."),
+  email: z.string().email("Invalid email.").nullable().optional(),
+  businessUnit: z.string().nullable().optional()
+});
+export type CreateTeamRequest = z.infer<typeof CreateTeamRequestSchema>;
+
+export const UpdateTeamRequestSchema = z.object({
+  name: z.string().min(1, "Team name is required.").optional(),
+  email: z.string().email("Invalid email.").nullable().optional(),
+  businessUnit: z.string().nullable().optional()
+});
+export type UpdateTeamRequest = z.infer<typeof UpdateTeamRequestSchema>;
+
+export const AddTeamMemberRequestSchema = z.object({
+  organizationMembershipId: z.string().min(1)
+});
+export type AddTeamMemberRequest = z.infer<typeof AddTeamMemberRequestSchema>;
+
+export const UpdateTeamMemberLeadRequestSchema = z.object({
+  isLead: z.boolean()
+});
+export type UpdateTeamMemberLeadRequest = z.infer<typeof UpdateTeamMemberLeadRequestSchema>;
 
 const AwsAccountIdSchema = z
   .string()
