@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { clearCsrfToken, fetchCloudShieldClient, useCloudShieldData } from "../../lib/client-api";
 import { RouteIcon } from "./route-views";
+import { GlobalSearchTrigger } from "../../components/search/GlobalSearchTrigger";
+import { GlobalSearchDialog } from "../../components/search/GlobalSearchDialog";
 
 type CurrentUserPayload = {
   user?: {
@@ -93,6 +95,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(true);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    setIsDesktop(media.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    media.addEventListener("change", handler);
+    return () => media.removeEventListener("change", handler);
+  }, []);
+
+  const toggleMenu = () => {
+    if (isDesktop) {
+      setCollapsed(prev => !prev);
+    } else {
+      setMobileOpen(prev => !prev);
+    }
+  };
 
   useEffect(() => {
     const saved = window.localStorage.getItem("cloudshield.sidebar.collapsed");
@@ -186,14 +206,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="portal-main">
         <header className="portal-topbar">
           <div className="portal-topbar-left">
-            <button className="portal-icon-button portal-mobile-menu" onClick={() => setMobileOpen(true)} type="button" aria-label="Open navigation">
+            <button className="portal-icon-button portal-sidebar-toggle" onClick={toggleMenu} type="button" aria-label="Toggle navigation">
               <Menu size={18} />
             </button>
-            <label className="portal-search">
-              <Search size={15} />
-              <input placeholder="Search resources, accounts, findings" type="search" />
-              <kbd><Command size={11} />K</kbd>
-            </label>
+            <GlobalSearchTrigger onOpen={() => setSearchOpen(true)} />
           </div>
           <div className="portal-topbar-right">
             <button className="portal-icon-button" onClick={() => setNotificationsOpen((value) => !value)} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
@@ -241,6 +257,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
         <main className="portal-content">{children}</main>
       </div>
+      <GlobalSearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }
