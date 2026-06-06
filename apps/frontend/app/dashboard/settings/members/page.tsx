@@ -1,5 +1,5 @@
-import { MembersView } from "../../route-views";
+import { MembersWorkspace } from "./members-workspace";
 
 export default function MembersPage() {
-  return <MembersView />;
+  return <MembersWorkspace />;
 }
