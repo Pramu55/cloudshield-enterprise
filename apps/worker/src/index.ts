@@ -296,6 +296,7 @@ function validateWorkerGate(
   }
   if (!plan.finding.awsAccount.executionRoleArnPlaceholder) return "Execution role is not configured.";
   if (!process.env.AWS_EXECUTOR_ROLE_ARN || !process.env.AWS_EXECUTOR_EXTERNAL_ID) return "Executor role environment configuration is missing.";
+  if (!plan.finding.awsAccount.regions.includes(String(plan.resource?.region))) return "Target region is not allowlisted on the registered AWS account.";
   if (plan.allowlistedOperation !== "EC2_APPLY_GOVERNANCE_TAGS") return "Only EC2_APPLY_GOVERNANCE_TAGS is enabled for sandbox validation.";
   if (plan.normalizedPayload?.operation !== "EC2_APPLY_GOVERNANCE_TAGS") return "Normalized payload is not an EC2 tagging action.";
   if (plan.resource?.resourceType !== "EC2_INSTANCE") return "Governed tagging pilot requires a verified EC2 instance.";
@@ -357,6 +358,7 @@ async function executeGovernedEc2Tagging(
         beforeState: {
           ...(typeof plan.beforeState === "object" && plan.beforeState ? plan.beforeState : {}),
           currentAwsTags: filterCloudShieldTags(before),
+          rollbackTags: buildRollbackTags(before, tags),
           verifiedAt: new Date().toISOString()
         },
         afterState: {
@@ -371,6 +373,11 @@ async function executeGovernedEc2Tagging(
           awsApiCallExecuted: true,
           mutationExecuted: !requestedTagsAlreadyPresent,
           action: "ec2:CreateTags",
+          rollbackAction: "ec2:DeleteTags or restore previous values after separate approval",
+          cloudTrailCorrelation: {
+            requestId: requestId ?? null,
+            eventName: requestedTagsAlreadyPresent ? "CreateTags.noop" : "CreateTags"
+          },
           result: "SUCCEEDED"
         },
         awsRequestId: requestId ?? null,
@@ -417,7 +424,15 @@ async function fetchInstanceTags(ec2: EC2Client, instanceId: string) {
 }
 
 function filterCloudShieldTags(tags: Record<string, string>) {
-  return Object.fromEntries(Object.entries(tags).filter(([key]) => key.startsWith("CloudShield:")));
+  return Object.fromEntries(Object.entries(tags).filter(([key]) => key.startsWith("CloudShield")));
+}
+
+function buildRollbackTags(before: Record<string, string>, requested: AwsTag[]) {
+  return requested.map((tag) => ({
+    key: tag.Key,
+    previousValue: before[tag.Key] ?? null,
+    rollbackOperation: before[tag.Key] === undefined ? "ec2:DeleteTags" : "ec2:CreateTags"
+  }));
 }
 
 async function failGovernedPlan(planId: string, failureClassification: string) {

@@ -32,11 +32,10 @@ export const ALLOWLISTED_GOVERNED_AWS_OPERATIONS: Record<
 };
 
 export const GOVERNANCE_TAG_KEYS = [
-  "CloudShield:Owner",
-  "CloudShield:Environment",
-  "CloudShield:CostCenter",
-  "CloudShield:Managed",
-  "CloudShield:RiskStatus"
+  "CloudShieldManaged",
+  "CloudShieldOwner",
+  "CloudShieldEnvironment",
+  "CloudShieldReviewDate"
 ] as const;
 
 export function getAwsChangeExecutionMode(): AwsChangeExecutionMode {
@@ -60,6 +59,7 @@ export function isSampleResource(resource: {
   name?: string | null;
 }) {
   const blob = JSON.stringify({
+    source: (resource as any).source,
     metadata: resource.metadata ?? {},
     tags: resource.tags ?? {},
     resourceId: resource.resourceId,

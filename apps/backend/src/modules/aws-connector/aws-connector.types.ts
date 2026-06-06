@@ -10,6 +10,9 @@ export type AwsConnectorConfig = {
   region: string;
   roleArn: string;
   externalId: string;
+  executorRoleArn: string;
+  allowedRegions: string[];
+  executionMode: "disabled" | "simulation" | "staging" | "production";
 };
 
 export type AwsReadonlyValidationResult = {

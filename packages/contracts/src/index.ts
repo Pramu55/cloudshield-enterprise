@@ -53,11 +53,10 @@ export const GOVERNED_CONFIRMATION_TOKENS = {
 } as const;
 
 export const GovernanceTagKeySchema = z.enum([
-  "CloudShield:Owner",
-  "CloudShield:Environment",
-  "CloudShield:CostCenter",
-  "CloudShield:Managed",
-  "CloudShield:RiskStatus"
+  "CloudShieldManaged",
+  "CloudShieldOwner",
+  "CloudShieldEnvironment",
+  "CloudShieldReviewDate"
 ]);
 export type GovernanceTagKey = z.infer<typeof GovernanceTagKeySchema>;
 
@@ -730,9 +729,54 @@ export const AwsConnectorStatusResponseSchema = z.object({
   region: z.string(),
   roleArnConfigured: z.boolean(),
   externalIdConfigured: z.boolean(),
+  executorRoleConfigured: z.boolean().default(false),
+  allowedRegions: z.array(z.string()).default([]),
   allowedAwsCall: z.literal("sts:GetCallerIdentity").or(z.literal("none")),
-  inventoryScan: z.literal("not_enabled"),
-  mutationAccess: z.literal("not_enabled"),
+  inventoryScan: z.enum(["not_enabled", "ready", "queued", "running", "connected", "partial", "failed"]).default("not_enabled"),
+  mutationAccess: z.enum(["not_enabled", "approval_controlled"]).default("not_enabled"),
+  scannerStatus: z.enum([
+    "NOT_CONFIGURED",
+    "READY_FOR_VALIDATION",
+    "IDENTITY_VERIFIED",
+    "INVENTORY_SYNC_QUEUED",
+    "INVENTORY_SYNC_RUNNING",
+    "CONNECTED",
+    "PARTIALLY_CONNECTED",
+    "DEGRADED",
+    "FAILED",
+    "BLOCKED"
+  ]).default("NOT_CONFIGURED"),
+  scannerStatusLabel: z.string().default("Not configured"),
+  accountEligibility: z.object({
+    registeredAccounts: z.number().int(),
+    eligibleNonProductionAccounts: z.number().int(),
+    productionAccountsBlocked: z.number().int()
+  }).default({
+    registeredAccounts: 0,
+    eligibleNonProductionAccounts: 0,
+    productionAccountsBlocked: 0
+  }),
+  accountIdentityVerified: z.boolean().default(false),
+  lastValidation: z.string().nullable().default(null),
+  lastSuccessfulScan: z.string().nullable().default(null),
+  lastFailedScan: z.string().nullable().default(null),
+  activeScan: z.object({
+    id: z.string(),
+    status: ScanRunStatusSchema,
+    phase: z.string().nullable()
+  }).nullable().default(null),
+  resourceCount: z.number().int().default(0),
+  blockedReasons: z.array(z.string()).default([]),
+  cloudTrailReadiness: z.enum(["not_configured", "required", "ready"]).default("required"),
+  executionEligibility: z.object({
+    eligible: z.boolean(),
+    mode: AwsChangeExecutionModeSchema,
+    reason: z.string().nullable()
+  }).default({
+    eligible: false,
+    mode: "disabled",
+    reason: "Governed execution is disabled."
+  }),
   message: z.string()
 });
 export type AwsConnectorStatusResponse = z.infer<

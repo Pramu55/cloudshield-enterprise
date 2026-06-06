@@ -32,7 +32,7 @@ export const RuntimeEnvSchema = z.object({
     .enum(["disabled", "simulation", "staging", "production"])
     .default("disabled"),
   CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS: z.string().optional().default(
-    "CloudShield:Owner,CloudShield:Environment,CloudShield:CostCenter,CloudShield:Managed,CloudShield:RiskStatus"
+    "CloudShieldManaged,CloudShieldOwner,CloudShieldEnvironment,CloudShieldReviewDate"
   ),
   LOG_LEVEL: z.string().optional().default("info"),
   MONITORING_ENABLED: z.coerce.boolean().default(false),

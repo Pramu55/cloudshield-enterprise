@@ -22,7 +22,7 @@ test("governance tag allowlist accepts CloudShield keys", () => {
       awsAccountId: "account-1",
       region: "us-east-1",
       resourceId: "i-123",
-      tags: [{ key: "CloudShield:Owner", value: "platform" }]
+      tags: [{ key: "CloudShieldOwner", value: "platform" }]
     }),
     []
   );
@@ -70,10 +70,10 @@ test("expected after state is idempotent for tagging", () => {
       awsAccountId: "account-1",
       region: "us-east-1",
       resourceId: "i-123",
-      tags: [{ key: "CloudShield:Managed", value: "true" }]
+    tags: [{ key: "CloudShieldManaged", value: "true" }]
     }),
     {
-      tags: { "CloudShield:Managed": "true" },
+      tags: { CloudShieldManaged: "true" },
       idempotent: true
     }
   );

@@ -43,11 +43,10 @@ Restrict `Resource` to the approved sandbox instance ARN where possible.
       "Condition": {
         "ForAllValues:StringEquals": {
           "aws:TagKeys": [
-            "CloudShield:Owner",
-            "CloudShield:Environment",
-            "CloudShield:CostCenter",
-            "CloudShield:Managed",
-            "CloudShield:RiskStatus"
+            "CloudShieldManaged",
+            "CloudShieldOwner",
+            "CloudShieldEnvironment",
+            "CloudShieldReviewDate"
           ]
         }
       }
@@ -60,11 +59,10 @@ Restrict `Resource` to the approved sandbox instance ARN where possible.
       "Condition": {
         "ForAllValues:StringEquals": {
           "aws:TagKeys": [
-            "CloudShield:Owner",
-            "CloudShield:Environment",
-            "CloudShield:CostCenter",
-            "CloudShield:Managed",
-            "CloudShield:RiskStatus"
+            "CloudShieldManaged",
+            "CloudShieldOwner",
+            "CloudShieldEnvironment",
+            "CloudShieldReviewDate"
           ]
         }
       }

@@ -33,9 +33,19 @@ export class AwsConnectorService {
         region: this.config.region,
         roleArnConfigured: Boolean(this.config.roleArn),
         externalIdConfigured: Boolean(this.config.externalId),
+        executorRoleConfigured: Boolean(this.config.executorRoleArn),
+        allowedRegions: this.config.allowedRegions,
         allowedAwsCall: "none",
         inventoryScan: "not_enabled",
         mutationAccess: "not_enabled",
+        scannerStatus: "BLOCKED",
+        scannerStatusLabel: "AWS connector disabled",
+        blockedReasons: [DISABLED_MESSAGE],
+        executionEligibility: {
+          eligible: false,
+          mode: this.config.executionMode,
+          reason: "Connector mode is disabled."
+        },
         message: DISABLED_MESSAGE
       });
     }
@@ -49,11 +59,24 @@ export class AwsConnectorService {
       region: this.config.region,
       roleArnConfigured: Boolean(this.config.roleArn),
       externalIdConfigured: Boolean(this.config.externalId),
+      executorRoleConfigured: Boolean(this.config.executorRoleArn),
+      allowedRegions: this.config.allowedRegions,
       allowedAwsCall: configured ? "sts:GetCallerIdentity" : "none",
-      inventoryScan: "not_enabled",
-      mutationAccess: "not_enabled",
+      inventoryScan: configured ? "ready" : "not_enabled",
+      mutationAccess: this.config.executionMode === "disabled" ? "not_enabled" : "approval_controlled",
+      scannerStatus: configured ? "READY_FOR_VALIDATION" : "NOT_CONFIGURED",
+      scannerStatusLabel: configured ? "Ready for validation" : "Not configured",
+      blockedReasons: configured ? [] : [NOT_CONFIGURED_MESSAGE],
+      executionEligibility: {
+        eligible: configured && Boolean(this.config.executorRoleArn) && this.config.executionMode !== "disabled",
+        mode: this.config.executionMode,
+        reason:
+          configured && Boolean(this.config.executorRoleArn) && this.config.executionMode !== "disabled"
+            ? null
+            : "Execution requires connector readiness, executor role configuration, approval, and non-production account opt-in."
+      },
       message: configured
-        ? "Read-only validation is configured for STS GetCallerIdentity only. No inventory scan will run."
+        ? "Read-only validation is configured for STS GetCallerIdentity. Inventory sync remains explicit and approval-controlled operations remain worker-driven."
         : NOT_CONFIGURED_MESSAGE
     });
   }
