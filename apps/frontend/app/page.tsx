@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ClipboardCheck, Cloud, FileText, Network, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ArrowRight, ClipboardCheck, Cloud, FileText, Layers3, Network, ShieldAlert, ShieldCheck, Sparkles } from "lucide-react";
 
 const capabilities = [
   {
@@ -105,6 +105,49 @@ export default function LandingPage() {
             </article>
           );
         })}
+      </section>
+      <section className="public-feature-band">
+        <div className="public-feature-copy">
+          <span><Sparkles size={16} /> CloudShield workspace</span>
+          <h2>Built for cloud-security operators who need signal, context, and control.</h2>
+          <p>
+            CloudShield brings account registry, resource inventory, security workflow,
+            governance, evidence, and reporting into one high-density operating surface.
+          </p>
+        </div>
+        <div className="public-feature-stack">
+          <article>
+            <Cloud size={18} />
+            <h3>Cloud inventory</h3>
+            <p>Explore account, region, type, freshness, and source classification from API-backed records.</p>
+          </article>
+          <article>
+            <ShieldAlert size={18} />
+            <h3>Security posture</h3>
+            <p>Triage findings with severity, owner, resource, evidence, and workflow state.</p>
+          </article>
+          <article>
+            <ClipboardCheck size={18} />
+            <h3>Governance</h3>
+            <p>Track approvals, requested work, manual completion, rollback context, and audit events.</p>
+          </article>
+          <article>
+            <FileText size={18} />
+            <h3>Evidence and reporting</h3>
+            <p>Review evidence center records and report library output from the current workspace.</p>
+          </article>
+        </div>
+      </section>
+      <section className="public-operations-band">
+        <div>
+          <span><Layers3 size={16} /> Controlled operations</span>
+          <h2>Every module is designed for practical enterprise review.</h2>
+          <p>CloudShield keeps customer, certification, and resource activity claims grounded in the current workspace. When data is unavailable, the console uses polished empty states and clear next actions.</p>
+        </div>
+        <Link className="cs-button" href="/login">
+          Open console
+          <ArrowRight size={15} />
+        </Link>
       </section>
     </main>
   );

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "disabled";
+type PanelVariant = "metric" | "operational" | "status" | "insight" | "warning" | "action" | "evidence" | "detail";
 
 export type StatusKey =
   | "CONNECTED"
@@ -57,8 +58,12 @@ const statusMap: Record<string, { label: string; tone: Tone; icon: ReactNode }> 
 };
 
 export function getStatusMeta(status: StatusKey | null | undefined) {
-  if (!status) return { label: "Unknown", tone: "disabled" as Tone, icon: <Circle size={13} /> };
-  return statusMap[String(status).toUpperCase()] ?? {
+  if (!status) return { label: "Data unavailable", tone: "disabled" as Tone, icon: <Circle size={13} /> };
+  const normalized = String(status).toUpperCase();
+  if (normalized === "UNKNOWN") {
+    return { label: "Data unavailable", tone: "disabled" as Tone, icon: <Circle size={13} /> };
+  }
+  return statusMap[normalized] ?? {
     label: humanize(status),
     tone: "neutral" as Tone,
     icon: <Circle size={13} />
@@ -94,16 +99,20 @@ export function PageHeader({
   breadcrumbs = [],
   title,
   description,
+  eyebrow,
   primaryAction,
   secondaryAction,
-  status
+  status,
+  meta
 }: {
   breadcrumbs?: string[];
   title: string;
   description?: string;
+  eyebrow?: string;
   primaryAction?: ReactNode;
   secondaryAction?: ReactNode;
   status?: ReactNode;
+  meta?: ReactNode;
 }) {
   return (
     <header className="cs-page-header">
@@ -115,11 +124,13 @@ export function PageHeader({
             ))}
           </div>
         ) : null}
+        {eyebrow ? <p className="cs-page-eyebrow">{eyebrow}</p> : null}
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1>{title}</h1>
           {status}
         </div>
         {description ? <p>{description}</p> : null}
+        {meta ? <div className="cs-page-meta">{meta}</div> : null}
       </div>
       {(primaryAction || secondaryAction) ? (
         <div className="cs-page-actions">
@@ -134,20 +145,27 @@ export function PageHeader({
 export function Section({
   title,
   description,
+  icon,
+  variant = "detail",
   action,
   children
 }: {
   title: string;
   description?: string;
+  icon?: ReactNode;
+  variant?: PanelVariant;
   action?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section className="cs-section">
+    <section className="cs-section" data-variant={variant}>
       <div className="cs-section-header">
-        <div>
-          <h2>{title}</h2>
-          {description ? <p>{description}</p> : null}
+        <div className="cs-section-title">
+          {icon ? <span>{icon}</span> : null}
+          <div>
+            <h2>{title}</h2>
+            {description ? <p>{description}</p> : null}
+          </div>
         </div>
         {action}
       </div>
@@ -160,18 +178,26 @@ export function MetricTile({
   label,
   value,
   detail,
-  tone = "neutral"
+  tone = "neutral",
+  icon,
+  trend
 }: {
   label: string;
   value: ReactNode;
   detail?: ReactNode;
   tone?: Tone;
+  icon?: ReactNode;
+  trend?: ReactNode;
 }) {
   return (
     <div className="cs-metric" data-tone={tone}>
-      <span>{label}</span>
+      <div className="cs-metric-top">
+        <span>{label}</span>
+        {icon ? <i>{icon}</i> : null}
+      </div>
       <strong>{value}</strong>
       {detail ? <p>{detail}</p> : null}
+      {trend ? <em>{trend}</em> : null}
     </div>
   );
 }
@@ -239,14 +265,17 @@ export function SearchInput({ label = "Search", placeholder = "Search" }: { labe
 export function EmptyState({
   title,
   description,
-  action
+  action,
+  icon
 }: {
   title: string;
   description: string;
   action?: ReactNode;
+  icon?: ReactNode;
 }) {
   return (
     <div className="cs-empty">
+      {icon ? <span className="cs-empty-icon">{icon}</span> : null}
       <strong>{title}</strong>
       <p>{description}</p>
       {action ? <div>{action}</div> : null}
@@ -259,6 +288,14 @@ export function LoadingState({ label = "Loading workspace data..." }: { label?: 
     <div className="cs-loading">
       <Loader2 size={16} />
       {label}
+    </div>
+  );
+}
+
+export function LoadingSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="cs-skeleton" aria-label="Loading">
+      {Array.from({ length: rows }).map((_, index) => <span key={index} />)}
     </div>
   );
 }
@@ -324,6 +361,48 @@ export function Tabs({ tabs }: { tabs: Array<{ label: string; children: ReactNod
   );
 }
 
+export function OperationalPanel({
+  title,
+  description,
+  icon,
+  variant = "operational",
+  children,
+  action
+}: {
+  title: string;
+  description?: string;
+  icon?: ReactNode;
+  variant?: PanelVariant;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <section className="cs-op-panel" data-variant={variant}>
+      <div className="cs-op-panel-head">
+        {icon ? <span>{icon}</span> : null}
+        <div>
+          <h3>{title}</h3>
+          {description ? <p>{description}</p> : null}
+        </div>
+        {action ? <div className="cs-op-action">{action}</div> : null}
+      </div>
+      <div className="cs-op-panel-body">{children}</div>
+    </section>
+  );
+}
+
+export function ActionMenu({ children }: { children: ReactNode }) {
+  return <div className="cs-action-menu">{children}</div>;
+}
+
+export function CommandPalette({ children }: { children: ReactNode }) {
+  return <div className="cs-command-palette">{children}</div>;
+}
+
+export function NotificationMenu({ children }: { children: ReactNode }) {
+  return <div className="cs-notification-menu">{children}</div>;
+}
+
 export function formatDate(value?: string | null) {
   if (!value) return "Never";
   const date = new Date(value);
@@ -335,7 +414,7 @@ export function formatDate(value?: string | null) {
 }
 
 export function humanize(value: unknown) {
-  return String(value ?? "Unknown")
+  return String(value ?? "Data unavailable")
     .replace(/_/g, " ")
     .replace(/-/g, " ")
     .toLowerCase()

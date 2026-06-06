@@ -13,7 +13,9 @@ import {
   FileText,
   GitBranch,
   KeyRound,
+  Layers3,
   Network,
+  RadioTower,
   RefreshCw,
   ScanLine,
   Search,
@@ -102,27 +104,83 @@ export function OverviewView() {
   const summary = useCloudShieldData<AnyRecord>("/api/v1/dashboard/summary", emptyObject);
   const activity = useCloudShieldData<AnyRecord>("/api/v1/platform/activity", emptyObject);
   const readiness = useCloudShieldData<AnyRecord>("/api/v1/platform/readiness", emptyObject);
+  const connector = useCloudShieldData<AnyRecord>("/api/v1/aws/connector/status", emptyObject);
+  const scans = useCloudShieldData<AnyRecord>("/api/v1/inventory/scans", { scanRuns: [] });
+  const approvals = useCloudShieldData<AnyRecord>("/api/v1/governance/approvals", { approvals: [] });
   const events = pickArray(activity.data, ["events", "activity", "items"]).slice(0, 8);
   const modules = pickArray(summary.data, ["modules", "moduleStatus", "cards"]).slice(0, 8);
+  const scanRuns = pickArray(scans.data, ["scanRuns", "runs", "items"]).slice(0, 5);
+  const approvalRows = pickArray(approvals.data, ["approvals", "items"]);
+  const accountCount = pickNumber(summary.data, ["accounts", "accountCount", "awsAccounts"]);
+  const resourceCount = pickNumber(summary.data, ["resources", "resourceCount", "inventoryResources"]);
+  const openFindings = pickNumber(summary.data, ["openFindings", "findings", "securityFindings"]);
+  const pendingApprovals = approvalRows.filter((row: AnyRecord) => String(row.status).toUpperCase().includes("PENDING")).length;
+  const lastScan = scanRuns.find((run: AnyRecord) => String(run.status ?? run.state).toUpperCase().includes("SUCCEEDED")) ?? scanRuns[0];
+  const connectorStatus = connector.data.status?.status ?? connector.data.status ?? connector.data.connectionStatus ?? readiness.data.connectorStatus;
+  const scannerStatus = readiness.data.scannerStatus ?? readiness.data.inventoryScannerStatus ?? (scanRuns.length ? "READY" : "NOT_CONFIGURED");
 
   return (
     <>
       <PageHeader
         breadcrumbs={["CloudShield", "Overview"]}
-        title="Operations dashboard"
-        description="A consolidated console for cloud accounts, inventory, findings, governed work, reporting, and team administration."
+        eyebrow="Cloud operations command center"
+        title="Security posture control plane"
+        description="Live workspace view for account onboarding, connector readiness, inventory freshness, security workflow, governed operations, and evidence reporting."
         primaryAction={<PrimaryLink href="/dashboard/scans">Start inventory workflow</PrimaryLink>}
-        status={<StatusBadge status={readiness.data.status ?? readiness.data.overallStatus} />}
+        secondaryAction={<PrimaryLink href="/dashboard/accounts">Review accounts</PrimaryLink>}
+        status={<StatusBadge status={connectorStatus ?? "NOT_CONFIGURED"} />}
+        meta={
+          <>
+            <span>Connector <StatusBadge status={connectorStatus ?? "NOT_CONFIGURED"} /></span>
+            <span>Scanner <StatusBadge status={scannerStatus} /></span>
+            <span>Last successful scan {formatDate(lastScan?.completedAt ?? lastScan?.finishedAt ?? lastScan?.updatedAt)}</span>
+          </>
+        }
       />
-      <ErrorAndRefresh error={summary.error || activity.error || readiness.error} isRefreshing={summary.isRefreshing || activity.isRefreshing || readiness.isRefreshing} />
+      <ErrorAndRefresh error={summary.error || activity.error || readiness.error || connector.error || scans.error || approvals.error} isRefreshing={summary.isRefreshing || activity.isRefreshing || readiness.isRefreshing || connector.isRefreshing || scans.isRefreshing || approvals.isRefreshing} />
+      <section className="cs-command-hero">
+        <div>
+          <span><RadioTower size={16} /> Workspace signal</span>
+          <h2>{accountCount ? "Cloud coverage is ready for review" : "Awaiting first account registration"}</h2>
+          <p>
+            {accountCount
+              ? "CloudShield is organizing account, resource, finding, scan, and governance records from the current workspace APIs."
+              : "Register an AWS account record to unlock connector validation, inventory sync planning, and posture review workflows."}
+          </p>
+        </div>
+        <div className="cs-command-actions">
+          <PrimaryLink href="/dashboard/accounts">Account registry</PrimaryLink>
+          <PrimaryLink href="/dashboard/security">Finding queue</PrimaryLink>
+        </div>
+      </section>
       <StatGroup>
-        <MetricTile label="AWS accounts" value={pickNumber(summary.data, ["accounts", "accountCount", "awsAccounts"])} detail="Registered cloud accounts" tone="info" />
-        <MetricTile label="Resources" value={pickNumber(summary.data, ["resources", "resourceCount", "inventoryResources"])} detail="Inventory records" />
-        <MetricTile label="Open findings" value={pickNumber(summary.data, ["openFindings", "findings", "securityFindings"])} detail="Security and risk workflow" tone="warning" />
-        <MetricTile label="Reports" value={pickNumber(summary.data, ["reports", "reportCount"])} detail="Generated evidence packages" />
+        <MetricTile label="AWS accounts" value={accountCount} detail="Registered account records" tone="info" icon={<Cloud size={16} />} />
+        <MetricTile label="Resources" value={resourceCount} detail={resourceCount ? "Current inventory records" : "Awaiting first scan"} icon={<Boxes size={16} />} />
+        <MetricTile label="Open findings" value={openFindings} detail="Security and risk workflow" tone={openFindings ? "warning" : "neutral"} icon={<ShieldAlert size={16} />} />
+        <MetricTile label="Pending approvals" value={pendingApprovals} detail="Governed work queue" tone={pendingApprovals ? "warning" : "neutral"} icon={<ClipboardCheck size={16} />} />
       </StatGroup>
+      <div className="cs-command-grid">
+        <Section title="Account posture" description="Onboarding and connector readiness for registered cloud accounts." icon={<Cloud size={16} />} variant="operational">
+          <DetailList
+            items={[
+              { label: "Registered accounts", value: accountCount },
+              { label: "Connector state", value: <StatusBadge status={connectorStatus ?? "NOT_CONFIGURED"} /> },
+              { label: "Scanner readiness", value: <StatusBadge status={scannerStatus} /> },
+              { label: "Last successful scan", value: formatDate(lastScan?.completedAt ?? lastScan?.finishedAt ?? lastScan?.updatedAt) }
+            ]}
+          />
+        </Section>
+        <Section title="Actionable next steps" description="Recommended actions from the current workspace state." icon={<Layers3 size={16} />} variant="action">
+          <div className="cs-next-steps">
+            <ConsoleLink href="/dashboard/accounts">{accountCount ? "Review multi-account coverage" : "Register your first AWS account"}</ConsoleLink>
+            <ConsoleLink href="/dashboard/scans">{scanRuns.length ? "Inspect recent scan history" : "Prepare the first inventory scan"}</ConsoleLink>
+            <ConsoleLink href="/dashboard/security">{openFindings ? "Triage open security findings" : "Open the finding queue"}</ConsoleLink>
+            <ConsoleLink href="/dashboard/reports">Review evidence and reports</ConsoleLink>
+          </div>
+        </Section>
+      </div>
       <div className="cs-two-column">
-        <Section title="Platform modules" description="Current module health reported by the API.">
+        <Section title="Platform modules" description="Current module health reported by the API." icon={<BarChart3 size={16} />} variant="status">
           <DataTable
             columns={["Module", "Status", "Updated"]}
             rows={modules.map((module: AnyRecord) => [
@@ -132,7 +190,7 @@ export function OverviewView() {
             ])}
           />
         </Section>
-        <Section title="Recent activity" description="Latest recorded workspace events.">
+        <Section title="Recent platform activity" description="Latest recorded workspace events." icon={<Activity size={16} />} variant="insight">
           <Timeline
             events={events.map((event: AnyRecord) => ({
               title: text(event.title ?? event.action ?? event.type, "Activity"),
@@ -143,6 +201,18 @@ export function OverviewView() {
           />
         </Section>
       </div>
+      <Section title="Recent scans" description="Inventory sync run history and scanner outcomes." icon={<ScanLine size={16} />} variant="evidence">
+        <DataTable
+          columns={["Run", "Account", "Status", "Started", "Finished"]}
+          rows={scanRuns.map((run: AnyRecord) => [
+            <ConsoleLink key="run" href={`/dashboard/scans/${run.id ?? run.scanRunId}`}>{text(run.id ?? run.scanRunId, "Scan run")}</ConsoleLink>,
+            text(run.awsAccountId ?? run.accountId),
+            <StatusBadge key="status" status={run.status ?? run.state} />,
+            formatDate(run.startedAt ?? run.createdAt),
+            formatDate(run.completedAt ?? run.finishedAt)
+          ])}
+        />
+      </Section>
     </>
   );
 }
@@ -646,10 +716,10 @@ export function SettingsView() {
 
   return (
     <>
-      <PageHeader breadcrumbs={["Administration", "Settings"]} title="Settings" description="Workspace settings, AWS connector readiness, notification preferences, and operational controls." />
+      <PageHeader breadcrumbs={["Administration", "Settings"]} eyebrow="Enterprise administration" title="Settings" description="Workspace administration, access, integration, notifications, evidence, and audit controls." />
       <ErrorAndRefresh error={platform.error || connector.error} isRefreshing={platform.isRefreshing || connector.isRefreshing} />
-      <div className="cs-two-column">
-        <Section title="Workspace">
+      <div className="cs-settings-grid">
+        <Section title="Workspace" icon={<KeyRound size={16} />} variant="detail">
           <DetailList
             items={[
               { label: "Organization", value: text(settings.organizationName ?? settings.name) },
@@ -659,7 +729,7 @@ export function SettingsView() {
             ]}
           />
         </Section>
-        <Section title="AWS connector">
+        <Section title="AWS integration" icon={<Cloud size={16} />} variant="operational">
           <DetailList
             items={[
               { label: "Status", value: <StatusBadge status={status.status ?? status.connectionStatus} /> },
@@ -670,10 +740,44 @@ export function SettingsView() {
           />
         </Section>
       </div>
-      <Section title="Administration">
+      <Section title="Members and access" description="Manage users, roles, teams, and invitations." icon={<Users size={16} />} variant="action">
         <div className="cs-action-grid">
           <PrimaryLink href="/dashboard/settings/members">Manage members</PrimaryLink>
-          <PrimaryLink href="/dashboard/accounts">Review accounts</PrimaryLink>
+          <PrimaryLink href="/dashboard/accounts">Review account access</PrimaryLink>
+        </div>
+      </Section>
+      <div className="cs-settings-grid">
+        <Section title="Security controls" description="Security controls are enforced by the existing backend policies." icon={<ShieldCheck size={16} />} variant="status">
+          <DetailList items={[
+            { label: "Session protection", value: "CSRF and exact-origin validation" },
+            { label: "Access model", value: "Role and membership scoped" },
+            { label: "Tenant isolation", value: "Organization-scoped records" }
+          ]} />
+        </Section>
+        <Section title="Notifications" description="Operational notification preferences and delivery status." icon={<Activity size={16} />} variant="insight">
+          <DetailList items={[
+            { label: "Status", value: text(settings.notificationStatus ?? "Not configured") },
+            { label: "Default channel", value: text(settings.notificationChannel) },
+            { label: "Updated", value: formatDate(settings.notificationsUpdatedAt ?? settings.updatedAt) }
+          ]} />
+        </Section>
+        <Section title="Audit and evidence" description="Evidence and activity records available from reporting workflows." icon={<FileText size={16} />} variant="evidence">
+          <DetailList items={[
+            { label: "Evidence center", value: <ConsoleLink href="/dashboard/compliance">Open evidence center</ConsoleLink> },
+            { label: "Reports", value: <ConsoleLink href="/dashboard/reports">Open report library</ConsoleLink> },
+            { label: "Governance activity", value: <ConsoleLink href="/dashboard/governance">Open audit timeline</ConsoleLink> }
+          ]} />
+        </Section>
+        <Section title="Danger zone" description="No destructive workspace actions are exposed by this frontend." icon={<ShieldAlert size={16} />} variant="warning">
+          <div className="cs-danger-zone">
+            <strong>No supported destructive action</strong>
+            <p>Workspace deletion or irreversible administrative actions are not available in the current API surface.</p>
+          </div>
+        </Section>
+      </div>
+      <Section title="Administration shortcuts" icon={<Layers3 size={16} />} variant="action">
+        <div className="cs-action-grid">
+          <PrimaryLink href="/dashboard/accounts">Account registry</PrimaryLink>
           <PrimaryLink href="/dashboard/reports">Open reports</PrimaryLink>
         </div>
       </Section>
@@ -732,4 +836,3 @@ export function RouteIcon({ name }: { name: string }) {
   };
   return icons[name] ?? <CheckCircle2 size={16} />;
 }
-

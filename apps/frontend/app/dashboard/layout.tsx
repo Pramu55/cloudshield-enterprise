@@ -8,14 +8,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Command,
+  LogOut,
   HelpCircle,
   Menu,
   Search,
   ShieldCheck,
   X
 } from "lucide-react";
-import { useCloudShieldData } from "../../lib/client-api";
-import { LogoutButton } from "./logout-button";
+import { clearCsrfToken, fetchCloudShieldClient, useCloudShieldData } from "../../lib/client-api";
 import { RouteIcon } from "./route-views";
 
 type CurrentUserPayload = {
@@ -91,6 +91,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const user = data.user;
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("cloudshield.sidebar.collapsed");
+    if (saved === "true") setCollapsed(true);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("cloudshield.sidebar.collapsed", String(collapsed));
+  }, [collapsed]);
 
   const visibleGroups = useMemo(() => {
     return navGroups
@@ -100,12 +111,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     setMobileOpen(false);
+    setProfileOpen(false);
+    setNotificationsOpen(false);
   }, [pathname]);
 
   useEffect(() => {
     const links = navGroups.flatMap((group) => group.items.map((item) => item.href));
     links.forEach((href) => router.prefetch(href));
   }, [router]);
+
+  async function logout() {
+    try {
+      await fetchCloudShieldClient("/api/v1/auth/logout", { method: "POST" });
+    } catch {
+      // Session may already be expired; route away either way.
+    }
+    clearCsrfToken();
+    router.replace("/login");
+    router.refresh();
+  }
+
+  const organizationName = user?.organizationName ?? "Workspace";
+  const userName = user?.name ?? user?.email ?? "Signed-in user";
+  const userRole = user?.role ? user.role.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()) : "Member";
 
   const sidebar = (
     <aside className="portal-sidebar" data-collapsed={collapsed}>
@@ -133,6 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               >
                 <RouteIcon name={item.icon} />
                 {!collapsed ? <span>{item.label}</span> : null}
+                {collapsed ? <em role="tooltip">{item.label}</em> : null}
               </Link>
             ))}
           </section>
@@ -167,20 +196,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </label>
           </div>
           <div className="portal-topbar-right">
-            <button className="portal-icon-button" type="button" aria-label="Notifications">
+            <button className="portal-icon-button" onClick={() => setNotificationsOpen((value) => !value)} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
               <Bell size={17} />
             </button>
+            {notificationsOpen ? (
+              <div className="portal-popover portal-notifications">
+                <strong>Notifications</strong>
+                <p>No new notifications.</p>
+              </div>
+            ) : null}
             <button className="portal-icon-button" type="button" aria-label="Help">
               <HelpCircle size={17} />
             </button>
-            <div className="portal-user">
-              <span>{(user?.name ?? user?.email ?? "U").slice(0, 1).toUpperCase()}</span>
-              <div>
-                <strong>{user?.name ?? "Workspace user"}</strong>
-                <p>{user?.organizationName ?? user?.role ?? "CloudShield"}</p>
-              </div>
+            <div className="portal-org" aria-label="Organization">
+              <span>{organizationName}</span>
             </div>
-            <LogoutButton />
+            <button className="portal-user" onClick={() => setProfileOpen((value) => !value)} type="button" aria-haspopup="menu" aria-expanded={profileOpen}>
+              <span>{userName.slice(0, 1).toUpperCase()}</span>
+              <div>
+                <strong>{userName}</strong>
+                <p>{userRole}</p>
+              </div>
+            </button>
+            {profileOpen ? (
+              <div className="portal-popover portal-profile" role="menu">
+                <div className="portal-profile-head">
+                  <span>{userName.slice(0, 1).toUpperCase()}</span>
+                  <div>
+                    <strong>{userName}</strong>
+                    <p>{user?.email ?? "No email reported"}</p>
+                  </div>
+                </div>
+                <dl>
+                  <div><dt>Organization</dt><dd>{organizationName}</dd></div>
+                  <div><dt>Role</dt><dd>{userRole}</dd></div>
+                </dl>
+                <button className="portal-profile-logout" onClick={logout} type="button" role="menuitem">
+                  <LogOut size={15} />
+                  Sign out
+                </button>
+              </div>
+            ) : null}
           </div>
         </header>
         <main className="portal-content">{children}</main>

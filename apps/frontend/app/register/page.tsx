@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { clearCsrfToken, getCsrfToken } from "../../lib/client-api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
@@ -21,6 +21,8 @@ function RegisterForm() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -123,11 +125,21 @@ function RegisterForm() {
             ) : null}
             <label>
               <span>Password</span>
-              <input disabled={isSubmitting} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 8 characters" type="password" value={password} />
+              <div className="auth-password-field">
+                <input disabled={isSubmitting} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 8 characters" type={showPassword ? "text" : "password"} value={password} />
+                <button aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((value) => !value)} type="button">
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </label>
             <label>
               <span>Confirm password</span>
-              <input disabled={isSubmitting} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter password" type="password" value={confirmPassword} />
+              <div className="auth-password-field">
+                <input disabled={isSubmitting} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter password" type={showConfirmPassword ? "text" : "password"} value={confirmPassword} />
+                <button aria-label={showConfirmPassword ? "Hide password" : "Show password"} onClick={() => setShowConfirmPassword((value) => !value)} type="button">
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </label>
 
             {error ? <div className="aws-form-message aws-form-error">{error}</div> : null}
