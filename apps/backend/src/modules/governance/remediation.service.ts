@@ -176,6 +176,32 @@ export async function requestApproval(actor: ActorContext, planId: string) {
   };
 }
 
+async function blockedPlanMutation(actor: ActorContext, plan: { id: string }, blockedReason: string) {
+  const updatedPlan = await prisma.remediationPlan.update({
+    where: { id: plan.id },
+    data: {
+      approvalStatus: "REJECTED",
+      executionStatus: "EXECUTION_BLOCKED",
+      blockedReason
+    },
+    include: remediationInclude
+  });
+
+  const auditEvent = await createGovernanceAuditEvent(actor, {
+    action: "governance.remediation_plan.blocked",
+    targetType: "remediation_plan",
+    targetId: plan.id,
+    metadata: { blockedReason }
+  });
+
+  return {
+    item: toRemediationPlanDto(updatedPlan),
+    auditEvent: toGovernanceActivityDto(auditEvent),
+    ...GovernanceSafety,
+    message: blockedReason
+  };
+}
+
 export async function approvePlan(
   actor: ActorContext,
   planId: string,
@@ -275,6 +301,10 @@ async function decidePlan(
 
   if (!plan) {
     return null;
+  }
+
+  if (status === "APPROVED" && plan.createdById === actor.userId) {
+    return blockedPlanMutation(actor, plan, "Self-approval is blocked for remediation plans.");
   }
 
   const approvalRequest = await prisma.approvalRequest.findFirst({

@@ -323,8 +323,8 @@ async function decideGovernedAwsChange(
   if (body.confirmationToken !== plan.confirmationTokenRequired) {
     return blockedMutation(actor, plan, "Incorrect confirmation token for approval decision.");
   }
-  if (plan.riskLevel === "HIGH" && plan.createdById === actor.userId) {
-    return blockedMutation(actor, plan, "Self-approval is blocked for high-risk governed changes.");
+  if (plan.createdById === actor.userId) {
+    return blockedMutation(actor, plan, "Self-approval is blocked for governed AWS changes.");
   }
 
   const approval = await prisma.approvalRequest.findFirst({

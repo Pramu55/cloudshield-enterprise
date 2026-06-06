@@ -33,6 +33,7 @@ import {
   requestGovernedAwsChangeApproval,
   simulateGovernedAwsChange
 } from "../modules/governance/aws-change-execution.service.js";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 
 const FindingParamsSchema = z.object({
   findingId: z.string().min(1)
@@ -47,6 +48,7 @@ export async function registerRemediationGovernanceRoutes(
 ): Promise<void> {
   app.get("/api/v1/remediation/plans", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_READ);
     return RemediationPlanListResponseSchema.parse({
       items: await listRemediationPlans(auth.organizationId),
       ...GovernanceSafety,
@@ -60,6 +62,7 @@ export async function registerRemediationGovernanceRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_READ);
       const { planId } = PlanParamsSchema.parse(request.params);
       const plan = await getRemediationPlan(auth.organizationId, planId);
 
@@ -80,6 +83,7 @@ export async function registerRemediationGovernanceRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_MANAGE);
       const { findingId } = FindingParamsSchema.parse(request.params);
       const body = CreateRemediationPlanRequestSchema.parse(request.body ?? {});
       const result = await createRemediationPlan(auth, findingId, body);
@@ -101,119 +105,155 @@ export async function registerRemediationGovernanceRoutes(
     "/api/v1/remediation/plans/:planId/request-approval",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(reply, await requestApproval(getAuthContext(request), PlanParamsSchema.parse(request.params).planId))
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.OPERATIONS_PREPARE);
+        return sendPlanMutation(reply, await requestApproval(auth, PlanParamsSchema.parse(request.params).planId));
+      }
   );
 
   app.post(
     "/api/v1/remediation/plans/:planId/approve",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.APPROVALS_DECIDE);
+        return sendPlanMutation(
         reply,
         await approvePlan(
-          getAuthContext(request),
+          auth,
           PlanParamsSchema.parse(request.params).planId,
           GovernanceDecisionRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+      }
   );
 
   app.post(
     "/api/v1/remediation/plans/:planId/reject",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.APPROVALS_DECIDE);
+        return sendPlanMutation(
         reply,
         await rejectPlan(
-          getAuthContext(request),
+          auth,
           PlanParamsSchema.parse(request.params).planId,
           GovernanceDecisionRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+      }
   );
 
   app.post(
     "/api/v1/remediation/plans/:planId/mark-manually-completed",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_MANAGE);
+        return sendPlanMutation(
         reply,
         await markPlanManuallyCompleted(
-          getAuthContext(request),
+          auth,
           PlanParamsSchema.parse(request.params).planId,
           GovernanceDecisionRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+      }
   );
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/simulate",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.OPERATIONS_PREPARE);
+        return sendPlanMutation(
         reply,
         await simulateGovernedAwsChange(
-          getAuthContext(request),
+          auth,
           PlanParamsSchema.parse(request.params).planId,
           GovernedSimulationRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+      }
   );
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/request-approval",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.OPERATIONS_PREPARE);
+        return sendPlanMutation(
         reply,
         await requestGovernedAwsChangeApproval(
-          getAuthContext(request),
+          auth,
           PlanParamsSchema.parse(request.params).planId,
           GovernedApprovalRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+      }
   );
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/approve",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.APPROVALS_DECIDE);
+        return sendPlanMutation(
         reply,
         await approveGovernedAwsChange(
-          getAuthContext(request),
+          auth,
           PlanParamsSchema.parse(request.params).planId,
           GovernedApprovalRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+      }
   );
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/reject",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.APPROVALS_DECIDE);
+        return sendPlanMutation(
         reply,
         await rejectGovernedAwsChange(
-          getAuthContext(request),
+          auth,
           PlanParamsSchema.parse(request.params).planId,
           GovernedApprovalRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+      }
   );
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/execute",
     { preHandler: requireAuth },
     async (request, reply) =>
-      sendPlanMutation(
+      {
+        const auth = getAuthContext(request);
+        requirePermission(auth.role, PERMISSIONS.OPERATIONS_PREPARE);
+        return sendPlanMutation(
         reply,
         await queueGovernedAwsChangeExecution(
-          getAuthContext(request),
+          auth,
           PlanParamsSchema.parse(request.params).planId,
           GovernedExecuteRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+      }
   );
 
   app.get(
@@ -221,6 +261,7 @@ export async function registerRemediationGovernanceRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.OPERATIONS_READ);
       const result = await getGovernedExecutionEvidence(
         auth.organizationId,
         PlanParamsSchema.parse(request.params).planId
@@ -238,6 +279,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.get("/api/v1/governance/approvals", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.APPROVALS_READ);
     return GovernanceApprovalsResponseSchema.parse({
       items: await listApprovals(auth.organizationId),
       ...GovernanceSafety,
@@ -247,6 +289,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.get("/api/v1/governance/activity", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.AUDIT_READ);
     return GovernanceActivityResponseSchema.parse({
       items: await listGovernanceActivity(auth.organizationId),
       ...GovernanceSafety,

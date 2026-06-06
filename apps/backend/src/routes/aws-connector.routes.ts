@@ -13,6 +13,7 @@ import { prisma } from "@cloudshield/database";
 import { getAwsConnectorConfig } from "../modules/aws-connector/aws-connector.config.js";
 import { AwsConnectorService } from "../modules/aws-connector/aws-connector.service.js";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import {
   findAccountForOrganization,
   toAwsAccountDto
@@ -26,6 +27,7 @@ export async function registerAwsConnectorRoutes(
     { preHandler: requireAuth },
     async (request) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
       return getOrganizationConnectorStatus(app, auth.organizationId);
     }
   );
@@ -35,6 +37,7 @@ export async function registerAwsConnectorRoutes(
     { preHandler: requireAuth },
     async (request) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
       return getOrganizationConnectorStatus(app, auth.organizationId);
     }
   );
@@ -43,7 +46,8 @@ export async function registerAwsConnectorRoutes(
     "/api/v1/aws/readiness",
     { preHandler: requireAuth },
     async (request) => {
-      getAuthContext(request);
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
       return AwsCredentialReadinessResponseSchema.parse(
         getAwsCredentialReadiness(app.config)
       );
@@ -55,6 +59,7 @@ export async function registerAwsConnectorRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
       const accountId = accountParamsSchema.parse(request.params).accountId;
       const account = await findAccountForOrganization(
         auth.organizationId,
@@ -87,6 +92,7 @@ export async function registerAwsConnectorRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
       const accountId = accountParamsSchema.parse(request.params).accountId;
       const account = await findAccountForOrganization(
         auth.organizationId,

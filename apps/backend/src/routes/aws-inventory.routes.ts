@@ -2,9 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { AwsInventoryPlanService } from "../modules/aws-inventory/aws-inventory.service.js";
 import { AwsInventoryScannerService } from "../modules/aws-inventory/aws-inventory-scanner.service.js";
-import { AwsInventorySyncService } from "../modules/aws-inventory/aws-inventory-sync.service.js";
 import { InventoryOrchestrationService } from "../modules/aws-inventory/inventory-orchestration.service.js";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import {
   findAccountForOrganization,
   toAwsAccountDto
@@ -18,6 +18,7 @@ export async function registerAwsInventoryRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_SCAN_REQUEST);
       const body = inventoryScanRequestSchema.parse(request.body ?? {});
       const result = await getInventoryOrchestrationService(app).planInventoryScan({
         organizationId: auth.organizationId,
@@ -43,6 +44,7 @@ export async function registerAwsInventoryRoutes(
     { preHandler: requireAuth },
     async (request) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
       const query = inventoryScanListQuerySchema.parse(request.query);
       return getInventoryOrchestrationService(app).listScans(auth.organizationId, query);
     }
@@ -53,6 +55,7 @@ export async function registerAwsInventoryRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
       const { scanRunId } = scanRunParamsSchema.parse(request.params);
       const detail = await getInventoryOrchestrationService(app).getScanDetail(auth.organizationId, scanRunId);
       if (!detail) {
@@ -71,6 +74,7 @@ export async function registerAwsInventoryRoutes(
     { preHandler: requireAuth },
     async (request) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
       return getInventoryOrchestrationService(app).getCoverage(auth.organizationId);
     }
   );
@@ -79,7 +83,8 @@ export async function registerAwsInventoryRoutes(
     "/api/v1/aws/inventory/plan",
     { preHandler: requireAuth },
     async (request) => {
-      getAuthContext(request);
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
       return getInventoryPlanService(app).getPlan();
     }
   );
@@ -89,6 +94,7 @@ export async function registerAwsInventoryRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
       const { accountId } = accountParamsSchema.parse(request.params);
       const account = await findAccountForOrganization(
         auth.organizationId,
@@ -115,6 +121,7 @@ export async function registerAwsInventoryRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_SCAN_REQUEST);
       const { accountId } = accountParamsSchema.parse(request.params);
       const account = await findAccountForOrganization(
         auth.organizationId,
@@ -130,11 +137,21 @@ export async function registerAwsInventoryRoutes(
         return;
       }
 
-      return getInventorySyncService(app).sync({
+      const result = await getInventoryOrchestrationService(app).planInventoryScan({
         organizationId: auth.organizationId,
         userId: auth.userId,
-        account
+        accountIds: [account.id],
+        regions: account.regions,
+        scannerType: "AWS_EC2_INVENTORY_SCAN",
+        dryRun: false,
+        reason: "Requested through account inventory sync endpoint."
       });
+      if (result.status === "CONFLICT") {
+        reply.status(409).send(result);
+        return;
+      }
+      reply.status(result.status === "QUEUED" ? 202 : 200);
+      return result;
     }
   );
 
@@ -143,6 +160,7 @@ export async function registerAwsInventoryRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_SCAN_REQUEST);
       const { accountId } = accountParamsSchema.parse(request.params);
       const account = await findAccountForOrganization(
         auth.organizationId,
@@ -172,6 +190,7 @@ export async function registerAwsInventoryRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
       const { accountId } = accountParamsSchema.parse(request.params);
       const account = await findAccountForOrganization(
         auth.organizationId,
@@ -222,13 +241,6 @@ function getInventoryPlanService(app: FastifyInstance) {
 
 function getInventoryScannerService(app: FastifyInstance) {
   return new AwsInventoryScannerService(app.config.AWS_INVENTORY_SCANNER_MODE);
-}
-
-function getInventorySyncService(app: FastifyInstance) {
-  return new AwsInventorySyncService(
-    app.config,
-    app.config.AWS_INVENTORY_SCANNER_MODE
-  );
 }
 
 function getInventoryOrchestrationService(app: FastifyInstance) {
