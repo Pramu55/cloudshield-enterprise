@@ -1,0 +1,735 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  Activity,
+  ArrowRight,
+  BarChart3,
+  Boxes,
+  CheckCircle2,
+  ClipboardCheck,
+  Cloud,
+  FileText,
+  GitBranch,
+  KeyRound,
+  Network,
+  RefreshCw,
+  ScanLine,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Wallet
+} from "lucide-react";
+import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
+import {
+  DataTable,
+  DetailList,
+  EmptyState,
+  ErrorState,
+  FilterBar,
+  formatDate,
+  humanize,
+  InlineNotice,
+  MetricTile,
+  PageHeader,
+  Section,
+  SourceBadge,
+  StatGroup,
+  StatusBadge,
+  Timeline
+} from "./shared";
+
+type AnyRecord = Record<string, any>;
+
+const emptyObject: AnyRecord = {};
+
+function pickArray(data: any, keys: string[] = []) {
+  if (Array.isArray(data)) return data;
+  for (const key of keys) {
+    const value = data?.[key];
+    if (Array.isArray(value)) return value;
+  }
+  for (const value of Object.values(data ?? {})) {
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+}
+
+function pickNumber(data: any, keys: string[], fallback = 0) {
+  for (const key of keys) {
+    const value = data?.[key];
+    if (typeof value === "number") return value;
+    if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) return Number(value);
+  }
+  return fallback;
+}
+
+function text(value: any, fallback = "None") {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function sourceFor(item: AnyRecord, parent?: AnyRecord) {
+  return item.dataSource ?? item.source ?? parent?.dataSource ?? parent?.source ?? null;
+}
+
+function ErrorAndRefresh({ error, isRefreshing }: { error: string | null; isRefreshing: boolean }) {
+  return <RefreshBadge error={error} isRefreshing={isRefreshing} />;
+}
+
+function ConsoleLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link className="cs-link" href={href}>
+      {children}
+    </Link>
+  );
+}
+
+function PrimaryLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link className="cs-action-primary" href={href}>
+      {children}
+      <ArrowRight size={15} />
+    </Link>
+  );
+}
+
+export function OverviewView() {
+  const summary = useCloudShieldData<AnyRecord>("/api/v1/dashboard/summary", emptyObject);
+  const activity = useCloudShieldData<AnyRecord>("/api/v1/platform/activity", emptyObject);
+  const readiness = useCloudShieldData<AnyRecord>("/api/v1/platform/readiness", emptyObject);
+  const events = pickArray(activity.data, ["events", "activity", "items"]).slice(0, 8);
+  const modules = pickArray(summary.data, ["modules", "moduleStatus", "cards"]).slice(0, 8);
+
+  return (
+    <>
+      <PageHeader
+        breadcrumbs={["CloudShield", "Overview"]}
+        title="Operations dashboard"
+        description="A consolidated console for cloud accounts, inventory, findings, governed work, reporting, and team administration."
+        primaryAction={<PrimaryLink href="/dashboard/scans">Start inventory workflow</PrimaryLink>}
+        status={<StatusBadge status={readiness.data.status ?? readiness.data.overallStatus} />}
+      />
+      <ErrorAndRefresh error={summary.error || activity.error || readiness.error} isRefreshing={summary.isRefreshing || activity.isRefreshing || readiness.isRefreshing} />
+      <StatGroup>
+        <MetricTile label="AWS accounts" value={pickNumber(summary.data, ["accounts", "accountCount", "awsAccounts"])} detail="Registered cloud accounts" tone="info" />
+        <MetricTile label="Resources" value={pickNumber(summary.data, ["resources", "resourceCount", "inventoryResources"])} detail="Inventory records" />
+        <MetricTile label="Open findings" value={pickNumber(summary.data, ["openFindings", "findings", "securityFindings"])} detail="Security and risk workflow" tone="warning" />
+        <MetricTile label="Reports" value={pickNumber(summary.data, ["reports", "reportCount"])} detail="Generated evidence packages" />
+      </StatGroup>
+      <div className="cs-two-column">
+        <Section title="Platform modules" description="Current module health reported by the API.">
+          <DataTable
+            columns={["Module", "Status", "Updated"]}
+            rows={modules.map((module: AnyRecord) => [
+              <span key="name" className="font-semibold">{text(module.name ?? module.module ?? module.label)}</span>,
+              <StatusBadge key="status" status={module.status ?? module.state} />,
+              formatDate(module.updatedAt ?? module.lastUpdatedAt)
+            ])}
+          />
+        </Section>
+        <Section title="Recent activity" description="Latest recorded workspace events.">
+          <Timeline
+            events={events.map((event: AnyRecord) => ({
+              title: text(event.title ?? event.action ?? event.type, "Activity"),
+              description: text(event.description ?? event.summary ?? event.message, ""),
+              time: event.createdAt ?? event.updatedAt ?? event.timestamp,
+              status: event.status ?? event.state
+            }))}
+          />
+        </Section>
+      </div>
+    </>
+  );
+}
+
+export function AccountsView() {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/aws/accounts", { accounts: [] });
+  const accounts = pickArray(data, ["accounts", "items"]);
+
+  return (
+    <>
+      <PageHeader
+        breadcrumbs={["Cloud", "Accounts"]}
+        title="AWS accounts"
+        description="Manage registered AWS account records and validation status from one account registry."
+        primaryAction={<PrimaryLink href="/dashboard/settings">Connector settings</PrimaryLink>}
+      />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Registered accounts" value={accounts.length} tone="info" />
+        <MetricTile label="Connected" value={accounts.filter((account: AnyRecord) => String(account.status ?? account.connectionStatus).includes("CONNECTED")).length} tone="success" />
+        <MetricTile label="Pending validation" value={accounts.filter((account: AnyRecord) => String(account.status ?? account.connectionStatus).includes("PENDING")).length} tone="warning" />
+      </StatGroup>
+      <Section title="Account registry" description="Only records returned by the CloudShield API are shown.">
+        <DataTable
+          columns={["Account", "Account ID", "Region", "Status", "Source", "Updated"]}
+          rows={accounts.map((account: AnyRecord) => [
+            <ConsoleLink key="name" href={`/dashboard/accounts/${account.id ?? account.accountId}`}>{text(account.name ?? account.alias ?? account.accountName, "AWS account")}</ConsoleLink>,
+            <span key="id" className="font-mono text-xs">{text(account.accountId ?? account.awsAccountId ?? account.id)}</span>,
+            text(account.region ?? account.defaultRegion),
+            <StatusBadge key="status" status={account.status ?? account.connectionStatus ?? account.validationStatus} />,
+            <SourceBadge key="source" source={sourceFor(account, data)} />,
+            formatDate(account.updatedAt ?? account.lastValidatedAt)
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function AccountDetailView({ accountId }: { accountId: string }) {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>(`/api/v1/aws/accounts/${accountId}`, emptyObject);
+  const account = data.account ?? data;
+  const inventory = data.inventory ?? {};
+  const findings = pickArray(data, ["findings", "securityFindings"]).slice(0, 8);
+
+  return (
+    <>
+      <PageHeader
+        breadcrumbs={["Cloud", "Accounts", text(account.accountId ?? accountId)]}
+        title={text(account.name ?? account.alias ?? account.accountName, "AWS account")}
+        description="Account metadata, validation status, and related operational records."
+        status={<StatusBadge status={account.status ?? account.connectionStatus ?? account.validationStatus} />}
+      />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <div className="cs-two-column">
+        <Section title="Account details">
+          <DetailList
+            items={[
+              { label: "Cloud account ID", value: <span className="font-mono text-xs">{text(account.accountId ?? account.awsAccountId ?? accountId)}</span> },
+              { label: "Region", value: text(account.region ?? account.defaultRegion) },
+              { label: "Provider", value: text(account.provider ?? "AWS") },
+              { label: "Source", value: <SourceBadge source={sourceFor(account, data)} /> },
+              { label: "Last validation", value: formatDate(account.lastValidatedAt ?? account.updatedAt) }
+            ]}
+          />
+        </Section>
+        <Section title="Inventory freshness">
+          <StatGroup>
+            <MetricTile label="Resources" value={pickNumber(inventory, ["resourceCount", "resources"])} />
+            <MetricTile label="Last scan" value={formatDate(inventory.lastScanAt ?? inventory.lastSuccessfulScanAt)} />
+          </StatGroup>
+        </Section>
+      </div>
+      <Section title="Related findings">
+        <DataTable
+          columns={["Finding", "Severity", "Status", "Updated"]}
+          rows={findings.map((finding: AnyRecord) => [
+            text(finding.title ?? finding.name),
+            <StatusBadge key="severity" status={finding.severity} />,
+            <StatusBadge key="status" status={finding.status ?? finding.workflowStatus} />,
+            formatDate(finding.updatedAt ?? finding.createdAt)
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function InventoryView() {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/inventory/resources", { resources: [] });
+  const resources = pickArray(data, ["resources", "items"]);
+
+  return (
+    <>
+      <PageHeader
+        breadcrumbs={["Cloud", "Inventory"]}
+        title="Resource inventory"
+        description="Browse AWS resource records captured by CloudShield inventory syncs."
+        secondaryAction={<FilterBar><Search size={14} /> Search and filters are applied by the current API view.</FilterBar>}
+      />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Resources" value={resources.length} tone="info" />
+        <MetricTile label="Accounts" value={new Set(resources.map((resource: AnyRecord) => resource.awsAccountId ?? resource.accountId)).size} />
+        <MetricTile label="Regions" value={new Set(resources.map((resource: AnyRecord) => resource.region).filter(Boolean)).size} />
+      </StatGroup>
+      <Section title="Inventory records">
+        <DataTable
+          columns={["Resource", "Type", "Account", "Region", "Status", "Source"]}
+          rows={resources.map((resource: AnyRecord) => [
+            <ConsoleLink key="name" href={`/dashboard/inventory/${resource.id ?? resource.resourceId}`}>{text(resource.name ?? resource.resourceId ?? resource.arn, "Resource")}</ConsoleLink>,
+            text(resource.type ?? resource.resourceType),
+            <span key="account" className="font-mono text-xs">{text(resource.awsAccountId ?? resource.accountId)}</span>,
+            text(resource.region),
+            <StatusBadge key="status" status={resource.status ?? resource.state} />,
+            <SourceBadge key="source" source={sourceFor(resource, data)} />
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function ResourceDetailView({ resourceId }: { resourceId: string }) {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>(`/api/v1/platform/resources/${resourceId}/detail`, emptyObject);
+  const resource = data.resource ?? data;
+  const context = data.context ?? {};
+  const relationships = pickArray(data, ["relationships", "edges", "connectedResources"]);
+
+  return (
+    <>
+      <PageHeader
+        breadcrumbs={["Cloud", "Inventory", text(resource.resourceType ?? resource.type, "Resource")]}
+        title={text(resource.name ?? resource.resourceId ?? resource.arn ?? resourceId)}
+        description="Resource metadata, relationships, and security context returned by the API."
+        status={<StatusBadge status={resource.status ?? resource.state} />}
+      />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <div className="cs-two-column">
+        <Section title="Resource details">
+          <DetailList
+            items={[
+              { label: "Resource ID", value: <span className="font-mono text-xs">{text(resource.resourceId ?? resource.id ?? resourceId)}</span> },
+              { label: "ARN", value: <span className="font-mono text-xs">{text(resource.arn)}</span> },
+              { label: "Type", value: text(resource.type ?? resource.resourceType) },
+              { label: "Account", value: text(resource.awsAccountId ?? resource.accountId) },
+              { label: "Region", value: text(resource.region) },
+              { label: "Source", value: <SourceBadge source={sourceFor(resource, data)} /> }
+            ]}
+          />
+        </Section>
+        <Section title="Context">
+          <DetailList
+            items={[
+              { label: "Risk", value: <StatusBadge status={context.riskLevel ?? context.severity} /> },
+              { label: "Owner", value: text(context.owner ?? resource.owner) },
+              { label: "Updated", value: formatDate(resource.updatedAt ?? context.updatedAt) }
+            ]}
+          />
+        </Section>
+      </div>
+      <Section title="Relationships">
+        <DataTable
+          columns={["Resource", "Relationship", "Status"]}
+          rows={relationships.map((item: AnyRecord) => [
+            text(item.name ?? item.targetResourceId ?? item.resourceId),
+            text(item.relationship ?? item.type),
+            <StatusBadge key="status" status={item.status ?? item.state} />
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function SecurityView() {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/findings/security", { findings: [] });
+  const findings = pickArray(data, ["findings", "items"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Security"]} title="Security findings" description="Prioritized findings and workflow state from CloudShield security analysis." />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Open findings" value={findings.filter((finding: AnyRecord) => !["RESOLVED", "ARCHIVED", "CLOSED"].includes(String(finding.status ?? finding.workflowStatus).toUpperCase())).length} tone="warning" />
+        <MetricTile label="Critical" value={findings.filter((finding: AnyRecord) => String(finding.severity).toUpperCase() === "CRITICAL").length} tone="danger" />
+        <MetricTile label="Resolved" value={findings.filter((finding: AnyRecord) => ["RESOLVED", "CLOSED"].includes(String(finding.status ?? finding.workflowStatus).toUpperCase())).length} tone="success" />
+      </StatGroup>
+      <Section title="Finding queue">
+        <DataTable
+          columns={["Finding", "Severity", "Resource", "Workflow", "Source", "Updated"]}
+          rows={findings.map((finding: AnyRecord) => [
+            text(finding.title ?? finding.name, "Finding"),
+            <StatusBadge key="severity" status={finding.severity} />,
+            text(finding.resourceId ?? finding.resource?.name ?? finding.awsResourceId),
+            <StatusBadge key="status" status={finding.workflowStatus ?? finding.status} />,
+            <SourceBadge key="source" source={sourceFor(finding, data)} />,
+            formatDate(finding.updatedAt ?? finding.createdAt)
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function GovernanceView() {
+  const plans = useCloudShieldData<AnyRecord>("/api/v1/remediation/plans", { plans: [] });
+  const approvals = useCloudShieldData<AnyRecord>("/api/v1/governance/approvals", { approvals: [] });
+  const activity = useCloudShieldData<AnyRecord>("/api/v1/governance/activity", { events: [] });
+  const planRows = pickArray(plans.data, ["plans", "items"]);
+  const approvalRows = pickArray(approvals.data, ["approvals", "items"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Governance"]} title="Governed operations" description="Remediation plans, approvals, owners, and audit events for manual cloud operations." />
+      <ErrorAndRefresh error={plans.error || approvals.error || activity.error} isRefreshing={plans.isRefreshing || approvals.isRefreshing || activity.isRefreshing} />
+      <InlineNotice title="Approval required" tone="info">Operational work is tracked through plans, approvals, owners, and completion evidence.</InlineNotice>
+      <StatGroup>
+        <MetricTile label="Plans" value={planRows.length} />
+        <MetricTile label="Pending approvals" value={approvalRows.filter((row: AnyRecord) => String(row.status).toUpperCase().includes("PENDING")).length} tone="warning" />
+        <MetricTile label="Completed" value={planRows.filter((row: AnyRecord) => String(row.executionStatus ?? row.status).toUpperCase().includes("COMPLETED")).length} tone="success" />
+      </StatGroup>
+      <div className="cs-two-column">
+        <Section title="Remediation plans">
+          <DataTable
+            columns={["Plan", "Owner", "Status", "Updated"]}
+            rows={planRows.map((plan: AnyRecord) => [
+              text(plan.title ?? plan.name),
+              text(plan.ownerName ?? plan.ownerEmail ?? plan.assignee),
+              <StatusBadge key="status" status={plan.executionStatus ?? plan.status} />,
+              formatDate(plan.updatedAt ?? plan.createdAt)
+            ])}
+          />
+        </Section>
+        <Section title="Governance activity">
+          <Timeline
+            events={pickArray(activity.data, ["events", "activity", "items"]).slice(0, 8).map((event: AnyRecord) => ({
+              title: text(event.action ?? event.title ?? event.type, "Governance event"),
+              description: text(event.description ?? event.summary, ""),
+              time: event.createdAt ?? event.timestamp,
+              status: event.status
+            }))}
+          />
+        </Section>
+      </div>
+    </>
+  );
+}
+
+export function AutomationView() {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/automation/latest", emptyObject);
+  const jobs = pickArray(data, ["jobs", "runs", "items", "activity"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Operations", "Automation"]} title="Automation center" description="Latest advisory automation runs, job outcomes, and report workflow status." />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Latest status" value={<StatusBadge status={data.status ?? data.latestStatus} />} />
+        <MetricTile label="Runs" value={jobs.length} />
+        <MetricTile label="Updated" value={formatDate(data.updatedAt ?? data.createdAt)} />
+      </StatGroup>
+      <Section title="Automation runs">
+        <DataTable
+          columns={["Run", "Status", "Summary", "Updated"]}
+          rows={jobs.map((job: AnyRecord) => [
+            text(job.name ?? job.id ?? job.type, "Automation run"),
+            <StatusBadge key="status" status={job.status ?? job.state} />,
+            text(job.summary ?? job.description),
+            formatDate(job.updatedAt ?? job.createdAt)
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function ComplianceView() {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/compliance/evidence-center", { controls: [] });
+  const controls = pickArray(data, ["controls", "evidence", "items"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Security", "Compliance"]} title="Compliance evidence" description="Control status, evidence records, and framework mapping produced by the evidence center." />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Controls" value={controls.length} />
+        <MetricTile label="Passing" value={controls.filter((control: AnyRecord) => String(control.status).toUpperCase().includes("PASS")).length} tone="success" />
+        <MetricTile label="Needs review" value={controls.filter((control: AnyRecord) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
+      </StatGroup>
+      <Section title="Control evidence">
+        <DataTable
+          columns={["Control", "Framework", "Status", "Evidence", "Source"]}
+          rows={controls.map((control: AnyRecord) => [
+            text(control.title ?? control.controlId ?? control.name, "Control"),
+            text(control.framework ?? control.standard),
+            <StatusBadge key="status" status={control.status ?? control.result} />,
+            text(control.evidenceCount ?? control.evidenceItems ?? control.summary),
+            <SourceBadge key="source" source={sourceFor(control, data)} />
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function CostView() {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/findings/cost", { findings: [] });
+  const findings = pickArray(data, ["findings", "items"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Cloud", "Cost"]} title="Cost findings" description="FinOps signals for unused resources, tagging hygiene, and account-level cost governance." />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Findings" value={findings.length} tone="warning" />
+        <MetricTile label="High impact" value={findings.filter((finding: AnyRecord) => String(finding.impact ?? finding.severity).toUpperCase() === "HIGH").length} />
+        <MetricTile label="Estimated savings" value={text(data.estimatedSavings ?? data.summary?.estimatedSavings, "Not reported")} />
+      </StatGroup>
+      <Section title="FinOps queue">
+        <DataTable
+          columns={["Finding", "Impact", "Account", "Status", "Source"]}
+          rows={findings.map((finding: AnyRecord) => [
+            text(finding.title ?? finding.name),
+            <StatusBadge key="impact" status={finding.impact ?? finding.severity} />,
+            text(finding.awsAccountId ?? finding.accountId),
+            <StatusBadge key="status" status={finding.status ?? finding.workflowStatus} />,
+            <SourceBadge key="source" source={sourceFor(finding, data)} />
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function RecommendationsView() {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/recommendations", { recommendations: [] });
+  const recommendations = pickArray(data, ["recommendations", "items"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Security", "Recommendations"]} title="Recommendations" description="Prioritized recommendations built from findings, inventory context, and governance workflow data." />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <Section title="Recommendation backlog">
+        <DataTable
+          columns={["Recommendation", "Priority", "Domain", "Status", "Source"]}
+          rows={recommendations.map((item: AnyRecord) => [
+            text(item.title ?? item.name),
+            <StatusBadge key="priority" status={item.priority ?? item.severity} />,
+            text(item.category ?? item.domain),
+            <StatusBadge key="status" status={item.status ?? item.workflowStatus} />,
+            <SourceBadge key="source" source={sourceFor(item, data)} />
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function GraphView() {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/resources/graph", { nodes: [], edges: [] });
+  const nodes = pickArray(data, ["nodes", "resources"]);
+  const edges = pickArray(data, ["edges", "relationships"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Cloud", "Graph"]} title="Resource graph" description="Relationship map for cloud resources, findings, accounts, and evidence records." />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Nodes" value={nodes.length} tone="info" />
+        <MetricTile label="Relationships" value={edges.length} />
+        <MetricTile label="Resource types" value={new Set(nodes.map((node: AnyRecord) => node.type ?? node.resourceType).filter(Boolean)).size} />
+      </StatGroup>
+      <Section title="Graph records">
+        <DataTable
+          columns={["Node", "Type", "Account", "Status"]}
+          rows={nodes.map((node: AnyRecord) => [
+            text(node.label ?? node.name ?? node.id),
+            text(node.type ?? node.resourceType),
+            text(node.awsAccountId ?? node.accountId),
+            <StatusBadge key="status" status={node.status ?? node.state} />
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function ScansView() {
+  const runs = useCloudShieldData<AnyRecord>("/api/v1/inventory/scans", { scanRuns: [] });
+  const plan = useCloudShieldData<AnyRecord>("/api/v1/aws/inventory/plan", emptyObject);
+  const scanRuns = pickArray(runs.data, ["scanRuns", "runs", "items"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Operations", "Scans"]} title="Inventory scans" description="Readiness, run history, and resource ingestion workflow for AWS inventory sync." />
+      <ErrorAndRefresh error={runs.error || plan.error} isRefreshing={runs.isRefreshing || plan.isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Runs" value={scanRuns.length} />
+        <MetricTile label="Succeeded" value={scanRuns.filter((run: AnyRecord) => String(run.status).toUpperCase().includes("SUCCEEDED")).length} tone="success" />
+        <MetricTile label="Plan status" value={<StatusBadge status={plan.data.status ?? plan.data.readinessStatus} />} />
+      </StatGroup>
+      <Section title="Scan runs">
+        <DataTable
+          columns={["Run", "Account", "Status", "Started", "Finished"]}
+          rows={scanRuns.map((run: AnyRecord) => [
+            <ConsoleLink key="run" href={`/dashboard/scans/${run.id ?? run.scanRunId}`}>{text(run.id ?? run.scanRunId, "Scan run")}</ConsoleLink>,
+            text(run.awsAccountId ?? run.accountId),
+            <StatusBadge key="status" status={run.status ?? run.state} />,
+            formatDate(run.startedAt ?? run.createdAt),
+            formatDate(run.completedAt ?? run.finishedAt)
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function ScanDetailView({ scanRunId }: { scanRunId: string }) {
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>(`/api/v1/inventory/scans/${scanRunId}`, emptyObject);
+  const run = data.scanRun ?? data.run ?? data;
+  const items = pickArray(data, ["resources", "items", "events"]);
+
+  return (
+    <>
+      <PageHeader
+        breadcrumbs={["Operations", "Scans", scanRunId]}
+        title="Scan run detail"
+        description="Run metadata, ingestion results, and event timeline for a single inventory sync."
+        status={<StatusBadge status={run.status ?? run.state} />}
+      />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <div className="cs-two-column">
+        <Section title="Run metadata">
+          <DetailList
+            items={[
+              { label: "Run ID", value: <span className="font-mono text-xs">{scanRunId}</span> },
+              { label: "Account", value: text(run.awsAccountId ?? run.accountId) },
+              { label: "Started", value: formatDate(run.startedAt ?? run.createdAt) },
+              { label: "Finished", value: formatDate(run.completedAt ?? run.finishedAt) }
+            ]}
+          />
+        </Section>
+        <Section title="Run counts">
+          <StatGroup>
+            <MetricTile label="Resources" value={pickNumber(run, ["resourceCount", "resourcesScanned"], items.length)} />
+            <MetricTile label="Errors" value={pickNumber(run, ["errorCount", "errors"])} tone="warning" />
+          </StatGroup>
+        </Section>
+      </div>
+      <Section title="Run records">
+        <DataTable
+          columns={["Record", "Type", "Status", "Updated"]}
+          rows={items.map((item: AnyRecord) => [
+            text(item.name ?? item.resourceId ?? item.title ?? item.id),
+            text(item.type ?? item.resourceType ?? item.eventType),
+            <StatusBadge key="status" status={item.status ?? item.state} />,
+            formatDate(item.updatedAt ?? item.createdAt ?? item.timestamp)
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function ReportsView() {
+  const reports = useCloudShieldData<AnyRecord>("/api/v1/reports", { reports: [] });
+  const summary = useCloudShieldData<AnyRecord>("/api/v1/reports/summary", emptyObject);
+  const rows = pickArray(reports.data, ["reports", "items"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Operations", "Reports"]} title="Reports" description="Generated reports, summaries, and evidence packages for cloud governance stakeholders." />
+      <ErrorAndRefresh error={reports.error || summary.error} isRefreshing={reports.isRefreshing || summary.isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Reports" value={rows.length} />
+        <MetricTile label="Completed" value={rows.filter((row: AnyRecord) => String(row.status).toUpperCase().includes("COMPLETED")).length} tone="success" />
+        <MetricTile label="Latest" value={formatDate(summary.data.latestReportAt ?? rows[0]?.createdAt)} />
+      </StatGroup>
+      <Section title="Report library">
+        <DataTable
+          columns={["Report", "Type", "Status", "Created", "Source"]}
+          rows={rows.map((report: AnyRecord) => [
+            text(report.title ?? report.name ?? report.id, "Report"),
+            text(report.type ?? report.reportType),
+            <StatusBadge key="status" status={report.status ?? report.state} />,
+            formatDate(report.createdAt ?? report.updatedAt),
+            <SourceBadge key="source" source={sourceFor(report, reports.data)} />
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function SettingsView() {
+  const platform = useCloudShieldData<AnyRecord>("/api/v1/platform/settings", emptyObject);
+  const connector = useCloudShieldData<AnyRecord>("/api/v1/aws/connector/status", emptyObject);
+  const settings = platform.data.settings ?? platform.data;
+  const status = connector.data.status ?? connector.data;
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Administration", "Settings"]} title="Settings" description="Workspace settings, AWS connector readiness, notification preferences, and operational controls." />
+      <ErrorAndRefresh error={platform.error || connector.error} isRefreshing={platform.isRefreshing || connector.isRefreshing} />
+      <div className="cs-two-column">
+        <Section title="Workspace">
+          <DetailList
+            items={[
+              { label: "Organization", value: text(settings.organizationName ?? settings.name) },
+              { label: "Environment", value: text(settings.environmentMode ?? settings.environment) },
+              { label: "Region", value: text(settings.region ?? settings.defaultRegion) },
+              { label: "Updated", value: formatDate(settings.updatedAt) }
+            ]}
+          />
+        </Section>
+        <Section title="AWS connector">
+          <DetailList
+            items={[
+              { label: "Status", value: <StatusBadge status={status.status ?? status.connectionStatus} /> },
+              { label: "Validation", value: <StatusBadge status={status.validationStatus ?? status.readinessStatus} /> },
+              { label: "Last checked", value: formatDate(status.lastValidatedAt ?? status.updatedAt) },
+              { label: "Source", value: <SourceBadge source={sourceFor(status, connector.data)} /> }
+            ]}
+          />
+        </Section>
+      </div>
+      <Section title="Administration">
+        <div className="cs-action-grid">
+          <PrimaryLink href="/dashboard/settings/members">Manage members</PrimaryLink>
+          <PrimaryLink href="/dashboard/accounts">Review accounts</PrimaryLink>
+          <PrimaryLink href="/dashboard/reports">Open reports</PrimaryLink>
+        </div>
+      </Section>
+    </>
+  );
+}
+
+export function MembersView() {
+  const members = useCloudShieldData<AnyRecord>("/api/v1/members", { members: [] });
+  const teams = useCloudShieldData<AnyRecord>("/api/v1/teams", { teams: [] });
+  const rows = pickArray(members.data, ["members", "items", "users"]);
+
+  return (
+    <>
+      <PageHeader breadcrumbs={["Administration", "Members"]} title="Members" description="Workspace members, roles, teams, and access status." />
+      <ErrorAndRefresh error={members.error || teams.error} isRefreshing={members.isRefreshing || teams.isRefreshing} />
+      <StatGroup>
+        <MetricTile label="Members" value={rows.length} />
+        <MetricTile label="Teams" value={pickArray(teams.data, ["teams", "items"]).length} />
+        <MetricTile label="Owners" value={rows.filter((row: AnyRecord) => String(row.role).toUpperCase().includes("OWNER") || String(row.role).toUpperCase().includes("ADMIN")).length} />
+      </StatGroup>
+      <Section title="Member directory">
+        <DataTable
+          columns={["Member", "Email", "Role", "Status", "Last active"]}
+          rows={rows.map((member: AnyRecord) => [
+            text(member.name ?? member.user?.name, "Member"),
+            text(member.email ?? member.user?.email),
+            humanize(member.role ?? member.user?.role),
+            <StatusBadge key="status" status={member.status ?? member.invitationStatus ?? "ACTIVE"} />,
+            formatDate(member.lastActiveAt ?? member.updatedAt)
+          ])}
+        />
+      </Section>
+    </>
+  );
+}
+
+export function RouteIcon({ name }: { name: string }) {
+  const icons: Record<string, React.ReactNode> = {
+    overview: <Activity size={16} />,
+    accounts: <Cloud size={16} />,
+    inventory: <Boxes size={16} />,
+    security: <ShieldAlert size={16} />,
+    governance: <ClipboardCheck size={16} />,
+    automation: <RefreshCw size={16} />,
+    compliance: <ShieldCheck size={16} />,
+    cost: <Wallet size={16} />,
+    recommendations: <Sparkles size={16} />,
+    graph: <Network size={16} />,
+    scans: <ScanLine size={16} />,
+    reports: <FileText size={16} />,
+    settings: <KeyRound size={16} />,
+    members: <Users size={16} />,
+    metrics: <BarChart3 size={16} />,
+    branch: <GitBranch size={16} />
+  };
+  return icons[name] ?? <CheckCircle2 size={16} />;
+}
+

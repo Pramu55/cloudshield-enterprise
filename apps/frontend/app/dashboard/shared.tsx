@@ -1,341 +1,207 @@
 import type { ReactNode } from "react";
+import {
+  AlertCircle,
+  Archive,
+  CheckCircle2,
+  Circle,
+  Clock3,
+  Info,
+  Loader2,
+  MinusCircle,
+  XCircle
+} from "lucide-react";
 
-type DashboardPageProps = {
-  title: string;
-  description: string;
-  children?: ReactNode;
+type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "disabled";
+
+export type StatusKey =
+  | "CONNECTED"
+  | "NOT_CONFIGURED"
+  | "READY"
+  | "READY_FOR_VALIDATION"
+  | "BLOCKED"
+  | "RUNNING"
+  | "STARTED"
+  | "SUCCEEDED"
+  | "COMPLETED"
+  | "FAILED"
+  | "PARTIAL"
+  | "PARTIALLY_SUCCEEDED"
+  | "DISABLED"
+  | "PENDING"
+  | "PENDING_APPROVAL"
+  | "ARCHIVED"
+  | "STALE"
+  | string;
+
+const statusMap: Record<string, { label: string; tone: Tone; icon: ReactNode }> = {
+  CONNECTED: { label: "Connected", tone: "success", icon: <CheckCircle2 size={13} /> },
+  VALIDATION_SUCCEEDED: { label: "Verified", tone: "success", icon: <CheckCircle2 size={13} /> },
+  NOT_CONFIGURED: { label: "Not configured", tone: "disabled", icon: <MinusCircle size={13} /> },
+  READY: { label: "Ready", tone: "info", icon: <Info size={13} /> },
+  READY_FOR_VALIDATION: { label: "Ready", tone: "info", icon: <Info size={13} /> },
+  BLOCKED: { label: "Blocked", tone: "warning", icon: <AlertCircle size={13} /> },
+  BLOCKED_DISABLED: { label: "Blocked", tone: "warning", icon: <AlertCircle size={13} /> },
+  RUNNING: { label: "Running", tone: "info", icon: <Loader2 size={13} /> },
+  STARTED: { label: "Running", tone: "info", icon: <Loader2 size={13} /> },
+  SUCCEEDED: { label: "Succeeded", tone: "success", icon: <CheckCircle2 size={13} /> },
+  COMPLETED: { label: "Completed", tone: "success", icon: <CheckCircle2 size={13} /> },
+  FAILED: { label: "Failed", tone: "danger", icon: <XCircle size={13} /> },
+  VALIDATION_FAILED: { label: "Failed", tone: "danger", icon: <XCircle size={13} /> },
+  PARTIAL: { label: "Partial", tone: "warning", icon: <AlertCircle size={13} /> },
+  PARTIALLY_SUCCEEDED: { label: "Partial", tone: "warning", icon: <AlertCircle size={13} /> },
+  DISABLED: { label: "Disabled", tone: "disabled", icon: <MinusCircle size={13} /> },
+  PENDING: { label: "Pending", tone: "warning", icon: <Clock3 size={13} /> },
+  PENDING_APPROVAL: { label: "Pending approval", tone: "warning", icon: <Clock3 size={13} /> },
+  ARCHIVED: { label: "Archived", tone: "disabled", icon: <Archive size={13} /> },
+  STALE: { label: "Stale", tone: "warning", icon: <AlertCircle size={13} /> }
 };
 
-export function DashboardPage({
-  title,
-  description,
-  children
-}: DashboardPageProps) {
-  return (
-    <div className="portal-page">
-      <div className="portal-page-header mb-5">
-        <div>
-          <p className="portal-page-kicker">CloudShield workspace</p>
-          <h2 className="portal-page-title">{title}</h2>
-          <p className="portal-page-description mt-2">
-            {description}
-          </p>
-        </div>
-      </div>
-      {children || <FoundationPanel />}
-    </div>
-  );
-}
-
-export function FoundationPanel() {
-  return (
-    <section className="portal-blade rounded-md border border-line bg-white p-6">
-      <p className="text-sm font-semibold text-ink">Enterprise governance workspace</p>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-        This page is prepared for CloudShield enterprise cloud governance workflows.
-        Current modules use typed contracts, tenant-scoped APIs, sample/demo data,
-        and safe read-only positioning before AWS inventory scanners are introduced.
-      </p>
-    </section>
-  );
-}
-
-type WorkspaceHeroProps = {
-  eyebrow?: string;
-  title: string;
-  description: string;
-  icon?: ReactNode;
-  badges?: Array<{ label: string; tone?: "neutral" | "good" | "warning" | "danger" | "info" }>;
-  actions?: ReactNode;
-  children?: ReactNode;
-};
-
-export function WorkspaceHero({
-  eyebrow,
-  title,
-  description,
-  icon,
-  badges = [],
-  actions,
-  children
-}: WorkspaceHeroProps) {
-  return (
-    <section className="workspace-hero mb-6">
-      <div className="workspace-hero-grid">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            {icon ? <span className="workspace-hero-icon">{icon}</span> : null}
-            {eyebrow ? <span className="workspace-eyebrow">{eyebrow}</span> : null}
-          </div>
-          <h1 className="mt-5 max-w-4xl text-3xl font-bold leading-tight text-white">
-            {title}
-          </h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-            {description}
-          </p>
-          {badges.length ? (
-            <div className="mt-5 flex flex-wrap gap-2">
-              {badges.map((badge, index) => (
-                <StatusBadge key={`${badge.label}-${index}`} tone={badge.tone || "neutral"}>
-                  {badge.label}
-                </StatusBadge>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div className="workspace-hero-side">
-          {children}
-          {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}
-        </div>
-      </div>
-    </section>
-  );
+export function getStatusMeta(status: StatusKey | null | undefined) {
+  if (!status) return { label: "Unknown", tone: "disabled" as Tone, icon: <Circle size={13} /> };
+  return statusMap[String(status).toUpperCase()] ?? {
+    label: humanize(status),
+    tone: "neutral" as Tone,
+    icon: <Circle size={13} />
+  };
 }
 
 export function StatusBadge({
-  children,
-  tone = "neutral"
+  status,
+  label
 }: {
-  children: ReactNode;
-  tone?: "neutral" | "good" | "warning" | "danger" | "info";
+  status?: StatusKey | null;
+  label?: string;
 }) {
-  const toneClass = {
-    neutral: "border-slate-600 bg-slate-800/80 text-slate-200",
-    good: "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
-    warning: "border-amber-400/50 bg-amber-500/10 text-amber-100",
-    danger: "border-red-400/50 bg-red-500/10 text-red-100",
-    info: "border-indigo-300/50 bg-indigo-500/15 text-indigo-100"
-  }[tone];
-
+  const meta = getStatusMeta(status ?? label);
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold ${toneClass}`}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {children}
+    <span className="cs-status" data-tone={meta.tone}>
+      {meta.icon}
+      {label ?? meta.label}
     </span>
   );
 }
 
-export function ProgressRing({
-  value,
-  label,
-  caption
-}: {
-  value: number;
-  label: string;
-  caption?: string;
-}) {
-  const clamped = Math.max(0, Math.min(100, value));
+export function SourceBadge({ source }: { source?: string | null }) {
+  const normalized = source || "UNKNOWN";
   return (
-    <div className="flex items-center gap-4">
-      <div
-        className="progress-ring"
-        style={{ "--progress": `${clamped * 3.6}deg` } as React.CSSProperties}
-      >
-        <div className="progress-ring-core">
-          <span>{clamped}</span>
-        </div>
-      </div>
-      <div>
-        <p className="text-sm font-bold text-white">{label}</p>
-        {caption ? <p className="mt-1 text-xs leading-5 text-slate-300">{caption}</p> : null}
-      </div>
-    </div>
+    <span className="cs-source" data-source={normalized === "AWS_SYNC" ? "aws" : normalized === "SAMPLE" ? "sample" : "other"}>
+      {normalized === "AWS_SYNC" ? "AWS_SYNC" : normalized === "SAMPLE" ? "SAMPLE" : humanize(normalized)}
+    </span>
   );
 }
 
-export function ProgressBars({
-  items
-}: {
-  items: Array<{ label: string; value: number; tone?: "good" | "warning" | "danger" | "info" }>;
-}) {
-  return (
-    <div className="space-y-3">
-      {items.map((item, index) => (
-        <div key={`${item.label}-${index}`}>
-          <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-slate-500">
-            <span>{item.label}</span>
-            <span>{item.value}%</span>
-          </div>
-          <div className="h-2 rounded-full bg-slate-100">
-            <div
-              className={`h-2 rounded-full ${barTone(item.tone)}`}
-              style={{ width: `${Math.max(0, Math.min(100, item.value))}%` }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function barTone(tone?: "good" | "warning" | "danger" | "info") {
-  if (tone === "good") return "bg-emerald-500";
-  if (tone === "warning") return "bg-amber-500";
-  if (tone === "danger") return "bg-red-500";
-  return "bg-indigo-600";
-}
-
-export function ReadinessJourney({
-  steps
-}: {
-  steps: Array<{ label: string; description: string; status: "done" | "active" | "blocked" | "planned" }>;
-}) {
-  return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {steps.map((step, index) => (
-        <div className="journey-step" data-status={step.status} key={`${step.label}-${index}`}>
-          <div className="flex items-center justify-between">
-            <span className="journey-index">{index + 1}</span>
-            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              {step.status}
-            </span>
-          </div>
-          <p className="mt-3 text-sm font-bold text-ink">{step.label}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">{step.description}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function CommandCard({
-  icon,
+export function PageHeader({
+  breadcrumbs = [],
   title,
   description,
-  href,
-  action
+  primaryAction,
+  secondaryAction,
+  status
 }: {
-  icon?: ReactNode;
+  breadcrumbs?: string[];
   title: string;
-  description: string;
-  href?: string;
-  action?: ReactNode;
+  description?: string;
+  primaryAction?: ReactNode;
+  secondaryAction?: ReactNode;
+  status?: ReactNode;
 }) {
-  const content = (
-    <>
-      <div className="flex items-start gap-3">
-        {icon ? <span className="workspace-icon-soft">{icon}</span> : null}
-        <div>
-          <p className="text-sm font-bold text-ink">{title}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+  return (
+    <header className="cs-page-header">
+      <div className="min-w-0">
+        {breadcrumbs.length ? (
+          <div className="cs-breadcrumbs" aria-label="Breadcrumb">
+            {breadcrumbs.map((item, index) => (
+              <span key={`${item}-${index}`}>{item}</span>
+            ))}
+          </div>
+        ) : null}
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <h1>{title}</h1>
+          {status}
         </div>
+        {description ? <p>{description}</p> : null}
       </div>
-      {action ? <div className="mt-4">{action}</div> : null}
-    </>
+      {(primaryAction || secondaryAction) ? (
+        <div className="cs-page-actions">
+          {secondaryAction}
+          {primaryAction}
+        </div>
+      ) : null}
+    </header>
   );
-
-  if (href) {
-    return (
-      <a className="command-card" href={href}>
-        {content}
-      </a>
-    );
-  }
-
-  return <div className="command-card">{content}</div>;
 }
 
-export function InsightPanel({
+export function Section({
   title,
   description,
+  action,
   children
 }: {
   title: string;
   description?: string;
-  children?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <section className="insight-panel">
-      <div className="border-b border-line px-5 py-4">
-        <p className="text-sm font-bold text-ink">{title}</p>
-        {description ? <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p> : null}
+    <section className="cs-section">
+      <div className="cs-section-header">
+        <div>
+          <h2>{title}</h2>
+          {description ? <p>{description}</p> : null}
+        </div>
+        {action}
       </div>
-      <div className="p-5">{children}</div>
+      {children}
     </section>
   );
 }
 
-export function ActivityTimeline({
-  events
+export function MetricTile({
+  label,
+  value,
+  detail,
+  tone = "neutral"
 }: {
-  events: Array<{ title: string; description?: string; time?: string; tone?: "good" | "warning" | "danger" | "info" }>;
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode;
+  tone?: Tone;
 }) {
   return (
-    <div className="activity-timeline">
-      {events.map((event, index) => (
-        <div className="activity-event" data-tone={event.tone || "info"} key={`${event.title}-${event.time || ""}-${index}`}>
-          <span className="activity-dot" />
-          <div className="activity-card">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-xs font-bold text-ink">{event.title}</p>
-              {event.time ? <span className="text-[10px] font-mono text-slate-400">{event.time}</span> : null}
-            </div>
-            {event.description ? <p className="mt-1 text-xs leading-5 text-slate-500">{event.description}</p> : null}
-          </div>
-        </div>
-      ))}
+    <div className="cs-metric" data-tone={tone}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail ? <p>{detail}</p> : null}
     </div>
   );
 }
 
-export function DetailBlade({
-  title,
-  subtitle,
-  children
-}: {
-  title: string;
-  subtitle?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <aside className="detail-blade">
-      <p className="text-sm font-bold text-ink">{title}</p>
-      {subtitle ? <p className="mt-1 text-xs leading-5 text-slate-500">{subtitle}</p> : null}
-      <div className="mt-4">{children}</div>
-    </aside>
-  );
+export function StatGroup({ children }: { children: ReactNode }) {
+  return <div className="cs-stat-group">{children}</div>;
 }
 
-export function StatusMatrix({
-  items
-}: {
-  items: Array<{ label: string; value: string | number | boolean; tone?: "good" | "warning" | "danger" | "info" }>;
-}) {
-  return (
-    <div className="status-matrix">
-      {items.map((item, index) => (
-        <div className="status-matrix-cell" data-tone={item.tone || "info"} key={`${item.label}-${index}`}>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{item.label}</p>
-          <p className="mt-1 text-sm font-bold text-ink">{String(item.value)}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function PremiumDataTable({
+export function DataTable({
   columns,
-  rows
+  rows,
+  empty
 }: {
   columns: string[];
   rows: ReactNode[][];
+  empty?: ReactNode;
 }) {
+  if (!rows.length) {
+    return <EmptyState title="No records found" description="There are no records for this workspace yet." action={empty} />;
+  }
   return (
-    <div className="premium-data-table overflow-x-auto">
-      <table className="min-w-full text-left text-sm">
+    <div className="cs-table-wrap">
+      <table className="cs-table">
         <thead>
-          <tr>
-            {columns.map((column, index) => (
-              <th key={`${column}-${index}`}>{column}</th>
-            ))}
-          </tr>
+          <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
         </thead>
         <tbody>
-          {rows.map((row, index) => (
-            <tr key={index}>
-              {row.map((cell, cellIndex) => (
-                <td key={cellIndex}>{cell}</td>
-              ))}
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}
             </tr>
           ))}
         </tbody>
@@ -344,50 +210,33 @@ export function PremiumDataTable({
   );
 }
 
-export function EvidenceCard({
-  title,
-  meta,
-  status,
-  children
-}: {
-  title: string;
-  meta?: string;
-  status?: string;
-  children?: ReactNode;
-}) {
+export function DetailList({ items }: { items: Array<{ label: string; value: ReactNode }> }) {
   return (
-    <article className="evidence-card">
-      <div className="flex flex-wrap items-center gap-2">
-        {status ? <span className="status-pill border-indigo-200 bg-indigo-50 text-indigo-700">{status}</span> : null}
-        {meta ? <span className="text-[11px] font-semibold text-slate-400">{meta}</span> : null}
-      </div>
-      <p className="mt-3 text-sm font-bold text-ink">{title}</p>
-      {children ? <div className="mt-2 text-xs leading-5 text-slate-500">{children}</div> : null}
-    </article>
+    <dl className="cs-detail-list">
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd>{item.value || "None"}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
-export function GovernanceStep({
-  title,
-  description,
-  state
-}: {
-  title: string;
-  description: string;
-  state: "complete" | "active" | "blocked" | "pending";
-}) {
+export function FilterBar({ children }: { children: ReactNode }) {
+  return <div className="cs-filter-bar">{children}</div>;
+}
+
+export function SearchInput({ label = "Search", placeholder = "Search" }: { label?: string; placeholder?: string }) {
   return (
-    <div className="governance-step" data-state={state}>
-      <span className="governance-step-dot" />
-      <div>
-        <p className="text-xs font-bold text-ink">{title}</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
-      </div>
-    </div>
+    <label className="cs-search-input">
+      <span className="sr-only">{label}</span>
+      <input placeholder={placeholder} type="search" />
+    </label>
   );
 }
 
-export function EmptyWorkspaceState({
+export function EmptyState({
   title,
   description,
   action
@@ -397,10 +246,98 @@ export function EmptyWorkspaceState({
   action?: ReactNode;
 }) {
   return (
-    <div className="empty-workspace-state">
-      <p className="text-sm font-bold text-ink">{title}</p>
-      <p className="mt-1 max-w-md text-sm leading-6 text-slate-500">{description}</p>
-      {action ? <div className="mt-4">{action}</div> : null}
+    <div className="cs-empty">
+      <strong>{title}</strong>
+      <p>{description}</p>
+      {action ? <div>{action}</div> : null}
     </div>
   );
+}
+
+export function LoadingState({ label = "Loading workspace data..." }: { label?: string }) {
+  return (
+    <div className="cs-loading">
+      <Loader2 size={16} />
+      {label}
+    </div>
+  );
+}
+
+export function ErrorState({ message }: { message: string }) {
+  return <InlineNotice tone="warning" title="Data unavailable">{message}</InlineNotice>;
+}
+
+export function InlineNotice({
+  title,
+  children,
+  tone = "info"
+}: {
+  title: string;
+  children?: ReactNode;
+  tone?: Tone;
+}) {
+  return (
+    <div className="cs-notice" data-tone={tone}>
+      <strong>{title}</strong>
+      {children ? <p>{children}</p> : null}
+    </div>
+  );
+}
+
+export function Timeline({
+  events
+}: {
+  events: Array<{ title: string; description?: string; time?: string; status?: string }>;
+}) {
+  if (!events.length) {
+    return <EmptyState title="No recent activity" description="Activity will appear after scans, findings, reports, or governed actions are recorded." />;
+  }
+  return (
+    <ol className="cs-timeline">
+      {events.map((event, index) => (
+        <li key={`${event.title}-${event.time ?? index}`}>
+          <span />
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <strong>{event.title}</strong>
+              {event.status ? <StatusBadge status={event.status} /> : null}
+            </div>
+            {event.description ? <p>{event.description}</p> : null}
+            {event.time ? <time>{formatDate(event.time)}</time> : null}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+export function Tabs({ tabs }: { tabs: Array<{ label: string; children: ReactNode }> }) {
+  return (
+    <div className="cs-tabs">
+      {tabs.map((tab) => (
+        <section key={tab.label}>
+          <h3>{tab.label}</h3>
+          {tab.children}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+export function formatDate(value?: string | null) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(date);
+}
+
+export function humanize(value: unknown) {
+  return String(value ?? "Unknown")
+    .replace(/_/g, " ")
+    .replace(/-/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }

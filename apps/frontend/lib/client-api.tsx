@@ -96,7 +96,7 @@ export function useCloudShieldData<T>(
       })
       .catch(() => {
         if (isActive) {
-          setError("Showing locally bundled fallback data while the API refresh is unavailable.");
+          setError("The API is unavailable. Showing an empty operational state until refresh succeeds.");
         }
       })
       .finally(() => {
