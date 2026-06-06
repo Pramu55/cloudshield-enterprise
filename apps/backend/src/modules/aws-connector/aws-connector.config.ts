@@ -6,6 +6,11 @@ export function getAwsConnectorConfig(env: RuntimeEnv): AwsConnectorConfig {
     mode: env.AWS_CONNECTOR_MODE,
     region: env.AWS_REGION_DEFAULT,
     roleArn: env.AWS_ROLE_ARN,
-    externalId: env.AWS_EXTERNAL_ID
+    externalId: env.AWS_EXTERNAL_ID,
+    executorRoleArn: env.AWS_EXECUTOR_ROLE_ARN,
+    allowedRegions: env.AWS_ALLOWED_REGIONS
+      ? env.AWS_ALLOWED_REGIONS.split(",").map((region) => region.trim()).filter(Boolean)
+      : [env.AWS_REGION_DEFAULT],
+    executionMode: env.AWS_CHANGE_EXECUTION_MODE
   };
 }

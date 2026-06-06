@@ -63,6 +63,12 @@ export default function DashboardLayout({
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authState, setAuthState] = useState<AuthState>("checking");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [scannerBadge, setScannerBadge] = useState<ScannerBadgeState>({
+    label: "AWS not configured",
+    toneClass: "border-slate-200 bg-slate-50 text-slate-700",
+    dotClass: "bg-slate-400",
+    title: "AWS connector status has not loaded yet."
+  });
 
   useEffect(() => {
     navItems.forEach((item) => router.prefetch(item.href));
@@ -94,6 +100,33 @@ export default function DashboardLayout({
       router.replace("/login");
     }
   }, [authState, router]);
+
+  useEffect(() => {
+    if (authState !== "authenticated") return;
+    let isActive = true;
+    fetch(`${API_BASE_URL}/api/v1/aws/connector/status`, {
+      credentials: "include"
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: AwsConnectorStatusPayload | null) => {
+        if (isActive && payload) {
+          setScannerBadge(mapScannerBadge(payload));
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setScannerBadge({
+            label: "Scanner degraded",
+            toneClass: "border-red-200 bg-red-50 text-red-700",
+            dotClass: "bg-red-500",
+            title: "Connector status could not be loaded."
+          });
+        }
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [authState]);
 
   function toggleSidebar() {
     setIsSidebarCollapsed((current) => {
@@ -263,10 +296,14 @@ export default function DashboardLayout({
                 <RefreshCw size={12} className="text-slate-500" />
                 Refresh view
               </button>
-              <span className="status-pill border-amber-200 bg-amber-50/50 text-amber-700 text-[11px] font-semibold py-1">
-                <span className="status-dot-pulse bg-amber-500" />
-                Scanner Offline
-              </span>
+              <Link
+                className={`status-pill text-[11px] font-semibold py-1 ${scannerBadge.toneClass}`}
+                href="/dashboard/accounts"
+                title={scannerBadge.title}
+              >
+                <span className={`status-dot-pulse ${scannerBadge.dotClass}`} />
+                {scannerBadge.label}
+              </Link>
               {currentUser ? <LogoutButton /> : null}
             </div>
           </div>
@@ -301,4 +338,88 @@ function TopbarButton({ label, icon }: { label: string; icon: React.ReactNode })
       {icon}
     </button>
   );
+}
+
+type AwsConnectorStatusPayload = {
+  scannerStatus?: string;
+  scannerStatusLabel?: string;
+  message?: string;
+  blockedReasons?: string[];
+};
+
+type ScannerBadgeState = {
+  label: string;
+  toneClass: string;
+  dotClass: string;
+  title: string;
+};
+
+function mapScannerBadge(payload: AwsConnectorStatusPayload): ScannerBadgeState {
+  const status = payload.scannerStatus ?? "NOT_CONFIGURED";
+  const title = [payload.scannerStatusLabel, payload.message, ...(payload.blockedReasons ?? [])]
+    .filter(Boolean)
+    .join(" - ");
+  const defaultState: Omit<ScannerBadgeState, "title"> = {
+    label: "AWS not configured",
+    toneClass: "border-slate-200 bg-slate-50 text-slate-700",
+    dotClass: "bg-slate-400"
+  };
+  const states: Record<string, Omit<ScannerBadgeState, "title">> = {
+    NOT_CONFIGURED: {
+      ...defaultState
+    },
+    READY_FOR_VALIDATION: {
+      label: "Identity verification required",
+      toneClass: "border-amber-200 bg-amber-50 text-amber-700",
+      dotClass: "bg-amber-500"
+    },
+    IDENTITY_VERIFIED: {
+      label: "Scanner ready",
+      toneClass: "border-indigo-200 bg-indigo-50 text-indigo-700",
+      dotClass: "bg-indigo-500"
+    },
+    INVENTORY_SYNC_QUEUED: {
+      label: "Inventory queued",
+      toneClass: "border-indigo-200 bg-indigo-50 text-indigo-700",
+      dotClass: "bg-indigo-500"
+    },
+    INVENTORY_SYNC_RUNNING: {
+      label: "Inventory running",
+      toneClass: "border-indigo-200 bg-indigo-50 text-indigo-700",
+      dotClass: "bg-indigo-500"
+    },
+    CONNECTED: {
+      label: "AWS connected",
+      toneClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      dotClass: "bg-emerald-500"
+    },
+    PARTIALLY_CONNECTED: {
+      label: "Partially connected",
+      toneClass: "border-amber-200 bg-amber-50 text-amber-700",
+      dotClass: "bg-amber-500"
+    },
+    DEGRADED: {
+      label: "Scanner degraded",
+      toneClass: "border-red-200 bg-red-50 text-red-700",
+      dotClass: "bg-red-500"
+    },
+    FAILED: {
+      label: "Scanner failed",
+      toneClass: "border-red-200 bg-red-50 text-red-700",
+      dotClass: "bg-red-500"
+    },
+    BLOCKED: {
+      label: "Scanner blocked",
+      toneClass: "border-slate-300 bg-slate-100 text-slate-800",
+      dotClass: "bg-slate-500"
+    }
+  };
+
+  const mapped = states[status] ?? defaultState;
+  return {
+    label: mapped.label,
+    toneClass: mapped.toneClass,
+    dotClass: mapped.dotClass,
+    title: title || "Open AWS account readiness."
+  };
 }

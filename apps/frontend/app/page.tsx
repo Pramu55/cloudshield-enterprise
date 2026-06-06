@@ -98,9 +98,9 @@ export default function LandingPage() {
             </Link>
           </div>
           <div className="aws-trust-row">
-            <span><CheckCircle2 size={14} /> No credential storage</span>
-            <span><CheckCircle2 size={14} /> No mutation</span>
-            <span><CheckCircle2 size={14} /> No Terraform apply</span>
+            <span><CheckCircle2 size={14} /> Temporary role-based access</span>
+            <span><CheckCircle2 size={14} /> Approval-controlled changes</span>
+            <span><CheckCircle2 size={14} /> Auditable rollback evidence</span>
           </div>
         </div>
 
@@ -189,14 +189,14 @@ export default function LandingPage() {
             <h2>CloudShield does not run cloud actions from public or auth pages.</h2>
             <p>
               Landing, login, and registration do not run AWS validation, inventory sync,
-              AWS APIs, mutation, Terraform apply, or automatic remediation.
+              AWS APIs, governed changes, Terraform apply, or automatic remediation.
             </p>
           </div>
           <div className="aws-safety-list">
             {[
               "No AWS logos, screenshots, assets, or certification claims",
               "No external fonts, images, or CDN assets",
-              "Credential-ready model remains explicit and gated",
+              "Temporary role-based AWS access remains explicit and gated",
               "Safety labels stay visible in console workflows"
             ].map((item) => (
               <span key={item}><CheckCircle2 size={15} />{item}</span>

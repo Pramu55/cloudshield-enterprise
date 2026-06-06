@@ -441,6 +441,8 @@ export class AwsInventorySyncService {
         ownerTeamId: account.ownerTeamId,
         tags: normalizeTags(tags),
         metadata: normalizeMetadata(metadata, account),
+        source: "AWS_SYNC",
+        lastVerifiedAt: new Date(),
         lastSeenAt: new Date()
       },
       create: {
@@ -455,6 +457,8 @@ export class AwsInventorySyncService {
         ownerTeamId: account.ownerTeamId,
         tags: normalizeTags(tags),
         metadata: normalizeMetadata(metadata, account),
+        source: "AWS_SYNC",
+        lastVerifiedAt: new Date(),
         lastSeenAt: new Date()
       }
     });
@@ -539,14 +543,39 @@ function normalizeTags(tags: Tag[] | undefined) {
 }
 
 function normalizeMetadata(metadata: unknown, account: InventoryAccount) {
+  const raw = JSON.parse(JSON.stringify(metadata ?? {}));
   return {
-    source: "aws-readonly-inventory-sync",
+    source: "AWS_SYNC",
+    ingestion: "aws-readonly-inventory-sync",
     businessUnit: account.businessUnit ?? null,
     environment: account.environment,
     costCenter: account.costCenter ?? null,
     criticality: account.criticality,
-    raw: JSON.parse(JSON.stringify(metadata ?? {}))
+    publicIpAddress: raw.PublicIpAddress ?? null,
+    encrypted: raw.Encrypted ?? null,
+    attachments: raw.Attachments ?? [],
+    inboundRules: normalizeInboundRules(raw.IpPermissions),
+    raw
   };
+}
+
+function normalizeInboundRules(permissions: unknown) {
+  if (!Array.isArray(permissions)) return [];
+  return permissions.flatMap((permission: any) => {
+    const fromPort = permission.FromPort ?? permission.fromPort ?? null;
+    const toPort = permission.ToPort ?? permission.toPort ?? fromPort;
+    const ranges = [
+      ...(permission.IpRanges ?? []).map((range: any) => range.CidrIp),
+      ...(permission.Ipv6Ranges ?? []).map((range: any) => range.CidrIpv6)
+    ].filter(Boolean);
+    return ranges.map((cidr: string) => ({
+      protocol: permission.IpProtocol ?? permission.ipProtocol ?? null,
+      port: fromPort === toPort ? fromPort : null,
+      fromPort,
+      toPort,
+      cidr
+    }));
+  });
 }
 
 function maskArn(arn: string | null) {

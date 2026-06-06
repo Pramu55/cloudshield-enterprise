@@ -23,6 +23,11 @@ function hasOpenPort(resource: ResourceForEvaluation, port: number): { open: boo
   };
 }
 
+function hasTag(tags: Record<string, unknown>, keys: string[]) {
+  const normalized = new Set(Object.keys(tags).map((key) => key.toLowerCase()));
+  return keys.some((key) => normalized.has(key.toLowerCase()));
+}
+
 const SG_OPEN_SSH_TO_WORLD: SecurityRuleDefinition = {
   ruleId: "SG_OPEN_SSH_TO_WORLD",
   title: "Security group allows SSH (port 22) from 0.0.0.0/0 or ::/0",
@@ -125,7 +130,7 @@ const MISSING_OWNER_TAG: SecurityRuleDefinition = {
   recommendation: "Add an 'owner' tag with the responsible team or individual to every resource.",
   evaluate(resource: ResourceForEvaluation): RuleEvaluationResult {
     const tags = resource.tags as Record<string, unknown>;
-    const hasOwner = tags.owner || tags.Owner || tags.OWNER || resource.ownerTeamId;
+    const hasOwner = hasTag(tags, ["owner", "CloudShieldOwner", "CloudShield:Owner"]) || resource.ownerTeamId;
     const evidence = { checked: true, ownerTagPresent: !!hasOwner, ownerTeamId: resource.ownerTeamId };
     if (!hasOwner) {
       return { status: "finding_created", ruleId: this.ruleId, resourceId: resource.id, evidence };
@@ -145,9 +150,33 @@ const MISSING_ENVIRONMENT_TAG: SecurityRuleDefinition = {
   recommendation: "Add an 'environment' tag (e.g., dev, staging, prod) to every resource.",
   evaluate(resource: ResourceForEvaluation): RuleEvaluationResult {
     const tags = resource.tags as Record<string, unknown>;
-    const hasEnv = tags.environment || tags.Environment || tags.ENV || tags.env;
+    const hasEnv = hasTag(tags, ["environment", "Environment", "ENV", "env", "CloudShieldEnvironment", "CloudShield:Environment"]);
     const evidence = { checked: true, environmentTagPresent: !!hasEnv };
     if (!hasEnv) {
+      return { status: "finding_created", ruleId: this.ruleId, resourceId: resource.id, evidence };
+    }
+    return { status: "pass", ruleId: this.ruleId, resourceId: resource.id, evidence };
+  }
+};
+
+const EBS_VOLUME_UNATTACHED: SecurityRuleDefinition = {
+  ruleId: "EBS_VOLUME_UNATTACHED",
+  title: "EBS volume is unattached",
+  description: "Detects EBS volumes that are available or have no active attachments. Unattached volumes can create avoidable cost and data-retention risk.",
+  severity: "LOW",
+  resourceTypes: ["ebs-volume", "EBS_VOLUME"],
+  complianceRefs: ["CIS-inspired storage hygiene", "SOC2-inspired CC8.1 - Asset lifecycle governance"],
+  businessImpact: "Unattached storage can accumulate cost and retain data outside normal workload ownership.",
+  recommendation: "Confirm ownership, backup needs, and retention policy before deleting or reattaching the volume.",
+  evaluate(resource: ResourceForEvaluation): RuleEvaluationResult {
+    if (!this.resourceTypes.includes(resource.resourceType)) {
+      return { status: "not_applicable", ruleId: this.ruleId };
+    }
+    const metadata = resource.metadata as Record<string, unknown>;
+    const attachments = metadata.attachments as unknown[] | undefined;
+    const unattached = resource.status === "available" || (Array.isArray(attachments) && attachments.length === 0);
+    const evidence = { checked: true, status: resource.status, attachmentCount: attachments?.length ?? "unknown" };
+    if (unattached) {
       return { status: "finding_created", ruleId: this.ruleId, resourceId: resource.id, evidence };
     }
     return { status: "pass", ruleId: this.ruleId, resourceId: resource.id, evidence };
@@ -186,6 +215,7 @@ export const SECURITY_RULE_CATALOG: SecurityRuleDefinition[] = [
   SG_OPEN_RDP_TO_WORLD,
   EC2_PUBLIC_IP_PRESENT,
   EBS_UNENCRYPTED,
+  EBS_VOLUME_UNATTACHED,
   MISSING_OWNER_TAG,
   MISSING_ENVIRONMENT_TAG,
   PUBLIC_NETWORK_WITH_COMPUTE_ATTACHMENT

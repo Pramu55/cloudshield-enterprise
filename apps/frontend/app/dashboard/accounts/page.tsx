@@ -134,9 +134,31 @@ const InstantConnectorStatus: AwsConnectorStatusResponse = {
   region: "us-east-1",
   roleArnConfigured: false,
   externalIdConfigured: false,
+  executorRoleConfigured: false,
+  allowedRegions: ["us-east-1"],
   allowedAwsCall: "none",
   inventoryScan: "not_enabled",
   mutationAccess: "not_enabled",
+  scannerStatus: "BLOCKED",
+  scannerStatusLabel: "Blocked",
+  accountEligibility: {
+    registeredAccounts: 0,
+    eligibleNonProductionAccounts: 0,
+    productionAccountsBlocked: 0
+  },
+  accountIdentityVerified: false,
+  lastValidation: null,
+  lastSuccessfulScan: null,
+  lastFailedScan: null,
+  activeScan: null,
+  resourceCount: 0,
+  blockedReasons: ["AWS connector mode is disabled."],
+  cloudTrailReadiness: "required",
+  executionEligibility: {
+    eligible: false,
+    mode: "disabled",
+    reason: "Governed execution is disabled."
+  },
   message: "AWS connector mode is disabled. No AWS API calls were executed."
 };
 
@@ -522,7 +544,7 @@ function CredentialReadinessPanel({
                 <span className="font-bold text-emerald-600">{String(readiness.mutationEnabled)}</span>
               </li>
               <li className="flex justify-between border-b border-line/50 pb-1.5">
-                <span>No Terraform apply</span>
+                <span>Worker-isolated execution</span>
                 <span className="font-bold text-emerald-600">{String(readiness.terraformApplyEnabled)}</span>
               </li>
               <li className="flex justify-between">
