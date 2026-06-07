@@ -343,8 +343,20 @@ export async function getCommandCenterData(organizationId: string): Promise<Comm
 
   const totalScore = components.reduce((acc, c) => acc + c.weightedContribution, 0);
 
+  let assessmentState: "HEALTHY" | "CALCULATED" | "SETUP_INCOMPLETE" | "INSUFFICIENT_DATA" | "NOT_CALCULATED" | "STALE_DATA" = "CALCULATED";
+  if (totalAccounts === 0) {
+    assessmentState = "SETUP_INCOMPLETE";
+  } else if (!hasData || !oldestAccountSyncAt) {
+    assessmentState = "INSUFFICIENT_DATA";
+  } else if (overallFreshnessStatus === "STALE") {
+    assessmentState = "STALE_DATA";
+  } else if (totalScore >= 80) {
+    assessmentState = "HEALTHY";
+  }
+
   const postureScore = {
     totalScore: Math.round(totalScore),
+    assessmentState,
     components,
     dataSource
   };

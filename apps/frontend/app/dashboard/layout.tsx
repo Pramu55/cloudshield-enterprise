@@ -199,9 +199,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="portal-shell" data-collapsed={collapsed}>
       <div className="portal-desktop-sidebar">{sidebar}</div>
-      {mobileOpen ? <div className="portal-mobile-backdrop" onClick={() => setMobileOpen(false)} /> : null}
-      <div className="portal-mobile-sidebar" data-open={mobileOpen}>{sidebar}</div>
-
       <div className="portal-main">
         <header className="portal-topbar">
           <div className="portal-topbar-left flex-1 flex items-center">
@@ -254,6 +251,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
         <main className="portal-content">{children}</main>
       </div>
+
+      {/* Mobile-only elements moved to the end to avoid grid interference */}
+      {mobileOpen ? <div className="portal-mobile-backdrop" onClick={() => setMobileOpen(false)} /> : null}
+      <div className="portal-mobile-sidebar" data-open={mobileOpen}>{sidebar}</div>
     </div>
   );
 }

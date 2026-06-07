@@ -729,6 +729,27 @@ function doesNotContainCredentialLikeValue(value: string | null | undefined) {
   );
 }
 
+export const NotificationSeveritySchema = z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]);
+export type NotificationSeverity = z.infer<typeof NotificationSeveritySchema>;
+
+export const NotificationDtoSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  message: z.string(),
+  severity: NotificationSeveritySchema,
+  read: z.boolean(),
+  createdAt: z.string(),
+  type: z.string().optional(),
+  targetType: z.string().nullable().optional(),
+  targetId: z.string().nullable().optional()
+});
+export type NotificationDto = z.infer<typeof NotificationDtoSchema>;
+
+export const NotificationListResponseSchema = z.object({
+  items: z.array(NotificationDtoSchema)
+});
+export type NotificationListResponse = z.infer<typeof NotificationListResponseSchema>;
+
 export const AwsAccountDtoSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -1511,15 +1532,13 @@ export const ComplianceControlDtoSchema = z.object({
 export type ComplianceControlDto = z.infer<typeof ComplianceControlDtoSchema>;
 
 const ComplianceEvidenceSafetySchema = z.object({
-  sampleData: z.literal(true),
-  sampleDataLabel: z.literal(
-    "Sample demo data - real AWS scanning is not enabled yet."
-  ),
-  officialCertificationClaim: z.literal(false),
-  awsApiCallExecuted: z.literal(false),
-  mutationExecuted: z.literal(false),
-  remediationExecuted: z.literal(false),
-  generatedFromCloudShieldRecordsOnly: z.literal(true),
+  sampleData: z.boolean(),
+  sampleDataLabel: z.string(),
+  officialCertificationClaim: z.boolean(),
+  awsApiCallExecuted: z.boolean(),
+  mutationExecuted: z.boolean(),
+  remediationExecuted: z.boolean(),
+  generatedFromCloudShieldRecordsOnly: z.boolean(),
   message: z.string()
 });
 
@@ -1619,10 +1638,8 @@ export const ReportFormatSchema = z.enum(["json", "json-preview"]);
 export type ReportFormat = z.infer<typeof ReportFormatSchema>;
 
 const ReportSafetyFlagsSchema = z.object({
-  sampleData: z.literal(true),
-  sampleDataLabel: z.literal(
-    "Sample demo data - real AWS scanning is not enabled yet."
-  ),
+  sampleData: z.boolean(),
+  sampleDataLabel: z.string(),
   generatedFromCloudShieldRecordsOnly: z.literal(true),
   officialAuditReportClaim: z.literal(false),
   officialCertificationClaim: z.literal(false),
@@ -1784,6 +1801,38 @@ export const SafetyStatusResponseSchema = z.object({
   message: z.string()
 });
 export type SafetyStatusResponse = z.infer<typeof SafetyStatusResponseSchema>;
+
+export const CloudResourceDtoSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  awsAccountId: z.string(),
+  awsAccountName: z.string().nullable().optional(),
+  provider: z.string(),
+  resourceType: z.string(),
+  resourceId: z.string(),
+  arn: z.string().nullable(),
+  name: z.string().nullable(),
+  region: z.string().nullable(),
+  status: z.string().nullable(),
+  environment: EnvironmentSchema.nullable().optional(),
+  ownerTeamId: z.string().nullable(),
+  ownerTeamName: z.string().nullable().optional(),
+  tags: z.record(z.string(), z.any()),
+  metadata: z.record(z.string(), z.any()),
+  source: z.string(),
+  riskCount: z.number().int(),
+  firstSeenAt: z.string(),
+  lastSeenAt: z.string().nullable(),
+  lastVerifiedAt: z.string().nullable()
+});
+export type CloudResourceDto = z.infer<typeof CloudResourceDtoSchema>;
+
+export const CloudResourceListResponseSchema = z.object({
+  sampleData: z.boolean(),
+  sampleDataLabel: z.string(),
+  items: z.array(CloudResourceDtoSchema)
+});
+export type CloudResourceListResponse = z.infer<typeof CloudResourceListResponseSchema>;
 
 export const ResourceDetailDtoSchema = z.object({
   id: z.string(),

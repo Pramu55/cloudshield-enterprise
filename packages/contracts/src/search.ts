@@ -12,7 +12,9 @@ export type GlobalSearchEntityType =
   | "evidence"
   | "team"
   | "member"
-  | "invitation";
+  | "invitation"
+  | "alias"
+  | "navigation";
 
 export type GlobalSearchResult = {
   id: string;

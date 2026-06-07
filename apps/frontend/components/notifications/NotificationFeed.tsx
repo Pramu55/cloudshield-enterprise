@@ -1,22 +1,15 @@
 import React from "react";
 import { useCloudShieldData } from "../../lib/client-api";
 import { Bell, AlertTriangle, Info, CheckCircle, Clock } from "lucide-react";
-
-type Notification = {
-  id: string;
-  title: string;
-  message: string;
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
-  createdAt: string;
-  read: boolean;
-};
+import { NotificationListResponse, NotificationDto } from "@cloudshield/contracts";
+import { formatDate } from "../../app/dashboard/shared";
 
 export function NotificationFeed() {
-  const { data, error, isRefreshing } = useCloudShieldData<{ notifications: Notification[] }>("/api/v1/notifications", { notifications: [] });
+  const { data, error, isRefreshing } = useCloudShieldData<NotificationListResponse>("/api/v1/notifications", { items: [] });
 
-  const notifications = data?.notifications || [];
+  const notifications = data?.items || [];
 
-  const getIcon = (severity: string) => {
+  const getIcon = (severity: NotificationDto["severity"]) => {
     switch (severity) {
       case "CRITICAL":
       case "HIGH":
@@ -31,27 +24,30 @@ export function NotificationFeed() {
   };
 
   return (
-    <div className="portal-popover portal-notifications absolute top-12 right-10 w-80 max-h-[28rem] overflow-y-auto bg-white border border-slate-200 shadow-xl rounded-md z-50 flex flex-col">
-      <div className="p-3 border-b border-slate-100 font-semibold flex justify-between items-center bg-slate-50 sticky top-0">
-        <span>Notifications</span>
-        <button className="text-xs text-blue-600 hover:text-blue-800">Mark all read</button>
+    <div className="portal-popover portal-notifications absolute top-14 right-10 w-[24rem] max-h-[32rem] overflow-y-auto bg-white border border-slate-200 shadow-2xl rounded-2xl z-50 flex flex-col">
+      <div className="px-5 py-4 border-b border-slate-100 font-bold flex justify-between items-center bg-white sticky top-0 z-10">
+        <span className="text-slate-900">Notifications</span>
+        <button className="text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">Mark all read</button>
       </div>
-      <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {notifications.length === 0 ? (
-          <div className="p-4 text-center text-sm text-slate-500 flex flex-col items-center gap-2">
-            <CheckCircle size={24} className="text-emerald-500" />
-            <p>You're all caught up!</p>
+          <div className="py-12 px-6 text-center text-sm text-slate-500 flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center">
+              <CheckCircle size={24} className="text-emerald-500" />
+            </div>
+            <p className="font-semibold text-slate-900">You're all caught up!</p>
+            <p className="text-xs text-slate-400">New alerts and operational updates will appear here.</p>
           </div>
         ) : (
           notifications.map(n => (
-            <div key={n.id} className={`text-sm p-3 border rounded flex gap-3 ${n.read ? 'bg-white border-slate-100 opacity-70' : 'bg-blue-50 border-blue-100'}`}>
-              <div className="mt-0.5">{getIcon(n.severity)}</div>
+            <div key={n.id} className={`text-sm p-4 border rounded-xl flex gap-4 transition-all hover:shadow-sm ${n.read ? 'bg-white border-slate-100 opacity-60' : 'bg-blue-50/50 border-blue-100 shadow-sm'}`}>
+              <div className="mt-1 flex-shrink-0">{getIcon(n.severity)}</div>
               <div className="flex-1">
-                <strong className="text-slate-800 block mb-0.5">{n.title}</strong>
-                <p className="text-xs text-slate-600 leading-relaxed">{n.message}</p>
-                <div className="flex items-center gap-1 mt-2 text-[10px] text-slate-400 font-mono">
+                <strong className={`block mb-1 ${n.read ? 'text-slate-600 font-bold' : 'text-slate-900 font-extrabold'}`}>{n.title}</strong>
+                <p className="text-xs text-slate-500 leading-relaxed">{n.message}</p>
+                <div className="flex items-center gap-2 mt-3 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                   <Clock size={10} />
-                  {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatDate(n.createdAt)}
                 </div>
               </div>
             </div>

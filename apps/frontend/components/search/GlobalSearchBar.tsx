@@ -81,9 +81,9 @@ export function GlobalSearchBar() {
       }
       return null;
     }
-    
+
     if (staticAliases.length === 0) return response;
-    
+
     return {
       ...response,
       total: response.total + staticAliases.length,
@@ -152,7 +152,7 @@ export function GlobalSearchBar() {
           `/api/v1/search?q=${encodeURIComponent(query.trim())}`,
           { signal: controller.signal }
         );
-        
+
         // Stale protection
         if (!controller.signal.aborted) {
           setResponse(data);
@@ -242,7 +242,7 @@ export function GlobalSearchBar() {
         <div className="pl-3 pr-2 flex items-center justify-center text-slate-400 dark:text-slate-500">
           <Search size={16} />
         </div>
-        
+
         <input
           ref={inputRef}
           type="text"
@@ -265,7 +265,7 @@ export function GlobalSearchBar() {
 
         <div className="pr-2 flex items-center space-x-1">
           {loading && <Loader2 size={14} className="text-cyan-500 animate-spin mr-1" />}
-          
+
           {query && !loading && (
             <button 
               type="button" 
@@ -290,7 +290,8 @@ export function GlobalSearchBar() {
 
       {open && (
         <div className="absolute top-[calc(100%+8px)] left-0 right-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md shadow-xl overflow-hidden max-h-[70vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-200 origin-top">
-          <div className="overflow-y-auto overscroll-contain flex-1 custom-scrollbar">
+
+...          <div className="overflow-y-auto overscroll-contain flex-1 custom-scrollbar">
             <GlobalSearchDropdown
               query={query}
               loading={loading}

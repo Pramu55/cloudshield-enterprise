@@ -27,6 +27,7 @@ import type {
   AwsInventoryPlanResponse,
   AwsInventoryStartResponse,
   CreateAwsAccountRequest,
+  TeamDto,
   UpdateAwsAccountRequest
 } from "@cloudshield/contracts";
 import { fetchCloudShieldClient, RefreshBadge, useCloudShieldData } from "../../lib/client-api";
@@ -154,7 +155,7 @@ export function AccountsWorkspace() {
   const failureCount = accounts.filter((account) => ["AUTH_FAILED", "VALIDATION_FAILED", "PERMISSION_DENIED"].includes(account.connectionStatus)).length;
   const editingAccount = useMemo(() => accounts.find((account) => account.id === form.id), [accounts, form.id]);
 
-  const teamsState = useCloudShieldData<{ teams: any[] }>("/api/v1/teams", { teams: [] });
+  const teamsState = useCloudShieldData<{ teams: TeamDto[] }>("/api/v1/teams", { teams: [] });
 
   function refresh() {
     setRefreshNonce((value) => value + 1);
@@ -271,7 +272,7 @@ export function AccountsWorkspace() {
       {!canManageAccounts ? (
         <InlineNotice title="Read-only account access" tone="info">Your role can view account records. Account registration, validation, synchronization, and archive actions require account management permissions.</InlineNotice>
       ) : null}
-      <div className="cs-account-workspace">
+      <div className="cs-account-workspace mt-8 gap-8">
         <Section title="Account registry" description="Clean account table with workflow commands kept in a compact action area." icon={<Cloud size={16} />} variant="operational">
           <DataTable
             columns={["Account", "Environment", "Regions", "Connector", "Last scan", "Source", "Actions"]}
@@ -425,7 +426,7 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
               />
             </div>
           </Section>
-          <div className="cs-two-column">
+          <div className="cs-two-column mt-8 gap-8">
             <Section title="Account details" icon={<KeyRound size={16} />} variant="detail">
               <DetailList items={[
                 { label: "Alias", value: account.name },
@@ -516,7 +517,7 @@ function AccountCommandBar({
       ? inventoryPlan.message
       : undefined;
   return (
-    <div className="cs-account-actions">
+    <div className="cs-account-actions gap-3">
       <Link className="cs-button-secondary" href={`/dashboard/accounts/${account.id}`}>Open</Link>
       {onEdit ? <ActionButton icon={<Edit3 size={14} />} label="Edit" disabled={!canManageAccounts || Boolean(activeAction)} onClick={onEdit} /> : null}
       <ActionButton icon={<CheckCircle2 size={14} />} label="Validate registry" active={actionMatches(activeAction, "registry", account.id)} activeLabel="Validating registry..." disabled={!canManageAccounts || Boolean(activeAction)} onClick={onRegistry} />
@@ -577,7 +578,7 @@ function AccountFormPanel({
 }) {
   return (
     <Section title={editingAccount ? "Edit account" : "Register account"} description="CloudShield registry metadata only. Do not enter credentials or secrets." icon={<Plus size={16} />} variant="action">
-      <div className="cs-account-form">
+      <div className="cs-account-form gap-6">
         <Field label="Alias" value={form.name} disabled={!canManageAccounts} onChange={(value) => onChange({ ...form, name: value })} />
         <Field label="AWS account ID" value={form.accountId} disabled={!canManageAccounts} onChange={(value) => onChange({ ...form, accountId: value })} />
         <label>
@@ -595,12 +596,12 @@ function AccountFormPanel({
         </label>
         <label>
           <span>Regions (comma separated)</span>
-          <div className="flex gap-2 mb-2">
+          <div className="flex flex-wrap gap-2 mb-3">
              {allowedRegions?.map(region => (
                 <button
                   key={region}
                   type="button"
-                  className={`px-2 py-1 text-xs rounded border ${form.regions.includes(region) ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-slate-50 border-slate-200 text-slate-600"} ${!canManageAccounts ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${form.regions.includes(region) ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"} ${!canManageAccounts ? "opacity-50 cursor-not-allowed" : ""}`}
                   disabled={!canManageAccounts}
                   onClick={() => {
                     const current = form.regions.split(",").map(r => r.trim()).filter(Boolean);
@@ -619,9 +620,9 @@ function AccountFormPanel({
         </label>
         <label>
           <span>Description</span>
-          <textarea disabled={!canManageAccounts} value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} />
+          <textarea className="min-h-[120px]" disabled={!canManageAccounts} value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} />
         </label>
-        <div className="cs-form-actions">
+        <div className="cs-form-actions mt-4 gap-4">
           <button className="cs-button" disabled={!canManageAccounts || Boolean(activeAction)} onClick={onSave} type="button">
             {actionMatches(activeAction, "save", form.id) ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
             {actionMatches(activeAction, "save", form.id) ? "Saving registry metadata..." : editingAccount ? "Save changes" : "Register account"}
@@ -683,9 +684,9 @@ function ConsoleAccountLink({ account }: { account: AwsAccountDto }) {
 
 function Guardrail({ title, body }: { title: string; body: string }) {
   return (
-    <article>
-      <strong>{title}</strong>
-      <p>{body}</p>
+    <article className="flex flex-col gap-3">
+      <strong className="text-slate-900">{title}</strong>
+      <p className="text-sm text-slate-500 leading-relaxed">{body}</p>
     </article>
   );
 }

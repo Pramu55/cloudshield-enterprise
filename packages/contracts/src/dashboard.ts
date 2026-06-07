@@ -71,6 +71,14 @@ export type PostureScoreComponent = z.infer<typeof PostureScoreComponentSchema>;
 
 export const PostureScoreSchema = z.object({
   totalScore: z.number().int(),
+  assessmentState: z.enum([
+    "HEALTHY",
+    "CALCULATED",
+    "SETUP_INCOMPLETE",
+    "INSUFFICIENT_DATA",
+    "NOT_CALCULATED",
+    "STALE_DATA"
+  ]),
   components: z.array(PostureScoreComponentSchema),
   dataSource: DataSourceLabelSchema
 });
