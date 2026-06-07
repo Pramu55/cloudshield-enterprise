@@ -18,6 +18,7 @@ import {
 import { clearCsrfToken, fetchCloudShieldClient, useCloudShieldData } from "../../lib/client-api";
 import { RouteIcon } from "./route-views";
 import { GlobalSearchBar } from "../../components/search/GlobalSearchBar";
+import { NotificationFeed } from "../../components/notifications/NotificationFeed";
 
 type CurrentUserPayload = {
   user?: {
@@ -210,16 +211,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <GlobalSearchBar />
           </div>
           <div className="portal-topbar-right">
-            <button className="portal-icon-button" onClick={() => setNotificationsOpen((value) => !value)} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
+            <button className="portal-icon-button relative" onClick={() => setNotificationsOpen((value) => !value)} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
               <Bell size={17} />
+              {/* Optional: Add badge if unread notifications exist */}
             </button>
-            {notificationsOpen ? (
-              <div className="portal-popover portal-notifications">
-                <strong>Notifications</strong>
-                <p>No new notifications.</p>
-              </div>
-            ) : null}
-            <button className="portal-icon-button" type="button" aria-label="Help">
+            {notificationsOpen ? <NotificationFeed /> : null}
+            <button className="portal-icon-button" onClick={() => {
+              window.open('/docs', '_blank');
+            }} type="button" aria-label="Help">
               <HelpCircle size={17} />
             </button>
             <div className="portal-org" aria-label="Organization">

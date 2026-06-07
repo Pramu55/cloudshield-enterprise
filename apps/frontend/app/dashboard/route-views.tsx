@@ -186,13 +186,27 @@ export function OverviewView() {
       <div className="cs-two-column mt-6">
         <Section title="Enterprise Posture Score" description="Deterministic weighted scoring based on real data." icon={<BarChart3 size={16} />} variant="insight">
           <div className="mb-6 flex items-center gap-4 border-b border-slate-100 pb-4">
-            <div className="text-4xl font-black" style={{ color: getScoreColor(postureScore.totalScore) }}>
-              {postureScore.totalScore}
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-slate-800">Overall Grade</div>
-              <div className="text-xs text-slate-500">Out of 100</div>
-            </div>
+            {postureScore.assessmentState === "SETUP_INCOMPLETE" || postureScore.assessmentState === "INSUFFICIENT_DATA" || postureScore.assessmentState === "NOT_CALCULATED" ? (
+              <>
+                <div className="text-3xl font-black text-slate-300">
+                  N/A
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-800">Score Not Available</div>
+                  <div className="text-xs text-slate-500">{postureScore.assessmentState.replace("_", " ")}</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-4xl font-black" style={{ color: getScoreColor(postureScore.totalScore) }}>
+                  {postureScore.totalScore}
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-800">Overall Grade</div>
+                  <div className="text-xs text-slate-500">Out of 100</div>
+                </div>
+              </>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             {postureScore.components.map(c => <PostureBar key={c.key} component={c} />)}

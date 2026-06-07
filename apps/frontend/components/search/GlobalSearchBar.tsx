@@ -53,10 +53,51 @@ export function GlobalSearchBar() {
     localStorage.removeItem("cloudshield.search.recent");
   }, []);
 
+  const staticAliases = useMemo(() => {
+    if (!query || query.trim().length < 2) return [];
+    const qLower = query.toLowerCase();
+    const ALIASES = [
+      { id: "nav-settings", type: "alias", title: "Workspace Settings", subtitle: "Navigation", href: "/dashboard/settings" },
+      { id: "nav-members", type: "alias", title: "Members & Access", subtitle: "Navigation", href: "/dashboard/settings/members" },
+      { id: "nav-accounts", type: "alias", title: "AWS Accounts Registry", subtitle: "Navigation", href: "/dashboard/accounts" },
+      { id: "nav-scans", type: "alias", title: "Inventory Scans", subtitle: "Navigation", href: "/dashboard/scans" },
+      { id: "nav-compliance", type: "alias", title: "Compliance Evidence", subtitle: "Navigation", href: "/dashboard/compliance" },
+      { id: "nav-security", type: "alias", title: "Security Findings", subtitle: "Navigation", href: "/dashboard/security" },
+      { id: "nav-reports", type: "alias", title: "Report Library", subtitle: "Navigation", href: "/dashboard/reports" }
+    ];
+    return ALIASES.filter(a => a.title.toLowerCase().includes(qLower) || a.id.includes(qLower));
+  }, [query]);
+
+  const enhancedResponse = useMemo(() => {
+    if (!response || response.query !== query) {
+      if (loading) return null;
+      if (staticAliases.length > 0) {
+        return {
+          query,
+          total: staticAliases.length,
+          generatedAt: new Date().toISOString(),
+          groups: [{ type: "navigation", label: "Quick Navigation", results: staticAliases, hasMore: false }]
+        } as unknown as GlobalSearchResponse;
+      }
+      return null;
+    }
+    
+    if (staticAliases.length === 0) return response;
+    
+    return {
+      ...response,
+      total: response.total + staticAliases.length,
+      groups: [
+        { type: "navigation", label: "Quick Navigation", results: staticAliases, hasMore: false },
+        ...response.groups
+      ]
+    } as unknown as GlobalSearchResponse;
+  }, [response, query, staticAliases, loading]);
+
   const flatResults = useMemo(() => {
-    if (!response || response.query !== query) return [];
-    return response.groups.flatMap(g => g.results);
-  }, [response, query]);
+    if (!enhancedResponse) return [];
+    return enhancedResponse.groups.flatMap(g => g.results);
+  }, [enhancedResponse]);
 
   // Handle global shortcuts
   useEffect(() => {
@@ -254,7 +295,7 @@ export function GlobalSearchBar() {
               query={query}
               loading={loading}
               error={error}
-              response={response}
+              response={enhancedResponse}
               recent={recent}
               selectedIndex={selectedIndex}
               flatResults={flatResults}

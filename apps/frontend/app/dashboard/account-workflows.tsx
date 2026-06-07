@@ -154,6 +154,8 @@ export function AccountsWorkspace() {
   const failureCount = accounts.filter((account) => ["AUTH_FAILED", "VALIDATION_FAILED", "PERMISSION_DENIED"].includes(account.connectionStatus)).length;
   const editingAccount = useMemo(() => accounts.find((account) => account.id === form.id), [accounts, form.id]);
 
+  const teamsState = useCloudShieldData<{ teams: any[] }>("/api/v1/teams", { teams: [] });
+
   function refresh() {
     setRefreshNonce((value) => value + 1);
   }
@@ -258,7 +260,7 @@ export function AccountsWorkspace() {
           </>
         }
       />
-      <RefreshBadge error={accountsState.error || connectorState.error || inventoryPlanState.error || currentUserState.error} isRefreshing={accountsState.isRefreshing || connectorState.isRefreshing || inventoryPlanState.isRefreshing || currentUserState.isRefreshing} />
+      <RefreshBadge error={accountsState.error || connectorState.error || inventoryPlanState.error || currentUserState.error || teamsState.error} isRefreshing={accountsState.isRefreshing || connectorState.isRefreshing || inventoryPlanState.isRefreshing || currentUserState.isRefreshing || teamsState.isRefreshing} />
       {feedback ? <InlineNotice title={feedback.title} tone={feedback.tone}>{feedback.message}</InlineNotice> : null}
       <StatGroup>
         <MetricTile label="Registered accounts" value={accounts.length} tone="info" icon={<Cloud size={16} />} />
@@ -307,6 +309,8 @@ export function AccountsWorkspace() {
           canManageAccounts={canManageAccounts}
           editingAccount={editingAccount}
           form={form}
+          teams={teamsState.data.teams}
+          allowedRegions={connectorState.data.allowedRegions}
           onCancel={() => setForm(emptyForm)}
           onChange={setForm}
           onSave={saveAccount}
@@ -555,6 +559,8 @@ function AccountFormPanel({
   editingAccount,
   activeAction,
   canManageAccounts,
+  teams,
+  allowedRegions,
   onChange,
   onCancel,
   onSave
@@ -563,6 +569,8 @@ function AccountFormPanel({
   editingAccount?: AwsAccountDto;
   activeAction: ActionState;
   canManageAccounts: boolean;
+  teams?: any[];
+  allowedRegions?: string[];
   onChange: (form: AccountFormState) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -578,8 +586,37 @@ function AccountFormPanel({
             {environmentOptions.map((environment) => <option key={environment} value={environment}>{environment}</option>)}
           </select>
         </label>
-        <Field label="Owner team ID" value={form.ownerTeamId} disabled={!canManageAccounts} onChange={(value) => onChange({ ...form, ownerTeamId: value })} />
-        <Field label="Regions" value={form.regions} disabled={!canManageAccounts} onChange={(value) => onChange({ ...form, regions: value })} />
+        <label>
+          <span>Owner team</span>
+          <select disabled={!canManageAccounts} value={form.ownerTeamId} onChange={(event) => onChange({ ...form, ownerTeamId: event.target.value })}>
+            <option value="">Unassigned</option>
+            {teams?.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Regions (comma separated)</span>
+          <div className="flex gap-2 mb-2">
+             {allowedRegions?.map(region => (
+                <button
+                  key={region}
+                  type="button"
+                  className={`px-2 py-1 text-xs rounded border ${form.regions.includes(region) ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-slate-50 border-slate-200 text-slate-600"} ${!canManageAccounts ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={!canManageAccounts}
+                  onClick={() => {
+                    const current = form.regions.split(",").map(r => r.trim()).filter(Boolean);
+                    if (current.includes(region)) {
+                      onChange({ ...form, regions: current.filter(r => r !== region).join(", ") });
+                    } else {
+                      onChange({ ...form, regions: [...current, region].join(", ") });
+                    }
+                  }}
+                >
+                  {region}
+                </button>
+             ))}
+          </div>
+          <input disabled={!canManageAccounts} value={form.regions} onChange={(event) => onChange({ ...form, regions: event.target.value })} placeholder="us-east-1, us-west-2" />
+        </label>
         <label>
           <span>Description</span>
           <textarea disabled={!canManageAccounts} value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} />

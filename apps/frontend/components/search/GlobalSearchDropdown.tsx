@@ -31,6 +31,7 @@ function ResultIcon({ type }: { type: string }) {
     case "resource": return <File size={14} className="text-blue-500" />;
     case "team":
     case "member": return <ArrowRight size={14} className="text-indigo-400" />;
+    case "alias": return <ArrowRight size={14} className="text-cyan-500" />;
     default: return <File size={14} className="text-slate-400" />;
   }
 }
