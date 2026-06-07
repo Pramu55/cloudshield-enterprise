@@ -50,15 +50,82 @@ test("Teams Endpoints", async (t) => {
     registeredUserId = body.user.id;
     registeredOrgId = body.organization.id;
 
-    const sessionCookieObj = res.cookies.find(c => c.name === "cloudshield_session");
-    sessionCookie += `; cloudshield_session=${sessionCookieObj?.value}`;
+    const sessionCookieObj = res.cookies.find(
+      (cookie) => cookie.name === "cloudshield_session"
+    );
+
+    assert.ok(
+      sessionCookieObj?.value,
+      `Registration did not return cloudshield_session. Cookies: ${res.cookies
+        .map((cookie) => cookie.name)
+        .join(", ")}`
+    );
+
+    sessionCookie = `_csrf=${resCsrf.cookies.find(
+      (cookie) => cookie.name === "_csrf"
+    )?.value}; cloudshield_session=${sessionCookieObj.value}`;
 
     const newCsrfRes = await app.inject({
       method: "GET",
       url: "/api/v1/auth/csrf",
       headers: { cookie: sessionCookie }
     });
+
+    const rotatedCsrfCookie = newCsrfRes.cookies.find(
+      (cookie) => cookie.name === "_csrf"
+    );
+
+    if (rotatedCsrfCookie?.value) {
+      sessionCookie =
+        `_csrf=${rotatedCsrfCookie.value}; ` +
+        `cloudshield_session=${sessionCookieObj.value}`;
+    }
+
     csrfToken = newCsrfRes.json().token;
+
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: {
+        cookie: sessionCookie
+      }
+    });
+
+    assert.strictEqual(
+      meRes.statusCode,
+      200,
+      `Authenticated session check failed: ${meRes.body}`
+    );
+
+    const { createHash } = await import("node:crypto");
+
+    const tokenHash = createHash("sha256")
+      .update(sessionCookieObj.value)
+      .digest("hex");
+
+    const storedSession = await prisma.authSession.findUnique({
+      where: { tokenHash },
+      include: {
+        user: {
+          include: {
+            organizationMemberships: true
+          }
+        }
+      }
+    });
+
+    assert.ok(storedSession, "Registration session was not persisted");
+    assert.strictEqual(storedSession.revokedAt, null);
+    assert.strictEqual(storedSession.organizationId, registeredOrgId);
+    assert.strictEqual(storedSession.user.status, "ACTIVE");
+    assert.ok(
+      storedSession.user.organizationMemberships.some(
+        (membership) =>
+          membership.organizationId === registeredOrgId &&
+          membership.status === "ACTIVE"
+      ),
+      "Registered user has no active organization membership"
+    );
 
     // Promote to OWNER just to be sure
     await prisma.organizationMembership.updateMany({

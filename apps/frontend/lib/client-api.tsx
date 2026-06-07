@@ -37,10 +37,10 @@ export async function getCsrfToken(): Promise<string> {
   return fetchingCsrfPromise;
 }
 
-
-export async function fetchCloudShieldClient<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
+export async function fetchCloudShieldClient<T>(path: string, options?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
   const init: RequestInit = {
-    credentials: "include"
+    credentials: "include",
+    signal: options?.signal
   };
   const method = options?.method ?? "GET";
   const isMutation = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
@@ -70,7 +70,10 @@ export async function fetchCloudShieldClient<T>(path: string, options?: { method
   }
 
   if (!response.ok) {
-    throw new Error("CloudShield API request failed.");
+    const payload = await response.json().catch(() => null) as { error?: string; code?: string; message?: string } | null;
+    const code = payload?.error ?? payload?.code ?? `HTTP_${response.status}`;
+    const message = payload?.message ?? "CloudShield API request failed.";
+    throw new Error(`${code}: ${message}`);
   }
 
   return (await response.json()) as T;
@@ -96,7 +99,7 @@ export function useCloudShieldData<T>(
       })
       .catch(() => {
         if (isActive) {
-          setError("Showing locally bundled fallback data while the API refresh is unavailable.");
+          setError("The API is unavailable. Showing an empty operational state until refresh succeeds.");
         }
       })
       .finally(() => {

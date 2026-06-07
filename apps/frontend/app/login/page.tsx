@@ -1,51 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Database, Lock, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <main className="aws-auth-page">
-      <header className="aws-public-topbar">
-        <Link className="aws-public-brand" href="/">
-          <span><ShieldCheck size={18} /></span>
+    <main className="auth-shell">
+      <section className="auth-brand">
+        <Link href="/">
+          <span className="auth-brand-mark"><ShieldCheck size={18} /></span>
           <strong>CloudShield</strong>
         </Link>
-        <nav aria-label="Auth navigation">
-          <Link href="/register">Create workspace</Link>
-        </nav>
-      </header>
-
-      <section className="aws-auth-shell">
-        <div className="aws-auth-card">
-          <div className="aws-auth-summary">
-            <span className="aws-kicker">
-              <Lock size={14} />
-              Secure console access
-            </span>
-            <h1>Sign in to CloudShield</h1>
-            <p>
-              Access the protected cloud governance workspace for account posture,
-              security findings, evidence, and reports.
-            </p>
-            <div className="aws-auth-badges">
-              <span><CheckCircle2 size={14} /> Read-only by default</span>
-              <span><Database size={14} /> Evidence ready</span>
-              <span><Lock size={14} /> No DB secrets</span>
-            </div>
-            <div className="aws-auth-alert">
-              Login does not run AWS validation, inventory sync, AWS APIs, mutation,
-              Terraform apply, or automatic remediation.
-            </div>
-          </div>
-          <div className="aws-auth-form-panel">
-            <h2>Sign in to console</h2>
-            <p>Use your workspace account.</p>
-            <LoginForm />
-            <div className="aws-auth-switch">
-              New workspace? <Link href="/register">Create workspace</Link>
-            </div>
+        <div>
+          <h1>Secure access to the CloudShield console.</h1>
+          <p>Sign in to inspect cloud account posture, findings, evidence, reports, and governed operations.</p>
+        </div>
+      </section>
+      <section className="auth-panel">
+        <div className="auth-card">
+          <h2>Sign in</h2>
+          <p>Use your workspace account.</p>
+          <LoginForm />
+          <div className="auth-switch">
+            New workspace? <Link href="/register">Create one</Link>
           </div>
         </div>
       </section>

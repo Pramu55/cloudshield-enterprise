@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ArrowRight, KeyRound, Info } from "lucide-react";
+import { Loader2, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { getCsrfToken, clearCsrfToken } from "../../lib/client-api";
 
 const API_BASE_URL =
@@ -15,13 +15,13 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccessMsg(null);
 
-    // Form validations
     if (!email.trim() || !password.trim()) {
       setError("Please enter your email and password.");
       return;
@@ -81,7 +81,6 @@ export function LoginForm() {
         <span>Work email</span>
         <div>
           <input
-            className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-3 pr-3 text-sm text-slate-900 outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@company.com"
             type="email"
@@ -93,15 +92,21 @@ export function LoginForm() {
       
       <label>
         <span>Password</span>
-        <div>
+        <div className="auth-password-field">
           <input
-            className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-3 pr-3 text-sm text-slate-900 outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             value={password}
             disabled={isSubmitting}
           />
+          <button
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            onClick={() => setShowPassword((value) => !value)}
+            type="button"
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         </div>
       </label>
 
@@ -114,13 +119,13 @@ export function LoginForm() {
 
       {successMsg && (
         <div className="aws-form-message aws-form-success">
-          <Loader2 size={14} className="animate-spin text-emerald-600" />
+          <Loader2 size={14} className="animate-spin" />
           {successMsg}
         </div>
       )}
 
       <button
-        className="cs-action-primary aws-auth-submit"
+        className="cs-button aws-auth-submit"
         disabled={isSubmitting}
         type="submit"
       >
@@ -136,16 +141,6 @@ export function LoginForm() {
           </>
         )}
       </button>
-
-      <div className="aws-auth-support">
-
-        <div className="aws-auth-notice">
-          <Info size={13} className="shrink-0 mt-0.5 text-slate-400" />
-          <span>
-            <strong className="text-slate-600">Safety:</strong> CloudShield runs in a secure sandbox mode. No AWS scans, API requests, or active remediations are triggered from this login console.
-          </span>
-        </div>
-      </div>
     </form>
   );
 }

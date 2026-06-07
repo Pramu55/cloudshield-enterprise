@@ -1,425 +1,260 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  BarChart3,
   Bell,
-  Bot,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
-  Cloud,
-  Database,
-  FileCheck2,
-  Gauge,
-  GitPullRequestDraft,
+  Command,
+  LogOut,
   HelpCircle,
-  Network,
-  RefreshCw,
-  ScrollText,
+  Menu,
   Search,
-  Settings,
-  ShieldAlert,
-  Wrench
+  ShieldCheck,
+  X
 } from "lucide-react";
-import { LogoutButton } from "./logout-button";
+import { clearCsrfToken, fetchCloudShieldClient, useCloudShieldData } from "../../lib/client-api";
+import { RouteIcon } from "./route-views";
+import { GlobalSearchBar } from "../../components/search/GlobalSearchBar";
 
-const navItems = [
-  { href: "/dashboard", label: "Overview", icon: Gauge, group: "General" },
-  { href: "/dashboard/accounts", label: "Accounts", icon: Cloud, group: "Governance" },
-  { href: "/dashboard/inventory", label: "Inventory", icon: Database, group: "Governance" },
-  { href: "/dashboard/graph", label: "Risk Graph", icon: Network, group: "Governance" },
-  { href: "/dashboard/automation", label: "Automation", icon: Bot, group: "Operations" },
-  { href: "/dashboard/security", label: "Security", icon: ShieldAlert, group: "Operations" },
-  { href: "/dashboard/governance", label: "Governance", icon: GitPullRequestDraft, group: "Operations" },
-  { href: "/dashboard/cost", label: "Cost", icon: BarChart3, group: "Operations" },
-  { href: "/dashboard/compliance", label: "Compliance", icon: FileCheck2, group: "Operations" },
-  { href: "/dashboard/recommendations", label: "Recommendations", icon: Wrench, group: "Operations" },
-  { href: "/dashboard/scans", label: "Scans", icon: ClipboardList, group: "Monitoring" },
-  { href: "/dashboard/reports", label: "Reports", icon: ScrollText, group: "Monitoring" },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings, group: "Manage" }
+type CurrentUserPayload = {
+  user?: {
+    name?: string;
+    email?: string;
+    role?: string;
+    organizationName?: string;
+  };
+};
+
+type NavItem = {
+  label: string;
+  href: string;
+  icon: string;
+  roles?: string[];
+};
+
+const navGroups: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: "Overview",
+    items: [{ label: "Dashboard", href: "/dashboard", icon: "overview" }]
+  },
+  {
+    label: "Cloud",
+    items: [
+      { label: "Accounts", href: "/dashboard/accounts", icon: "accounts" },
+      { label: "Inventory", href: "/dashboard/inventory", icon: "inventory" },
+      { label: "Resource graph", href: "/dashboard/graph", icon: "graph" },
+      { label: "Cost", href: "/dashboard/cost", icon: "cost" }
+    ]
+  },
+  {
+    label: "Security",
+    items: [
+      { label: "Findings", href: "/dashboard/security", icon: "security" },
+      { label: "Governance", href: "/dashboard/governance", icon: "governance" },
+      { label: "Compliance", href: "/dashboard/compliance", icon: "compliance" },
+      { label: "Recommendations", href: "/dashboard/recommendations", icon: "recommendations" }
+    ]
+  },
+  {
+    label: "Operations",
+    items: [
+      { label: "Automation", href: "/dashboard/automation", icon: "automation" },
+      { label: "Scans", href: "/dashboard/scans", icon: "scans" },
+      { label: "Reports", href: "/dashboard/reports", icon: "reports" }
+    ]
+  },
+  {
+    label: "Administration",
+    items: [
+      { label: "Settings", href: "/dashboard/settings", icon: "settings", roles: ["OWNER", "ADMIN"] },
+      { label: "Members", href: "/dashboard/settings/members", icon: "members", roles: ["OWNER", "ADMIN"] }
+    ]
+  }
 ];
 
-type CurrentUser = {
-  user: { email: string; name: string | null; role: string };
-  organization: { name: string };
-};
+function canSee(item: NavItem, role?: string) {
+  if (!item.roles?.length) return true;
+  return item.roles.includes(String(role ?? "").toUpperCase());
+}
 
-type AuthState = "checking" | "authenticated" | "anonymous";
+function isActive(pathname: string, href: string) {
+  if (href === "/dashboard") return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4100";
-
-export default function DashboardLayout({
-  children
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  const router = useRouter();
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [authState, setAuthState] = useState<AuthState>("checking");
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [scannerBadge, setScannerBadge] = useState<ScannerBadgeState>({
-    label: "AWS not configured",
-    toneClass: "border-slate-200 bg-slate-50 text-slate-700",
-    dotClass: "bg-slate-400",
-    title: "AWS connector status has not loaded yet."
-  });
+  const router = useRouter();
+  const { data } = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
+  const user = data.user;
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(true);
 
   useEffect(() => {
-    navItems.forEach((item) => router.prefetch(item.href));
+    const media = window.matchMedia("(min-width: 1024px)");
+    setIsDesktop(media.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    media.addEventListener("change", handler);
+    return () => media.removeEventListener("change", handler);
+  }, []);
+
+  const toggleMenu = () => {
+    if (isDesktop) {
+      setCollapsed(prev => !prev);
+    } else {
+      setMobileOpen(prev => !prev);
+    }
+  };
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("cloudshield.sidebar.collapsed");
+    if (saved === "true") setCollapsed(true);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("cloudshield.sidebar.collapsed", String(collapsed));
+  }, [collapsed]);
+
+  const visibleGroups = useMemo(() => {
+    return navGroups
+      .map((group) => ({ ...group, items: group.items.filter((item) => canSee(item, user?.role)) }))
+      .filter((group) => group.items.length);
+  }, [user?.role]);
+
+  useEffect(() => {
+    setMobileOpen(false);
+    setProfileOpen(false);
+    setNotificationsOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const links = navGroups.flatMap((group) => group.items.map((item) => item.href));
+    links.forEach((href) => router.prefetch(href));
   }, [router]);
 
-  useEffect(() => {
-    const savedState = window.localStorage.getItem("cloudshield_sidebar_collapsed");
-    setIsSidebarCollapsed(savedState === "true");
-  }, []);
-
-  useEffect(() => {
-    fetch(`${API_BASE_URL}/api/v1/auth/me`, {
-      credentials: "include"
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: CurrentUser | null) => {
-        if (payload) {
-          setAuthState("authenticated");
-          setCurrentUser(payload);
-        } else {
-          setAuthState("anonymous");
-        }
-      })
-      .catch(() => setAuthState("anonymous"));
-  }, []);
-
-  useEffect(() => {
-    if (authState === "anonymous") {
-      router.replace("/login");
+  async function logout() {
+    try {
+      await fetchCloudShieldClient("/api/v1/auth/logout", { method: "POST" });
+    } catch {
+      // Session may already be expired; route away either way.
     }
-  }, [authState, router]);
-
-  useEffect(() => {
-    if (authState !== "authenticated") return;
-    let isActive = true;
-    fetch(`${API_BASE_URL}/api/v1/aws/connector/status`, {
-      credentials: "include"
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: AwsConnectorStatusPayload | null) => {
-        if (isActive && payload) {
-          setScannerBadge(mapScannerBadge(payload));
-        }
-      })
-      .catch(() => {
-        if (isActive) {
-          setScannerBadge({
-            label: "Scanner degraded",
-            toneClass: "border-red-200 bg-red-50 text-red-700",
-            dotClass: "bg-red-500",
-            title: "Connector status could not be loaded."
-          });
-        }
-      });
-    return () => {
-      isActive = false;
-    };
-  }, [authState]);
-
-  function toggleSidebar() {
-    setIsSidebarCollapsed((current) => {
-      const next = !current;
-      window.localStorage.setItem("cloudshield_sidebar_collapsed", String(next));
-      return next;
-    });
+    clearCsrfToken();
+    router.replace("/login");
+    router.refresh();
   }
 
-  const showConsole = useMemo(
-    () => authState === "authenticated" || Boolean(currentUser),
-    [authState, currentUser]
-  );
+  const organizationName = user?.organizationName ?? "Workspace";
+  const userName = user?.name ?? user?.email ?? "Signed-in user";
+  const userRole = user?.role ? user.role.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()) : "Member";
 
-  const activeItem = navItems.find((item) => item.href === pathname) ?? navItems[0]!;
-  const ActiveIcon = activeItem.icon;
-
-  // Simple avatar generation
-  const userInitials = useMemo(() => {
-    if (!currentUser?.user.email) return "CS";
-    const namePart = currentUser.user.name || currentUser.user.email.split("@")[0] || "CS";
-    return namePart.substring(0, 2).toUpperCase();
-  }, [currentUser]);
-
-  if (authState === "checking") {
-    return <PortalLoading label="Loading CloudShield console..." />;
-  }
-
-  if (!showConsole) {
-    return <PortalLoading label="Redirecting to login..." />;
-  }
-
-  return (
-    <main className="portal-app">
-      <header className="portal-topbar sticky top-0 z-30 flex h-14 items-center px-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600/10 text-indigo-400">
-            <Cloud size={22} className="stroke-[2.5]" />
-          </div>
-          <Link className="flex flex-col text-[16px] font-bold tracking-tight text-white" href="/dashboard">
-            <span>CloudShield</span>
-            <span className="text-[10px] text-slate-400 font-medium tracking-normal -mt-1">Command Center</span>
-          </Link>
-        </div>
-
-        <div className="mx-8 hidden h-9 max-w-xl flex-1 items-center gap-3 px-3 text-sm lg:flex portal-search">
-          <Search size={16} className="text-slate-400" />
-          <span className="text-slate-400 text-xs">Search accounts, compliance controls, and resources</span>
-        </div>
-
-        <div className="ml-auto flex h-full items-center gap-1">
-          <span className="status-pill mr-2 border-indigo-500/30 bg-indigo-950/40 text-indigo-400 text-[11px] font-semibold py-1">
-            <span className="status-dot-pulse bg-indigo-400" />
-            Tenant Mode
-          </span>
-          <TopbarButton label="Activity" icon={<Activity size={17} />} />
-          <TopbarButton label="Notifications" icon={<Bell size={17} />} />
-          <TopbarButton label="Help" icon={<HelpCircle size={17} />} />
-          <div className="mx-2 h-6 border-l border-slate-700" />
-          <div className="flex items-center gap-3 pl-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 font-bold text-xs text-white">
-              {userInitials}
-            </div>
-            <div className="hidden flex-col text-left md:flex">
-              <span className="text-xs font-semibold text-white leading-3">
-                {currentUser?.user.name || "CloudShield User"}
-              </span>
-              <span className="text-[10px] text-slate-400">
-                {currentUser?.organization.name || "Workspace"}
-              </span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div
-        className="portal-shell grid h-[calc(100vh-56px)]"
-        data-sidebar-collapsed={isSidebarCollapsed}
-      >
-        <aside className="portal-nav hidden min-w-0 lg:flex flex-col justify-between py-2 h-full overflow-y-auto border-r border-slate-800">
-          <div>
-            <div className="flex h-11 items-center justify-between border-b border-slate-800 px-4 mb-2">
-              {!isSidebarCollapsed ? (
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Navigation
-                </p>
-              ) : null}
-              <button
-                aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                className="portal-icon-button ml-auto flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-white"
-                onClick={toggleSidebar}
-                title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                type="button"
-              >
-                {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-              </button>
-            </div>
-
-            <nav className="space-y-1">
-              {navItems.map((item, index) => {
-                const Icon = item.icon;
-                const previousGroup = navItems[index - 1]?.group;
-                const showGroup = !isSidebarCollapsed && item.group !== previousGroup;
-
-                return (
-                  <div key={item.href}>
-                    {showGroup ? (
-                      <p className="px-4 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        {item.group}
-                      </p>
-                    ) : null}
-                    <Link
-                      className={`portal-nav-link flex h-9 items-center text-sm ${
-                        isSidebarCollapsed ? "justify-center px-0 mx-2" : "gap-3 px-3 mx-3"
-                      }`}
-                      data-active={pathname === item.href}
-                      href={item.href}
-                      prefetch
-                      title={item.label}
-                    >
-                      <Icon className="shrink-0" size={16} />
-                      {!isSidebarCollapsed ? <span className="truncate">{item.label}</span> : null}
-                    </Link>
-                  </div>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="px-3 py-2 border-t border-slate-800 mt-2">
-            {!isSidebarCollapsed ? (
-              <div className="rounded-lg bg-slate-900/60 p-3 border border-slate-800">
-                <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
-                  Safety Guardrails
-                </p>
-                <p className="text-[10px] leading-relaxed text-slate-400">
-                  Read-Only console logic active. No AWS mutation allowed.
-                </p>
-              </div>
-            ) : (
-              <div className="flex justify-center text-slate-500" title="Safety active">
-                <ShieldAlert size={16} className="text-emerald-300" />
-              </div>
-            )}
-          </div>
-        </aside>
-
-        <section className="portal-content min-w-0 h-full overflow-y-auto">
-          <div className="portal-commandbar sticky top-0 z-20 flex min-h-12 flex-wrap items-center justify-between gap-2 px-6 py-2 bg-white/80 backdrop-blur-md border-b border-line">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                <ActiveIcon className="shrink-0" size={16} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-ink leading-tight">{activeItem.label}</p>
-                <p className="truncate text-[11px] text-slate-500 mt-0.5">
-                  CloudShield workspace / Stored DB records mode
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                className="inline-flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                onClick={() => router.refresh()}
-                type="button"
-              >
-                <RefreshCw size={12} className="text-slate-500" />
-                Refresh view
-              </button>
-              <Link
-                className={`status-pill text-[11px] font-semibold py-1 ${scannerBadge.toneClass}`}
-                href="/dashboard/accounts"
-                title={scannerBadge.title}
-              >
-                <span className={`status-dot-pulse ${scannerBadge.dotClass}`} />
-                {scannerBadge.label}
-              </Link>
-              {currentUser ? <LogoutButton /> : null}
-            </div>
-          </div>
-          <div className="p-1">
-            {children}
-          </div>
-        </section>
+  const sidebar = (
+    <aside className="portal-sidebar" data-collapsed={collapsed}>
+      <div className="portal-brand">
+        <Link href="/dashboard" aria-label="CloudShield dashboard">
+          <span><ShieldCheck size={20} /></span>
+          {!collapsed ? <strong>CloudShield</strong> : null}
+        </Link>
+        <button className="portal-icon-button portal-mobile-close" onClick={() => setMobileOpen(false)} type="button" aria-label="Close navigation">
+          <X size={18} />
+        </button>
       </div>
-    </main>
-  );
-}
 
-function PortalLoading({ label }: { label: string }) {
+      <nav className="portal-nav" aria-label="Dashboard navigation">
+        {visibleGroups.map((group) => (
+          <section key={group.label}>
+            {!collapsed ? <p>{group.label}</p> : null}
+            {group.items.map((item) => (
+              <Link
+                className="portal-nav-link"
+                data-active={isActive(pathname, item.href)}
+                href={item.href}
+                key={item.href}
+                title={collapsed ? item.label : undefined}
+              >
+                <RouteIcon name={item.icon} />
+                {!collapsed ? <span>{item.label}</span> : null}
+                {collapsed ? <em role="tooltip">{item.label}</em> : null}
+              </Link>
+            ))}
+          </section>
+        ))}
+      </nav>
+
+      <div className="portal-sidebar-footer">
+        <button className="portal-collapse" onClick={() => setCollapsed((value) => !value)} type="button" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          {!collapsed ? <span>Collapse</span> : null}
+        </button>
+      </div>
+    </aside>
+  );
+
   return (
-    <main className="portal-auth flex min-h-screen items-center justify-center px-6">
-      <section className="portal-auth-card w-full max-w-sm border bg-white p-6 text-center rounded-xl shadow-xl">
-        <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent mb-3" />
-        <p className="text-sm font-semibold text-ink">{label}</p>
-      </section>
-    </main>
+    <div className="portal-shell" data-collapsed={collapsed}>
+      <div className="portal-desktop-sidebar">{sidebar}</div>
+      {mobileOpen ? <div className="portal-mobile-backdrop" onClick={() => setMobileOpen(false)} /> : null}
+      <div className="portal-mobile-sidebar" data-open={mobileOpen}>{sidebar}</div>
+
+      <div className="portal-main">
+        <header className="portal-topbar">
+          <div className="portal-topbar-left flex-1 flex items-center">
+            <button className="portal-icon-button portal-sidebar-toggle" onClick={toggleMenu} type="button" aria-label="Toggle navigation">
+              <Menu size={18} />
+            </button>
+            <GlobalSearchBar />
+          </div>
+          <div className="portal-topbar-right">
+            <button className="portal-icon-button" onClick={() => setNotificationsOpen((value) => !value)} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
+              <Bell size={17} />
+            </button>
+            {notificationsOpen ? (
+              <div className="portal-popover portal-notifications">
+                <strong>Notifications</strong>
+                <p>No new notifications.</p>
+              </div>
+            ) : null}
+            <button className="portal-icon-button" type="button" aria-label="Help">
+              <HelpCircle size={17} />
+            </button>
+            <div className="portal-org" aria-label="Organization">
+              <span>{organizationName}</span>
+            </div>
+            <button className="portal-user" onClick={() => setProfileOpen((value) => !value)} type="button" aria-haspopup="menu" aria-expanded={profileOpen}>
+              <span>{userName.slice(0, 1).toUpperCase()}</span>
+              <div>
+                <strong>{userName}</strong>
+                <p>{userRole}</p>
+              </div>
+            </button>
+            {profileOpen ? (
+              <div className="portal-popover portal-profile" role="menu">
+                <div className="portal-profile-head">
+                  <span>{userName.slice(0, 1).toUpperCase()}</span>
+                  <div>
+                    <strong>{userName}</strong>
+                    <p>{user?.email ?? "No email reported"}</p>
+                  </div>
+                </div>
+                <dl>
+                  <div><dt>Organization</dt><dd>{organizationName}</dd></div>
+                  <div><dt>Role</dt><dd>{userRole}</dd></div>
+                </dl>
+                <button className="portal-profile-logout" onClick={logout} type="button" role="menuitem">
+                  <LogOut size={15} />
+                  Sign out
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </header>
+        <main className="portal-content">{children}</main>
+      </div>
+    </div>
   );
-}
-
-function TopbarButton({ label, icon }: { label: string; icon: React.ReactNode }) {
-  return (
-    <button
-      aria-label={label}
-      className="portal-icon-button flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white"
-      title={label}
-      type="button"
-    >
-      {icon}
-    </button>
-  );
-}
-
-type AwsConnectorStatusPayload = {
-  scannerStatus?: string;
-  scannerStatusLabel?: string;
-  message?: string;
-  blockedReasons?: string[];
-};
-
-type ScannerBadgeState = {
-  label: string;
-  toneClass: string;
-  dotClass: string;
-  title: string;
-};
-
-function mapScannerBadge(payload: AwsConnectorStatusPayload): ScannerBadgeState {
-  const status = payload.scannerStatus ?? "NOT_CONFIGURED";
-  const title = [payload.scannerStatusLabel, payload.message, ...(payload.blockedReasons ?? [])]
-    .filter(Boolean)
-    .join(" - ");
-  const defaultState: Omit<ScannerBadgeState, "title"> = {
-    label: "AWS not configured",
-    toneClass: "border-slate-200 bg-slate-50 text-slate-700",
-    dotClass: "bg-slate-400"
-  };
-  const states: Record<string, Omit<ScannerBadgeState, "title">> = {
-    NOT_CONFIGURED: {
-      ...defaultState
-    },
-    READY_FOR_VALIDATION: {
-      label: "Identity verification required",
-      toneClass: "border-amber-200 bg-amber-50 text-amber-700",
-      dotClass: "bg-amber-500"
-    },
-    IDENTITY_VERIFIED: {
-      label: "Scanner ready",
-      toneClass: "border-indigo-200 bg-indigo-50 text-indigo-700",
-      dotClass: "bg-indigo-500"
-    },
-    INVENTORY_SYNC_QUEUED: {
-      label: "Inventory queued",
-      toneClass: "border-indigo-200 bg-indigo-50 text-indigo-700",
-      dotClass: "bg-indigo-500"
-    },
-    INVENTORY_SYNC_RUNNING: {
-      label: "Inventory running",
-      toneClass: "border-indigo-200 bg-indigo-50 text-indigo-700",
-      dotClass: "bg-indigo-500"
-    },
-    CONNECTED: {
-      label: "AWS connected",
-      toneClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      dotClass: "bg-emerald-500"
-    },
-    PARTIALLY_CONNECTED: {
-      label: "Partially connected",
-      toneClass: "border-amber-200 bg-amber-50 text-amber-700",
-      dotClass: "bg-amber-500"
-    },
-    DEGRADED: {
-      label: "Scanner degraded",
-      toneClass: "border-red-200 bg-red-50 text-red-700",
-      dotClass: "bg-red-500"
-    },
-    FAILED: {
-      label: "Scanner failed",
-      toneClass: "border-red-200 bg-red-50 text-red-700",
-      dotClass: "bg-red-500"
-    },
-    BLOCKED: {
-      label: "Scanner blocked",
-      toneClass: "border-slate-300 bg-slate-100 text-slate-800",
-      dotClass: "bg-slate-500"
-    }
-  };
-
-  const mapped = states[status] ?? defaultState;
-  return {
-    label: mapped.label,
-    toneClass: mapped.toneClass,
-    dotClass: mapped.dotClass,
-    title: title || "Open AWS account readiness."
-  };
 }

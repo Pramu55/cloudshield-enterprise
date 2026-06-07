@@ -1902,3 +1902,4 @@ export const AwsIdentityValidationResponseSchema = AwsIdentityValidationSafetyFl
   principalArnMasked: z.string().nullable()
 });
 export type AwsIdentityValidationResponse = z.infer<typeof AwsIdentityValidationResponseSchema>;
+export * from './search.js';

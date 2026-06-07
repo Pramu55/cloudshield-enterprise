@@ -3,7 +3,7 @@ import Link from "next/link";
 export function SampleDataNotice() {
   return (
     <div className="mb-5 rounded-md border border-warning/40 bg-white px-4 py-3 text-sm font-medium text-ink">
-      Sample demo data - real AWS inventory scanning is not enabled yet.
+      SAMPLE data is clearly labeled until real inventory is available.
     </div>
   );
 }

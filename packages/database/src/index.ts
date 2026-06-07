@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 
 export const prisma = new PrismaClient();
 export type { Prisma };
+export { Environment, AwsAccountStatus } from "@prisma/client";
 
 export type OrganizationScope = {
   organizationId: string;
