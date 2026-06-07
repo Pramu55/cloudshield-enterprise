@@ -24,6 +24,7 @@ import { registerPlatformCoreRoutes } from "./routes/platform-core.routes.js";
 import { registerMembersRoutes } from "./routes/members.routes.js";
 import { registerTeamsRoutes } from "./routes/teams.routes.js";
 import { registerSearchRoutes } from "./routes/search.routes.js";
+import { registerDashboardRoutes } from "./routes/dashboard.routes.js";
 export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify(opts);
 
@@ -96,6 +97,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   await registerAutomationRoutes(app);
   await registerPlatformCoreRoutes(app);
   await registerSearchRoutes(app);
+  await registerDashboardRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send({

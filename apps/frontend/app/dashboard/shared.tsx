@@ -32,6 +32,15 @@ export type StatusKey =
   | "PENDING_APPROVAL"
   | "ARCHIVED"
   | "STALE"
+  | "CONNECTOR_DISABLED"
+  | "PARTIALLY_CONNECTED"
+  | "STALE_INVENTORY"
+  | "NEVER_VALIDATED"
+  | "SYNC_BLOCKED"
+  | "SYNC_FAILED"
+  | "FRESH"
+  | "AGING"
+  | "NEVER_SYNCHRONIZED"
   | string;
 
 const statusMap: Record<string, { label: string; tone: Tone; icon: ReactNode }> = {
@@ -54,7 +63,16 @@ const statusMap: Record<string, { label: string; tone: Tone; icon: ReactNode }> 
   PENDING: { label: "Pending", tone: "warning", icon: <Clock3 size={13} /> },
   PENDING_APPROVAL: { label: "Pending approval", tone: "warning", icon: <Clock3 size={13} /> },
   ARCHIVED: { label: "Archived", tone: "disabled", icon: <Archive size={13} /> },
-  STALE: { label: "Stale", tone: "warning", icon: <AlertCircle size={13} /> }
+  STALE: { label: "Stale", tone: "warning", icon: <AlertCircle size={13} /> },
+  CONNECTOR_DISABLED: { label: "Connector Disabled", tone: "disabled", icon: <MinusCircle size={13} /> },
+  PARTIALLY_CONNECTED: { label: "Partially Connected", tone: "warning", icon: <AlertCircle size={13} /> },
+  STALE_INVENTORY: { label: "Stale Inventory", tone: "warning", icon: <AlertCircle size={13} /> },
+  NEVER_VALIDATED: { label: "Never Validated", tone: "disabled", icon: <MinusCircle size={13} /> },
+  SYNC_BLOCKED: { label: "Sync Blocked", tone: "warning", icon: <AlertCircle size={13} /> },
+  SYNC_FAILED: { label: "Sync Failed", tone: "danger", icon: <XCircle size={13} /> },
+  FRESH: { label: "Fresh", tone: "success", icon: <CheckCircle2 size={13} /> },
+  AGING: { label: "Aging", tone: "warning", icon: <Clock3 size={13} /> },
+  NEVER_SYNCHRONIZED: { label: "Never Synchronized", tone: "disabled", icon: <MinusCircle size={13} /> }
 };
 
 export function getStatusMeta(status: StatusKey | null | undefined) {
