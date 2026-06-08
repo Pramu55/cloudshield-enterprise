@@ -257,6 +257,8 @@ logger.info(
   "cloud-scans queue ready; EC2 read-only scanner slice is available"
 );
 
+export { securityMonitoringWorker } from "./security-monitoring.processor.js";
+
 function isAwsInventoryJob(jobType: CloudScanJobType) {
   return [
     "AWS_INVENTORY_PLAN",

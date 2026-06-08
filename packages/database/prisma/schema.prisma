@@ -275,6 +275,10 @@ model Organization {
   memberships           OrganizationMembership[]
   invitations           Invitation[]
   teamMemberships       TeamMembership[]
+  securityMonitors      SecurityMonitor[]
+  monitoringRuns        MonitoringRun[]
+  securityAlerts        SecurityAlert[]
+  monitoringSnapshots   MonitoringSnapshot[]
   settings              OrganizationSettings?
   onboarding            OrganizationOnboarding?
 }
@@ -401,10 +405,14 @@ model AwsAccount {
   createdAt                      DateTime            @default(now())
   updatedAt                      DateTime            @updatedAt
 
-  resources        CloudResource[]
-  securityFindings SecurityFinding[]
-  costFindings     CostFinding[]
-  scanRuns         ScanRun[]
+  resources           CloudResource[]
+  securityFindings    SecurityFinding[]
+  costFindings        CostFinding[]
+  scanRuns            ScanRun[]
+  securityMonitors    SecurityMonitor[]
+  monitoringRuns      MonitoringRun[]
+  securityAlerts      SecurityAlert[]
+  monitoringSnapshots MonitoringSnapshot[]
 
   @@unique([organizationId, accountId])
   @@index([organizationId])
@@ -451,6 +459,7 @@ model CloudResource {
   costFindings        CostFinding[]
   complianceEvidence  ComplianceEvidence[]
   remediationPlans    RemediationPlan[]
+  securityAlerts      SecurityAlert[]
 
   @@unique([organizationId, awsAccountId, resourceType, resourceId])
   @@index([organizationId])
@@ -535,6 +544,7 @@ model SecurityFinding {
   recommendations  Recommendation[]
   riskAcceptances  RiskAcceptance[]
   remediationPlans RemediationPlan[]
+  securityAlerts   SecurityAlert[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -1034,4 +1044,156 @@ model Invitation {
   @@index([organizationId])
   @@index([email])
   @@index([tokenHash])
+}
+
+enum SecurityMonitorCategory {
+  ACCOUNT_HEALTH
+  INVENTORY_FRESHNESS
+  SECURITY_FINDING
+  RESOURCE_DRIFT
+  PUBLIC_EXPOSURE
+  ENCRYPTION
+  IDENTITY_AND_ACCESS
+  COMPLIANCE
+  TAGGING
+  COST_SECURITY_SIGNAL
+}
+
+enum SecurityMonitorStatus {
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
+enum MonitoringRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum SecurityAlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model SecurityMonitor {
+  id              String                   @id @default(cuid())
+  organizationId  String
+  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccountId    String?
+  awsAccount      AwsAccount?              @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+  name            String
+  description     String
+  category        SecurityMonitorCategory
+  severity        FindingSeverity          @default(MEDIUM)
+  status          SecurityMonitorStatus    @default(ACTIVE)
+  scopeType       String                   @default("ORGANIZATION")
+  resourceScope   String?
+  ruleKey         String
+  configuration   Json                     @default("{}")
+  enabled         Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  alerts          SecurityAlert[]
+
+  @@unique([organizationId, ruleKey, awsAccountId])
+  @@index([organizationId])
+  @@index([organizationId, ruleKey])
+}
+
+model MonitoringRun {
+  id                           String                   @id @default(cuid())
+  organizationId               String
+  organization                 Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccountId                 String?
+  awsAccount                   AwsAccount?              @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+  status                       MonitoringRunStatus      @default(RUNNING)
+  trigger                      String                   @default("MANUAL")
+
+  awsApiCallExecuted           Boolean                  @default(false)
+  scannerRun                   Boolean                  @default(false)
+  mutationExecuted             Boolean                  @default(false)
+  terraformApplyExecuted       Boolean                  @default(false)
+  automaticRemediationExecuted Boolean                  @default(false)
+  remediationExecuted          Boolean                  @default(false)
+
+  evaluatedCount               Int                      @default(0)
+  alertsCreated                Int                      @default(0)
+  alertsUpdated                Int                      @default(0)
+  alertsResolved               Int                      @default(0)
+
+  errorCode                    String?
+  errorSummary                 Json                     @default("{}")
+
+  startedAt                    DateTime                 @default(now())
+  completedAt                  DateTime?
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, startedAt])
+}
+
+model SecurityAlert {
+  id                String                   @id @default(cuid())
+  organizationId    String
+  organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccountId      String?
+  awsAccount        AwsAccount?              @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+  cloudResourceId   String?
+  cloudResource     CloudResource?           @relation(fields: [cloudResourceId], references: [id], onDelete: SetNull)
+  securityFindingId String?
+  securityFinding   SecurityFinding?         @relation(fields: [securityFindingId], references: [id], onDelete: SetNull)
+  monitorId         String?
+  monitor           SecurityMonitor?         @relation(fields: [monitorId], references: [id], onDelete: SetNull)
+
+  dedupeKey         String
+  title             String
+  description       String
+  severity          FindingSeverity
+  status            SecurityAlertStatus      @default(OPEN)
+  category          SecurityMonitorCategory
+
+  firstObservedAt   DateTime                 @default(now())
+  lastObservedAt    DateTime                 @default(now())
+  resolvedAt        DateTime?
+
+  evidence          Json                     @default("{}")
+  evidenceCount     Int                      @default(0)
+  mappedEvidence    Json                     @default("[]")
+  sourceType        String?
+  sourceId          String?
+
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId])
+  @@index([organizationId, status, severity, updatedAt])
+  @@index([organizationId, awsAccountId, status])
+  @@index([organizationId, category, status])
+}
+
+model MonitoringSnapshot {
+  id                           String                   @id @default(cuid())
+  organizationId               String
+  organization                 Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  awsAccountId                 String?
+  awsAccount                   AwsAccount?              @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+  monitoringRunId              String?
+  generatedAt                  DateTime                 @default(now())
+
+  postureSummary               Json                     @default("{}")
+  accountState                 Json                     @default("{}")
+  findingFingerprints          Json                     @default("{}")
+  complianceStates             Json                     @default("{}")
+
+  deterministicChecksum        String
+  schemaVersion                Int                      @default(1)
+
+  @@index([organizationId])
+  @@index([organizationId, generatedAt])
+  @@index([organizationId, awsAccountId])
 }

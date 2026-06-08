@@ -25,6 +25,7 @@ import { registerMembersRoutes } from "./routes/members.routes.js";
 import { registerTeamsRoutes } from "./routes/teams.routes.js";
 import { registerSearchRoutes } from "./routes/search.routes.js";
 import { registerDashboardRoutes } from "./routes/dashboard.routes.js";
+import { registerMonitoringRoutes } from "./routes/monitoring.routes.js";
 export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify(opts);
 
@@ -98,6 +99,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   await registerPlatformCoreRoutes(app);
   await registerSearchRoutes(app);
   await registerDashboardRoutes(app);
+  await registerMonitoringRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send({

@@ -13,7 +13,9 @@ export type GovernedAwsChangeJob = {
   idempotencyKey: string;
 };
 
-export const governedAwsChangeQueue = new Queue<GovernedAwsChangeJob>(
-  GOVERNED_AWS_CHANGE_QUEUE_NAME,
-  { connection }
-);
+export const governedAwsChangeQueue = process.env.DISABLE_QUEUE_CONNECTIONS_FOR_TESTS === "true"
+  ? ({ name: GOVERNED_AWS_CHANGE_QUEUE_NAME, add: async () => {}, close: async () => {} } as unknown as Queue<GovernedAwsChangeJob>)
+  : new Queue<GovernedAwsChangeJob>(
+      GOVERNED_AWS_CHANGE_QUEUE_NAME,
+      { connection }
+    );

@@ -1,4 +1,4 @@
-﻿import { prisma } from "@cloudshield/database";
+import { prisma } from "@cloudshield/database";
 import type { FastifyRequest } from "fastify";
 import { hasPermission, PERMISSIONS } from "@cloudshield/security";
 import { GlobalSearchEntityType, GlobalSearchGroup, GlobalSearchResponse, GlobalSearchResult } from "@cloudshield/contracts";
@@ -486,6 +486,28 @@ export async function performGlobalSearch(
     })());
   }
 
+  // ALIAS SEARCHING
+  if (requestedTypes === undefined || typesToSearch.includes("alias" as any)) {
+    const monitoringAliases = ["monitoring", "security monitoring", "alerts", "critical alerts", "drift", "stale inventory", "monitoring health"];
+    const matches = monitoringAliases.filter(a => a.includes(qLower) || qLower.includes(a));
+
+    if (matches.length > 0) {
+      groups.push({
+        type: "alias" as any,
+        label: "Navigation Aliases",
+        hasMore: false,
+        results: [{
+          id: "security-monitoring",
+          type: "alias" as any,
+          title: "Security Monitoring",
+          subtitle: "Workspace",
+          href: "/dashboard/security-monitoring",
+          updatedAt: new Date().toISOString()
+        }]
+      });
+    }
+  }
+
   await Promise.all(queries);
 
   // Deterministic Ranking
@@ -514,7 +536,7 @@ export async function performGlobalSearch(
 
   // Sort groups deterministically based on standard ordering
   const groupOrder: GlobalSearchEntityType[] = [
-    "awsAccount", "resource", "finding", "complianceControl",
+    "alias", "awsAccount", "resource", "finding", "complianceControl",
     "scanRun", "operation", "recommendation", "governance",
     "auditEvent", "report", "evidence", "team", "member", "invitation"
   ];

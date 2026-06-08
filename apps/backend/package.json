@@ -19,6 +19,7 @@
     "@cloudshield/database": "workspace:*",
     "@cloudshield/logger": "workspace:*",
     "@cloudshield/security": "workspace:*",
+    "@cloudshield/security-monitoring": "workspace:*",
     "@cloudshield/utils": "workspace:*",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^10.0.2",

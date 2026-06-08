@@ -67,6 +67,15 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     keywords: ["security", "posture", "alerts", "vulnerabilities"]
   },
   {
+    id: "nav-security-monitoring",
+    label: "Security Monitoring",
+    href: "/dashboard/monitoring",
+    icon: "activity",
+    category: "Security",
+    description: "Continuous AWS security monitoring and alerting.",
+    keywords: ["monitoring", "security monitoring", "alerts", "critical alerts", "drift", "stale inventory", "monitoring health"]
+  },
+  {
     id: "nav-governance",
     label: "Governance",
     href: "/dashboard/governance",
