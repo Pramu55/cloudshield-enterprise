@@ -24,3 +24,20 @@ export function setupTestEnvironment() {
 }
 
 setupTestEnvironment();
+
+// Globally mock BullMQ for backend tests to prevent Redis ECONNREFUSED
+try {
+  const bullmq = require("bullmq");
+  bullmq.Queue = class MockQueue {
+    constructor() {}
+    async add() { return {}; }
+    async close() {}
+  };
+  bullmq.Worker = class MockWorker {
+    constructor() {}
+    on() {}
+    async close() {}
+  };
+} catch (err) {
+  // Ignore if not in CJS or module not found
+}

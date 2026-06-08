@@ -148,6 +148,7 @@ function PostureBar({ component }: { component: PostureScoreComponent }) {
 
 export function OverviewView() {
   const { data, error, isRefreshing } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
+  const { data: monitoringHealth } = useCloudShieldData<any>("/api/v1/security-monitoring/health", null);
 
   if (error) {
     return <ErrorAndRefresh error={error} isRefreshing={false} />;
@@ -188,6 +189,7 @@ export function OverviewView() {
         meta={
           <>
             <span>Connector <StatusBadge status={connectorStatus} /></span>
+            <span>Monitoring <StatusBadge status={monitoringHealth?.status || "UNKNOWN"} /></span>
             <span>Data Source <span className="font-mono text-xs ml-1 bg-slate-100 px-1 rounded border border-slate-200">{executiveSummary.dataSource}</span></span>
             <span>Last Sync {inventoryFreshness.lastSyncAt ? formatDate(inventoryFreshness.lastSyncAt) : "Never"}</span>
           </>

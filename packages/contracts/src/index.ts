@@ -8,6 +8,7 @@ export const CLOUD_SCAN_QUEUE_NAME = "cloud-scans";
 export const CLOUD_INVENTORY_SYNC_QUEUE_NAME = "cloud-inventory-sync";
 export const CLOUD_ASSESSMENT_QUEUE_NAME = "cloud-assessment";
 export const GOVERNED_AWS_CHANGE_QUEUE_NAME = "governed-aws-changes";
+export const SECURITY_MONITORING_QUEUE_NAME = "security-monitoring";
 export const REMEDIATION_BLOCKED_REASON =
   "Automatic remediation is disabled in CloudShield v1.";
 
@@ -1964,3 +1965,4 @@ export const AwsIdentityValidationResponseSchema = AwsIdentityValidationSafetyFl
 export type AwsIdentityValidationResponse = z.infer<typeof AwsIdentityValidationResponseSchema>;
 export * from './search.js';
 export * from "./dashboard.js";
+export * from "./monitoring.js";

@@ -322,7 +322,7 @@ async function getQueueHealth() {
     CLOUD_ASSESSMENT_QUEUE_NAME,
     GOVERNED_AWS_CHANGE_QUEUE_NAME
   ];
-  const handles = queues.map((name) => new Queue(name, { connection }));
+  const handles = process.env.DISABLE_QUEUE_CONNECTIONS_FOR_TESTS === "true" ? queues.map(name => ({ name, getJobCounts: async () => ({}) } as unknown as Queue)) : queues.map((name) => new Queue(name, { connection }));
   try {
     const counts = await Promise.all(handles.map(async (queue) => ({
       name: queue.name,
