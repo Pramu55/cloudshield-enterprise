@@ -563,6 +563,17 @@ export const CurrentUserResponseSchema = z.object({
 });
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
 
+export const UpdateProfileRequestSchema = z.object({
+  name: z.string().trim().min(1, "Display name is required.").max(80, "Display name must be 80 characters or fewer.")
+}).strict();
+export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
+
+export const UpdateProfileResponseSchema = z.object({
+  status: z.literal("ok"),
+  user: AuthUserSchema
+});
+export type UpdateProfileResponse = z.infer<typeof UpdateProfileResponseSchema>;
+
 export const RegisterRequestSchema = z.object({
   name: z.string().min(1, "Full name is required."),
   email: z.string().email("Please enter a valid work email."),

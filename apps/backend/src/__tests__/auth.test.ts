@@ -365,6 +365,89 @@ test("Authentication Endpoints", async (t) => {
     csrfToken = newCsrfRes.json().token;
   });
 
+  await t.test("PATCH /api/v1/auth/profile updates name and creates audit event", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/auth/profile",
+      headers: {
+        "x-csrf-token": csrfToken,
+        cookie: sessionCookie
+      },
+      payload: {
+        name: "Updated Test User"
+      }
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    const body = res.json();
+    assert.strictEqual(body.status, "ok");
+    assert.strictEqual(body.user.name, "Updated Test User");
+    assert.strictEqual(body.user.id, registeredUserId);
+
+    const userInDb = await prisma.user.findUnique({ where: { id: registeredUserId } });
+    assert.strictEqual(userInDb?.name, "Updated Test User");
+
+    const audit = await prisma.auditEvent.findFirst({
+      where: {
+        organizationId: registeredOrgId,
+        actorUserId: registeredUserId,
+        action: "auth.profile_updated"
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    assert.ok(audit);
+    assert.strictEqual(audit.targetType, "user");
+    assert.strictEqual(audit.targetId, registeredUserId);
+  });
+
+  await t.test("PATCH /api/v1/auth/profile rejects empty name", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/auth/profile",
+      headers: {
+        "x-csrf-token": csrfToken,
+        cookie: sessionCookie
+      },
+      payload: {
+        name: "   "
+      }
+    });
+
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  await t.test("PATCH /api/v1/auth/profile ignores unallowed fields", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/auth/profile",
+      headers: {
+        "x-csrf-token": csrfToken,
+        cookie: sessionCookie
+      },
+      payload: {
+        name: "Hacker User",
+        role: "OWNER",
+        email: "hacked@example.com",
+        organizationId: "other-org-id"
+      }
+    });
+
+    // The strict schema should reject unknown fields
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  await t.test("PATCH /api/v1/auth/profile returns 401 if unauthenticated", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/auth/profile",
+      payload: {
+        name: "Unauthenticated Update"
+      }
+    });
+
+    assert.strictEqual(res.statusCode, 401);
+  });
+
   await t.test("POST /api/v1/auth/logout is idempotent", async () => {
     const first = await app.inject({
       method: "POST",

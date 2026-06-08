@@ -52,11 +52,11 @@ export function GlobalSearchDropdown({
   // 1. Error State
   if (error) {
     return (
-      <div className="p-8 text-center flex flex-col items-center border-t border-slate-100 dark:border-slate-800">
+      <div className="p-8 text-center flex flex-col items-center border-t border-slate-100">
         <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center mb-4">
           <AlertTriangle size={24} className="text-amber-500" />
         </div>
-        <div className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+        <div className="text-sm font-bold text-slate-800 mb-1">
           Search is temporarily unavailable.
         </div>
         <div className="text-xs text-slate-500 mb-6">Please check your connection and try again.</div>
@@ -77,18 +77,18 @@ export function GlobalSearchDropdown({
   if (!query) {
     if (recent.length === 0) {
       return (
-        <div className="p-5 border-t border-slate-100 dark:border-slate-800">
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-4 px-3">Suggested Destinations</div>
+        <div className="p-5 border-t border-slate-100">
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em] mb-4 px-3">Suggested Destinations</div>
           <div className="grid gap-1">
-            <button onClick={() => onSelectResult({ id: "aws", title: "AWS Accounts", href: "/dashboard/accounts", type: "awsAccount" })} className="w-full flex items-center px-4 py-2.5 text-sm rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left text-slate-700 dark:text-slate-300 transition-all hover:translate-x-1">
+            <button onClick={() => onSelectResult({ id: "aws", title: "AWS Accounts", href: "/dashboard/accounts", type: "awsAccount" })} className="w-full flex items-center px-4 py-2.5 text-sm rounded-xl hover:bg-slate-50 text-left text-slate-800 transition-all hover:translate-x-1">
               <ResultIcon type="awsAccount" />
               <span className="ml-4 truncate font-semibold">AWS Accounts</span>
             </button>
-            <button onClick={() => onSelectResult({ id: "inv", title: "Inventory", href: "/dashboard/inventory", type: "resource" })} className="w-full flex items-center px-4 py-2.5 text-sm rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left text-slate-700 dark:text-slate-300 transition-all hover:translate-x-1">
+            <button onClick={() => onSelectResult({ id: "inv", title: "Inventory", href: "/dashboard/inventory", type: "resource" })} className="w-full flex items-center px-4 py-2.5 text-sm rounded-xl hover:bg-slate-50 text-left text-slate-800 transition-all hover:translate-x-1">
               <ResultIcon type="resource" />
               <span className="ml-4 truncate font-semibold">Inventory</span>
             </button>
-            <button onClick={() => onSelectResult({ id: "sec", title: "Findings", href: "/dashboard/security", type: "finding" })} className="w-full flex items-center px-4 py-2.5 text-sm rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left text-slate-700 dark:text-slate-300 transition-all hover:translate-x-1">
+            <button onClick={() => onSelectResult({ id: "sec", title: "Findings", href: "/dashboard/security", type: "finding" })} className="w-full flex items-center px-4 py-2.5 text-sm rounded-xl hover:bg-slate-50 text-left text-slate-800 transition-all hover:translate-x-1">
               <ResultIcon type="finding" />
               <span className="ml-4 truncate font-semibold">Findings</span>
             </button>
@@ -98,9 +98,9 @@ export function GlobalSearchDropdown({
     }
 
     return (
-      <div className="p-3 border-t border-slate-100 dark:border-slate-800">
+      <div className="p-3 border-t border-slate-100">
         <div className="flex items-center justify-between px-3 py-2 mb-2 mt-1">
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em]">Recent Searches</div>
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em]">Recent Searches</div>
           {onClearRecent && (
             <button onClick={onClearRecent} className="text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-0.5 rounded hover:bg-blue-50 transition-colors">
               Clear
@@ -111,7 +111,7 @@ export function GlobalSearchDropdown({
           {recent.map((item, i) => (
             <button
               key={i}
-              className="w-full flex items-center px-4 py-2.5 text-sm rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left text-slate-700 dark:text-slate-300 transition-all hover:translate-x-1"
+              className="w-full flex items-center px-4 py-2.5 text-sm rounded-xl hover:bg-slate-50 text-left text-slate-800 transition-all hover:translate-x-1"
               onMouseDown={(e) => {
                 e.preventDefault();
                 onSelectResult(item);
@@ -129,14 +129,14 @@ export function GlobalSearchDropdown({
   // 3. Loading state
   if (loading && (!response || response.query !== query)) {
     return (
-      <div className="p-5 border-t border-slate-100 dark:border-slate-800">
+      <div className="p-5 border-t border-slate-100">
         <div className="animate-pulse space-y-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="flex items-center space-x-4 px-3">
-              <div className="w-5 h-5 bg-slate-100 dark:bg-slate-800 rounded-full"></div>
+              <div className="w-5 h-5 bg-slate-100 rounded-full"></div>
               <div className="flex-1 space-y-3">
-                <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/3"></div>
-                <div className="h-2.5 bg-slate-50 dark:bg-slate-900 rounded w-1/2"></div>
+                <div className="h-3 bg-slate-100 rounded w-1/3"></div>
+                <div className="h-2.5 bg-slate-50 rounded w-1/2"></div>
               </div>
             </div>
           ))}
@@ -148,11 +148,11 @@ export function GlobalSearchDropdown({
   // 4. No Results
   if (!loading && flatResults.length === 0) {
     return (
-      <div className="py-16 px-6 text-center border-t border-slate-100 dark:border-slate-800">
-        <div className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+      <div className="py-16 px-6 text-center border-t border-slate-100">
+        <div className="text-sm font-bold text-slate-800 mb-2">
           No records match "{query}"
         </div>
-        <div className="text-xs text-slate-400 max-w-[240px] mx-auto leading-relaxed">
+        <div className="text-xs text-slate-500 max-w-[240px] mx-auto leading-relaxed">
           Try searching for IDs, names, regions, or common resource types like "S3" or "EC2".
         </div>
       </div>
@@ -161,12 +161,12 @@ export function GlobalSearchDropdown({
 
   // 5. Results
   return (
-    <div className="p-3 border-t border-slate-100 dark:border-slate-800" role="listbox" id="search-results-listbox">
+    <div className="p-3 border-t border-slate-100" role="listbox" id="search-results-listbox">
       {response?.groups.map(group => {
         if (group.results.length === 0) return null;
         return (
           <div key={group.type} className="mb-6 last:mb-0">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-3 mt-2 px-4">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em] mb-3 mt-2 px-4">
               {group.label}
             </div>
             <div className="grid gap-1">
@@ -180,7 +180,7 @@ export function GlobalSearchDropdown({
                     role="option"
                     aria-selected={isSelected}
                     className={`w-full flex items-center px-4 py-3 text-sm rounded-xl text-left transition-all ${
-                      isSelected ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 translate-x-1 shadow-sm ring-1 ring-indigo-200/50" : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                      isSelected ? "bg-indigo-50 text-indigo-700 translate-x-1 shadow-sm ring-1 ring-indigo-200/50" : "text-slate-800 hover:bg-slate-50"
                     }`}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -193,10 +193,10 @@ export function GlobalSearchDropdown({
                     </div>
                     <div className="ml-3 flex-1 min-w-0 flex flex-col justify-center">
                       <div className="truncate font-bold tracking-tight">{item.title}</div>
-                      {item.subtitle && <div className={`truncate text-[11px] mt-0.5 ${isSelected ? 'text-indigo-500/80 dark:text-indigo-400/80' : 'text-slate-500 dark:text-slate-400'}`}>{item.subtitle}</div>}
+                      {item.subtitle && <div className={`truncate text-[11px] mt-0.5 ${isSelected ? 'text-indigo-500/80' : 'text-slate-500'}`}>{item.subtitle}</div>}
                     </div>
                     {item.status && (
-                      <div className={`ml-4 flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg border uppercase tracking-widest font-extrabold ${isSelected ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-100/50 dark:bg-indigo-900/50' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'}`}>
+                      <div className={`ml-4 flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg border uppercase tracking-widest font-extrabold ${isSelected ? 'border-indigo-200 bg-indigo-100/50' : 'border-slate-200 bg-slate-50'}`}>
                         {item.status}
                       </div>
                     )}
