@@ -19,7 +19,7 @@ type EvaluateMonitoringJob = {
 
 const orchestrator = new MonitoringOrchestrator();
 
-export const securityMonitoringWorker = new BullWorker<EvaluateMonitoringJob>(
+export const securityMonitoringWorker = process.env.NODE_ENV === "test" ? { on: () => {} } as any : new BullWorker<EvaluateMonitoringJob>(
   SECURITY_MONITORING_QUEUE_NAME,
   async (job) => {
     logger.info(
@@ -58,10 +58,10 @@ export const securityMonitoringWorker = new BullWorker<EvaluateMonitoringJob>(
   { connection }
 );
 
-securityMonitoringWorker.on("completed", (job) => {
+securityMonitoringWorker.on("completed", (job: any) => {
   logger.info({ jobId: job.id }, "Security monitoring job completed");
 });
 
-securityMonitoringWorker.on("failed", (job, error) => {
+securityMonitoringWorker.on("failed", (job: any, error: any) => {
   logger.error({ jobId: job?.id, error }, "Security monitoring job failed");
 });
