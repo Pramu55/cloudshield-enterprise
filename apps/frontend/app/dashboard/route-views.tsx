@@ -101,122 +101,247 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
   );
 }
 
+import {
+  CommandCenterResponse,
+  PostureScoreComponent,
+  CloudResourceDto,
+  CloudResourceListResponse,
+  SecurityFindingDto,
+  SecurityFindingsResponse,
+  ComplianceControlDto,
+  ComplianceEvidenceCenterResponse
+} from "@cloudshield/contracts";
+
+function getScoreColor(score: number) {
+  if (score >= 90) return "var(--success-color, #10b981)";
+  if (score >= 70) return "var(--warning-color, #f59e0b)";
+  return "var(--danger-color, #ef4444)";
+}
+
+function PostureBar({ component }: { component: PostureScoreComponent }) {
+  const clampedScore = Math.max(0, Math.min(100, component.score));
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-4">
+        <span className="min-w-0 font-medium text-slate-700">{component.label}</span>
+        <span className="shrink-0 font-semibold tabular-nums text-slate-900">{clampedScore}/100</span>
+      </div>
+
+      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${clampedScore}%`, backgroundColor: getScoreColor(clampedScore) }}
+          role="progressbar"
+          aria-valuenow={clampedScore}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        />
+      </div>
+
+      <p className="text-sm leading-relaxed text-slate-500">
+        {component.explanation}
+      </p>
+    </div>
+  );
+}
+
 export function OverviewView() {
-  const summary = useCloudShieldData<AnyRecord>("/api/v1/dashboard/summary", emptyObject);
-  const activity = useCloudShieldData<AnyRecord>("/api/v1/platform/activity", emptyObject);
-  const readiness = useCloudShieldData<AnyRecord>("/api/v1/platform/readiness", emptyObject);
-  const connector = useCloudShieldData<AnyRecord>("/api/v1/aws/connector/status", emptyObject);
-  const scans = useCloudShieldData<AnyRecord>("/api/v1/inventory/scans", { scanRuns: [] });
-  const approvals = useCloudShieldData<AnyRecord>("/api/v1/governance/approvals", { approvals: [] });
-  const events = pickArray(activity.data, ["events", "activity", "items"]).slice(0, 8);
-  const modules = pickArray(summary.data, ["modules", "moduleStatus", "cards"]).slice(0, 8);
-  const scanRuns = pickArray(scans.data, ["scanRuns", "runs", "items"]).slice(0, 5);
-  const approvalRows = pickArray(approvals.data, ["approvals", "items"]);
-  const accountCount = pickNumber(summary.data, ["accounts", "accountCount", "awsAccounts"]);
-  const resourceCount = pickNumber(summary.data, ["resources", "resourceCount", "inventoryResources"]);
-  const openFindings = pickNumber(summary.data, ["openFindings", "findings", "securityFindings"]);
-  const pendingApprovals = approvalRows.filter((row: AnyRecord) => String(row.status).toUpperCase().includes("PENDING")).length;
-  const lastScan = scanRuns.find((run: AnyRecord) => String(run.status ?? run.state).toUpperCase().includes("SUCCEEDED")) ?? scanRuns[0];
-  const connectorStatus = connector.data.status?.status ?? connector.data.status ?? connector.data.connectionStatus ?? readiness.data.connectorStatus;
-  const scannerStatus = readiness.data.scannerStatus ?? readiness.data.inventoryScannerStatus ?? (scanRuns.length ? "READY" : "NOT_CONFIGURED");
+  const { data, error, isRefreshing } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
+
+  if (error) {
+    return <ErrorAndRefresh error={error} isRefreshing={false} />;
+  }
+
+  if (!data) {
+    return <ErrorAndRefresh error={null} isRefreshing={true} />;
+  }
+
+  const {
+    executiveSummary,
+    postureScore,
+    accountHealth,
+    inventoryFreshness,
+    riskDistribution,
+    scanSummary,
+    priorityActions,
+    recentActivity,
+    governanceSummary,
+    evidenceReadiness,
+    dataFreshness,
+    graphSummary
+  } = data;
+
+  const connectorStatus = accountHealth.length > 0 && accountHealth.some(a => a.connectionStatus === "VALIDATION_SUCCEEDED")
+    ? "CONNECTED" : "NOT_CONFIGURED";
 
   return (
     <>
       <PageHeader
-        breadcrumbs={["CloudShield", "Overview"]}
-        eyebrow="Cloud operations command center"
-        title="Security posture control plane"
-        description="Live workspace view for account onboarding, connector readiness, inventory freshness, security workflow, governed operations, and evidence reporting."
-        primaryAction={<PrimaryLink href="/dashboard/scans">Start inventory workflow</PrimaryLink>}
-        secondaryAction={<PrimaryLink href="/dashboard/accounts">Review accounts</PrimaryLink>}
-        status={<StatusBadge status={connectorStatus ?? "NOT_CONFIGURED"} />}
+        breadcrumbs={["CloudShield", "Enterprise Command Center"]}
+        eyebrow="Enterprise operations command center"
+        title="Security & Governance Posture"
+        description="Database-backed executive view for account readiness, security risk, and real-time operational intelligence."
+        primaryAction={<PrimaryLink href="/dashboard/scans">Inventory Scans</PrimaryLink>}
+        secondaryAction={<PrimaryLink href="/dashboard/accounts">Review Accounts</PrimaryLink>}
+        status={<StatusBadge status={connectorStatus} />}
         meta={
           <>
-            <span>Connector <StatusBadge status={connectorStatus ?? "NOT_CONFIGURED"} /></span>
-            <span>Scanner <StatusBadge status={scannerStatus} /></span>
-            <span>Last successful scan {formatDate(lastScan?.completedAt ?? lastScan?.finishedAt ?? lastScan?.updatedAt)}</span>
+            <span>Connector <StatusBadge status={connectorStatus} /></span>
+            <span>Data Source <span className="font-mono text-xs ml-1 bg-slate-100 px-1 rounded border border-slate-200">{executiveSummary.dataSource}</span></span>
+            <span>Last Sync {inventoryFreshness.lastSyncAt ? formatDate(inventoryFreshness.lastSyncAt) : "Never"}</span>
           </>
         }
       />
-      <ErrorAndRefresh error={summary.error || activity.error || readiness.error || connector.error || scans.error || approvals.error} isRefreshing={summary.isRefreshing || activity.isRefreshing || readiness.isRefreshing || connector.isRefreshing || scans.isRefreshing || approvals.isRefreshing} />
-      <section className="cs-command-hero">
-        <div>
-          <span><RadioTower size={16} /> Workspace signal</span>
-          <h2>{accountCount ? "Cloud coverage is ready for review" : "Awaiting first account registration"}</h2>
-          <p>
-            {accountCount
-              ? "CloudShield is organizing account, resource, finding, scan, and governance records from the current workspace APIs."
-              : "Register an AWS account record to unlock connector validation, inventory sync planning, and posture review workflows."}
-          </p>
-        </div>
-        <div className="cs-command-actions">
-          <PrimaryLink href="/dashboard/accounts">Account registry</PrimaryLink>
-          <PrimaryLink href="/dashboard/security">Finding queue</PrimaryLink>
-        </div>
-      </section>
+      <ErrorAndRefresh error={null} isRefreshing={isRefreshing} />
+
       <StatGroup>
-        <MetricTile label="AWS accounts" value={accountCount} detail="Registered account records" tone="info" icon={<Cloud size={16} />} />
-        <MetricTile label="Resources" value={resourceCount} detail={resourceCount ? "Current inventory records" : "Awaiting first scan"} icon={<Boxes size={16} />} />
-        <MetricTile label="Open findings" value={openFindings} detail="Security and risk workflow" tone={openFindings ? "warning" : "neutral"} icon={<ShieldAlert size={16} />} />
-        <MetricTile label="Pending approvals" value={pendingApprovals} detail="Governed work queue" tone={pendingApprovals ? "warning" : "neutral"} icon={<ClipboardCheck size={16} />} />
+        <MetricTile label="AWS Accounts" value={executiveSummary.totalAccounts} detail={`${executiveSummary.connectedAccounts} connected`} tone="info" icon={<Cloud size={16} />} />
+        <MetricTile label="Cloud Resources" value={executiveSummary.totalResources} detail="Active inventory" icon={<Boxes size={16} />} />
+        <MetricTile label="Critical Findings" value={executiveSummary.criticalFindings} detail={`${executiveSummary.activeFindings} total open`} tone={executiveSummary.criticalFindings > 0 ? "danger" : "success"} icon={<ShieldAlert size={16} />} />
+        <MetricTile label="Compliance Controls" value={executiveSummary.unresolvedControls} detail="Needs review / Fail" tone={executiveSummary.unresolvedControls > 0 ? "warning" : "neutral"} icon={<ShieldCheck size={16} />} />
       </StatGroup>
-      <div className="cs-command-grid">
-        <Section title="Account posture" description="Onboarding and connector readiness for registered cloud accounts." icon={<Cloud size={16} />} variant="operational">
-          <DetailList
-            items={[
-              { label: "Registered accounts", value: accountCount },
-              { label: "Connector state", value: <StatusBadge status={connectorStatus ?? "NOT_CONFIGURED"} /> },
-              { label: "Scanner readiness", value: <StatusBadge status={scannerStatus} /> },
-              { label: "Last successful scan", value: formatDate(lastScan?.completedAt ?? lastScan?.finishedAt ?? lastScan?.updatedAt) }
-            ]}
-          />
+
+      <div className="cs-two-column mt-8 gap-8">
+        <Section title="Enterprise Posture Score" description="Deterministic weighted scoring based on real data." icon={<BarChart3 size={16} />} variant="insight">
+          <div className="mb-8 flex items-center gap-6 border-b border-slate-100 pb-6">
+            {postureScore.assessmentState === "SETUP_INCOMPLETE" || postureScore.assessmentState === "INSUFFICIENT_DATA" || postureScore.assessmentState === "NOT_CALCULATED" ? (
+              <>
+                <div className="text-4xl font-black text-slate-300">
+                  N/A
+                </div>
+                <div>
+                  <div className="text-base font-bold text-slate-800">Score Not Available</div>
+                  <div className="text-xs text-slate-400 mt-1 uppercase tracking-wider">{postureScore.assessmentState.replace("_", " ")}</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-5xl font-black" style={{ color: getScoreColor(postureScore.totalScore) }}>
+                  {postureScore.totalScore}
+                </div>
+                <div>
+                  <div className="text-base font-bold text-slate-800">Overall Grade</div>
+                  <div className="text-xs text-slate-400 mt-1">Out of 100</div>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex flex-col gap-4">
+            {postureScore.components.map(c => <PostureBar key={c.key} component={c} />)}
+          </div>
         </Section>
-        <Section title="Actionable next steps" description="Recommended actions from the current workspace state." icon={<Layers3 size={16} />} variant="action">
-          <div className="cs-next-steps">
-            <ConsoleLink href="/dashboard/accounts">{accountCount ? "Review multi-account coverage" : "Register your first AWS account"}</ConsoleLink>
-            <ConsoleLink href="/dashboard/scans">{scanRuns.length ? "Inspect recent scan history" : "Prepare the first inventory scan"}</ConsoleLink>
-            <ConsoleLink href="/dashboard/security">{openFindings ? "Triage open security findings" : "Open the finding queue"}</ConsoleLink>
-            <ConsoleLink href="/dashboard/reports">Review evidence and reports</ConsoleLink>
+
+        <Section title="Priority Actions" description="High-impact actions requiring immediate attention." icon={<Activity size={16} />} variant="warning">
+          {priorityActions.length === 0 ? (
+            <EmptyState title="No priority actions" description="All critical items have been addressed." icon={<CheckCircle2 size={32} />} />
+          ) : (
+            <div className="flex flex-col gap-4">
+              {priorityActions.map(action => (
+                <div key={action.id} className="border border-slate-200 rounded-xl p-5 flex flex-col gap-3 bg-white shadow-sm hover:border-orange-200 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <span className="font-bold text-slate-800 flex items-center gap-3">
+                      <StatusBadge status={action.severity} />
+                      {action.title}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold tracking-widest uppercase bg-slate-50 px-2 py-1 rounded">Score: {action.rankingScore}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 leading-relaxed">{action.reason}</p>
+                  <div className="flex items-center justify-between mt-3 pt-4 border-t border-slate-50">
+                    <span className="text-xs text-slate-400">Account: <span className="font-mono text-slate-600">{action.accountId || 'N/A'}</span></span>
+                    <PrimaryLink href={action.destinationPath}>{action.suggestedAction}</PrimaryLink>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+      </div>
+
+      <div className="cs-two-column mt-8 gap-8">
+        <Section title="Risk Distribution" description="Open security findings grouped by severity." icon={<ShieldAlert size={16} />} variant="insight">
+          <DetailList items={[
+            { label: "Critical", value: <span className="text-red-600 font-bold">{riskDistribution.bySeverity.CRITICAL}</span> },
+            { label: "High", value: <span className="text-orange-500 font-bold">{riskDistribution.bySeverity.HIGH}</span> },
+            { label: "Medium", value: riskDistribution.bySeverity.MEDIUM },
+            { label: "Low", value: riskDistribution.bySeverity.LOW },
+            { label: "Info", value: riskDistribution.bySeverity.INFO }
+          ]} />
+          <div className="mt-4 border-t border-slate-100 pt-4">
+             <ConsoleLink href="/dashboard/security">View all findings</ConsoleLink>
+          </div>
+        </Section>
+
+        <Section title="Scan Summary" description="Inventory scan jobs." icon={<ScanLine size={16} />} variant="operational">
+          <DetailList items={[
+            { label: "Completed (24h)", value: scanSummary.last24HoursCount },
+            { label: "Currently Running", value: scanSummary.running },
+            { label: "Queued", value: scanSummary.queued },
+            { label: "Failed", value: scanSummary.failed },
+            { label: "Blocked", value: scanSummary.blocked },
+            { label: "Avg Duration (ms)", value: scanSummary.averageDurationMs ?? "N/A" }
+          ]} />
+          <div className="mt-4 border-t border-slate-100 pt-4">
+             <ConsoleLink href="/dashboard/scans">View all scans</ConsoleLink>
           </div>
         </Section>
       </div>
-      <div className="cs-two-column">
-        <Section title="Platform modules" description="Current module health reported by the API." icon={<BarChart3 size={16} />} variant="status">
+
+      <div className="cs-two-column mt-8 gap-8">
+        <Section title="Evidence Readiness" description="Governance and evidence metrics." icon={<ClipboardCheck size={16} />} variant="evidence">
+          <DetailList items={[
+            { label: "Coverage", value: `${Math.round(evidenceReadiness.coveragePercent * 100)}%` },
+            { label: "Status", value: <StatusBadge status={evidenceReadiness.status} /> },
+            { label: "Controls w/ Evidence", value: evidenceReadiness.controlsWithEvidence },
+            { label: "Total Controls", value: evidenceReadiness.totalControls },
+            { label: "Owned High Risk", value: evidenceReadiness.ownedHighRiskRecords },
+            { label: "Pending Approvals", value: evidenceReadiness.pendingApprovals }
+          ]} />
+          <div className="mt-4 border-t border-slate-100 pt-4">
+             <ConsoleLink href="/dashboard/compliance">View evidence</ConsoleLink>
+          </div>
+        </Section>
+
+        <Section title="Graph Summary" description="Resource relationship density." icon={<Network size={16} />} variant="insight">
+          <DetailList items={[
+            { label: "Total Nodes", value: graphSummary.nodeCount },
+            { label: "Relationships", value: graphSummary.edgeCount },
+            { label: "Accounts", value: graphSummary.accountCount }
+          ]} />
+          <div className="mt-4 border-t border-slate-100 pt-4">
+             <ConsoleLink href="/dashboard/graph">View resource graph</ConsoleLink>
+          </div>
+        </Section>
+      </div>
+
+      <div className="cs-two-column mt-8 gap-8">
+        <Section title="Account Health & Readiness" description="Validation status and risk levels across registered AWS environments." icon={<Cloud size={16} />} variant="operational">
           <DataTable
-            columns={["Module", "Status", "Updated"]}
-            rows={modules.map((module: AnyRecord) => [
-              <span key="name" className="font-semibold">{text(module.name ?? module.module ?? module.label)}</span>,
-              <StatusBadge key="status" status={module.status ?? module.state} />,
-              formatDate(module.updatedAt ?? module.lastUpdatedAt)
+            columns={["Account", "Env", "Connection", "Freshness", "Findings", "Resources"]}
+            rows={accountHealth.map(acc => [
+              <ConsoleLink key="acc" href={`/dashboard/accounts/${acc.id}`}>{acc.displayName}</ConsoleLink>,
+              <span key="env" className="uppercase text-xs font-semibold">{acc.environment}</span>,
+              <StatusBadge key="conn" status={acc.connectionStatus} />,
+              <StatusBadge key="fresh" status={acc.freshnessStatus} />,
+              <span key="find" className="font-mono text-sm">{acc.findingCount}</span>,
+              <span key="res" className="font-mono text-sm">{acc.resourceCount}</span>
             ])}
           />
         </Section>
-        <Section title="Recent platform activity" description="Latest recorded workspace events." icon={<Activity size={16} />} variant="insight">
-          <Timeline
-            events={events.map((event: AnyRecord) => ({
-              title: text(event.title ?? event.action ?? event.type, "Activity"),
-              description: text(event.description ?? event.summary ?? event.message, ""),
-              time: event.createdAt ?? event.updatedAt ?? event.timestamp,
-              status: event.status ?? event.state
-            }))}
-          />
+
+        <Section title="Recent Activity" description="Latest audit events." icon={<Activity size={16} />} variant="detail">
+          <Timeline events={recentActivity.map(event => ({
+            title: event.title,
+            description: event.description,
+            time: event.timestamp,
+            status: event.status
+          }))} />
         </Section>
       </div>
-      <Section title="Recent scans" description="Inventory sync run history and scanner outcomes." icon={<ScanLine size={16} />} variant="evidence">
-        <DataTable
-          columns={["Run", "Account", "Status", "Started", "Finished"]}
-          rows={scanRuns.map((run: AnyRecord) => [
-            <ConsoleLink key="run" href={`/dashboard/scans/${run.id ?? run.scanRunId}`}>{text(run.id ?? run.scanRunId, "Scan run")}</ConsoleLink>,
-            text(run.awsAccountId ?? run.accountId),
-            <StatusBadge key="status" status={run.status ?? run.state} />,
-            formatDate(run.startedAt ?? run.createdAt),
-            formatDate(run.completedAt ?? run.finishedAt)
-          ])}
-        />
-      </Section>
     </>
   );
 }
+
 
 export function AccountsView() {
   return <AccountsWorkspace />;
@@ -227,8 +352,12 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
 }
 
 export function InventoryView() {
-  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/inventory/resources", { resources: [] });
-  const resources = pickArray(data, ["resources", "items"]);
+  const { data, error, isRefreshing } = useCloudShieldData<CloudResourceListResponse>("/api/v1/inventory/resources", {
+    items: [],
+    sampleData: false,
+    sampleDataLabel: ""
+  });
+  const resources = data?.items || [];
 
   return (
     <>
@@ -241,19 +370,19 @@ export function InventoryView() {
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
       <StatGroup>
         <MetricTile label="Resources" value={resources.length} tone="info" />
-        <MetricTile label="Accounts" value={new Set(resources.map((resource: AnyRecord) => resource.awsAccountId ?? resource.accountId)).size} />
-        <MetricTile label="Regions" value={new Set(resources.map((resource: AnyRecord) => resource.region).filter(Boolean)).size} />
+        <MetricTile label="Accounts" value={new Set(resources.map((resource: CloudResourceDto) => resource.awsAccountId)).size} />
+        <MetricTile label="Regions" value={new Set(resources.map((resource: CloudResourceDto) => resource.region).filter(Boolean)).size} />
       </StatGroup>
       <Section title="Inventory records">
         <DataTable
           columns={["Resource", "Type", "Account", "Region", "Status", "Source"]}
-          rows={resources.map((resource: AnyRecord) => [
-            <ConsoleLink key="name" href={`/dashboard/inventory/${resource.id ?? resource.resourceId}`}>{text(resource.name ?? resource.resourceId ?? resource.arn, "Resource")}</ConsoleLink>,
-            text(resource.type ?? resource.resourceType),
-            <span key="account" className="font-mono text-xs">{text(resource.awsAccountId ?? resource.accountId)}</span>,
+          rows={resources.map((resource: CloudResourceDto) => [
+            <ConsoleLink key="name" href={`/dashboard/inventory/${resource.id}`}>{text(resource.name ?? resource.resourceId, "Resource")}</ConsoleLink>,
+            text(resource.resourceType),
+            <span key="account" className="font-mono text-xs">{text(resource.awsAccountId)}</span>,
             text(resource.region),
-            <StatusBadge key="status" status={resource.status ?? resource.state} />,
-            <SourceBadge key="source" source={sourceFor(resource, data)} />
+            <StatusBadge key="status" status={resource.status} />,
+            <SourceBadge key="source" source={sourceFor(resource as any, data as any)} />
           ])}
         />
       </Section>
@@ -314,17 +443,23 @@ export function ResourceDetailView({ resourceId }: { resourceId: string }) {
 }
 
 export function SecurityView() {
-  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/findings/security", { findings: [] });
-  const findings = pickArray(data, ["findings", "items"]);
+  const { data, error, isRefreshing } = useCloudShieldData<SecurityFindingsResponse>("/api/v1/findings/security", {
+    items: [],
+    sampleData: false,
+    sampleDataLabel: "",
+    awsApiCallExecuted: false,
+    mutationExecuted: false
+  });
+  const findings = data?.items || [];
 
   return (
     <>
       <PageHeader breadcrumbs={["Security"]} title="Security findings" description="Prioritized findings and workflow state from CloudShield security analysis." />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
       <StatGroup>
-        <MetricTile label="Open findings" value={findings.filter((finding: AnyRecord) => !["RESOLVED", "ARCHIVED", "CLOSED"].includes(String(finding.status ?? finding.workflowStatus).toUpperCase())).length} tone="warning" />
-        <MetricTile label="Critical" value={findings.filter((finding: AnyRecord) => String(finding.severity).toUpperCase() === "CRITICAL").length} tone="danger" />
-        <MetricTile label="Resolved" value={findings.filter((finding: AnyRecord) => ["RESOLVED", "CLOSED"].includes(String(finding.status ?? finding.workflowStatus).toUpperCase())).length} tone="success" />
+        <MetricTile label="Open findings" value={findings.filter((finding: SecurityFindingDto) => !["RESOLVED", "ARCHIVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="warning" />
+        <MetricTile label="Critical" value={findings.filter((finding: SecurityFindingDto) => String(finding.severity).toUpperCase() === "CRITICAL").length} tone="danger" />
+        <MetricTile label="Resolved" value={findings.filter((finding: SecurityFindingDto) => ["RESOLVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="success" />
       </StatGroup>
       <Section title="Finding queue">
         <DataTable
@@ -416,8 +551,30 @@ export function AutomationView() {
 }
 
 export function ComplianceView() {
-  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/compliance/evidence-center", { controls: [] });
-  const controls = pickArray(data, ["controls", "evidence", "items"]);
+  const { data, error, isRefreshing } = useCloudShieldData<ComplianceEvidenceCenterResponse>("/api/v1/compliance/evidence-center", {
+    controls: [],
+    evidence: [],
+    summary: {
+      totalControls: 0,
+      pass: 0,
+      fail: 0,
+      warning: 0,
+      needsReview: 0,
+      evidenceItems: 0,
+      linkedFindings: 0,
+      riskAccepted: 0,
+      lastEvaluatedAt: null
+    },
+    sampleData: false,
+    sampleDataLabel: "",
+    officialCertificationClaim: false,
+    awsApiCallExecuted: false,
+    mutationExecuted: false,
+    remediationExecuted: false,
+    generatedFromCloudShieldRecordsOnly: true,
+    message: ""
+  });
+  const controls = data?.controls || [];
 
   return (
     <>
@@ -425,18 +582,18 @@ export function ComplianceView() {
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
       <StatGroup>
         <MetricTile label="Controls" value={controls.length} />
-        <MetricTile label="Passing" value={controls.filter((control: AnyRecord) => String(control.status).toUpperCase().includes("PASS")).length} tone="success" />
-        <MetricTile label="Needs review" value={controls.filter((control: AnyRecord) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
+        <MetricTile label="Passing" value={controls.filter((control: ComplianceControlDto) => String(control.status).toUpperCase().includes("PASS")).length} tone="success" />
+        <MetricTile label="Needs review" value={controls.filter((control: ComplianceControlDto) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
       </StatGroup>
       <Section title="Control evidence">
         <DataTable
           columns={["Control", "Framework", "Status", "Evidence", "Source"]}
-          rows={controls.map((control: AnyRecord) => [
-            text(control.title ?? control.controlId ?? control.name, "Control"),
-            text(control.framework ?? control.standard),
-            <StatusBadge key="status" status={control.status ?? control.result} />,
-            text(control.evidenceCount ?? control.evidenceItems ?? control.summary),
-            <SourceBadge key="source" source={sourceFor(control, data)} />
+          rows={controls.map((control: ComplianceControlDto) => [
+            text(control.title ?? control.controlId, "Control"),
+            text(control.framework),
+            <StatusBadge key="status" status={control.status} />,
+            text(control.evidenceCount),
+            <SourceBadge key="source" source={sourceFor(control as any, data as any)} />
           ])}
         />
       </Section>

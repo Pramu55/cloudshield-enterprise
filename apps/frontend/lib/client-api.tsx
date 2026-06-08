@@ -86,9 +86,11 @@ export function useCloudShieldData<T>(
   const [data, setData] = useState(instantData);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [fetchCounter, setFetchCounter] = useState(0);
 
   useEffect(() => {
     let isActive = true;
+    setIsRefreshing(true);
 
     fetchCloudShieldClient<T>(path)
       .then((payload) => {
@@ -111,9 +113,25 @@ export function useCloudShieldData<T>(
     return () => {
       isActive = false;
     };
+  }, [path, fetchCounter]);
+
+  useEffect(() => {
+    const handleRefetch = (e: Event) => {
+      if (e instanceof CustomEvent && e.detail === path) {
+        setFetchCounter((c) => c + 1);
+      }
+    };
+    window.addEventListener("cloudshield-refetch", handleRefetch);
+    return () => window.removeEventListener("cloudshield-refetch", handleRefetch);
   }, [path]);
 
   return { data, error, isRefreshing };
+}
+
+export function mutateCloudShieldData(path: string) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("cloudshield-refetch", { detail: path }));
+  }
 }
 
 export function RefreshBadge({

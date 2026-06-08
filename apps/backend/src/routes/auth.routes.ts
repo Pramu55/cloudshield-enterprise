@@ -8,7 +8,9 @@ import {
   RegisterRequestSchema,
   RegisterResponseSchema,
   ForgotPasswordRequestSchema,
-  ResetPasswordRequestSchema
+  ResetPasswordRequestSchema,
+  UpdateProfileRequestSchema,
+  UpdateProfileResponseSchema
 } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
@@ -172,6 +174,60 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       return CurrentUserResponseSchema.parse({
         user: { id: user.id, email: user.email, name: user.name, role: "OWNER", organizationId: user.organizationId }, // Role will be pulled from membership dynamically later if needed, or we query membership
         organization: user.organization
+      });
+    }
+  );
+
+  app.patch(
+    "/api/v1/auth/profile",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      const body = UpdateProfileRequestSchema.parse(request.body);
+
+      const user = await prisma.user.findFirst({
+        where: { id: auth.userId, organizationId: auth.organizationId },
+        include: { organizationMemberships: { where: { status: "ACTIVE", organizationId: auth.organizationId } } }
+      });
+
+      if (!user) {
+        reply.status(404).send({ error: "not_found", message: "User not found." });
+        return;
+      }
+
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
+          where: { id: user.id },
+          data: { name: body.name }
+        });
+
+        await tx.auditEvent.create({
+          data: {
+            organizationId: auth.organizationId,
+            actorUserId: auth.userId,
+            action: "auth.profile_updated",
+            targetType: "user",
+            targetId: user.id,
+            metadata: {
+              changedFields: ["name"]
+            }
+          }
+        });
+
+        return updated;
+      });
+
+      const membership = user.organizationMemberships[0];
+
+      return UpdateProfileResponseSchema.parse({
+        status: "ok",
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          name: updatedUser.name,
+          role: membership?.role === "admin" ? "OWNER" : (membership?.role || "VIEWER"),
+          organizationId: updatedUser.organizationId
+        }
       });
     }
   );

@@ -5,19 +5,22 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
-  ChevronLeft,
-  ChevronRight,
-  Command,
+  PanelLeftClose,
+  PanelLeftOpen,
   LogOut,
   HelpCircle,
-  Menu,
-  Search,
   ShieldCheck,
-  X
+  Building,
+  Cloud,
+  Settings,
+  User
 } from "lucide-react";
 import { clearCsrfToken, fetchCloudShieldClient, useCloudShieldData } from "../../lib/client-api";
 import { RouteIcon } from "./route-views";
 import { GlobalSearchBar } from "../../components/search/GlobalSearchBar";
+import { NotificationFeed } from "../../components/notifications/NotificationFeed";
+import { NAV_GROUPS } from "../../lib/route-registry";
+import type { CommandCenterResponse } from "@cloudshield/contracts";
 
 type CurrentUserPayload = {
   user?: {
@@ -28,54 +31,7 @@ type CurrentUserPayload = {
   };
 };
 
-type NavItem = {
-  label: string;
-  href: string;
-  icon: string;
-  roles?: string[];
-};
-
-const navGroups: Array<{ label: string; items: NavItem[] }> = [
-  {
-    label: "Overview",
-    items: [{ label: "Dashboard", href: "/dashboard", icon: "overview" }]
-  },
-  {
-    label: "Cloud",
-    items: [
-      { label: "Accounts", href: "/dashboard/accounts", icon: "accounts" },
-      { label: "Inventory", href: "/dashboard/inventory", icon: "inventory" },
-      { label: "Resource graph", href: "/dashboard/graph", icon: "graph" },
-      { label: "Cost", href: "/dashboard/cost", icon: "cost" }
-    ]
-  },
-  {
-    label: "Security",
-    items: [
-      { label: "Findings", href: "/dashboard/security", icon: "security" },
-      { label: "Governance", href: "/dashboard/governance", icon: "governance" },
-      { label: "Compliance", href: "/dashboard/compliance", icon: "compliance" },
-      { label: "Recommendations", href: "/dashboard/recommendations", icon: "recommendations" }
-    ]
-  },
-  {
-    label: "Operations",
-    items: [
-      { label: "Automation", href: "/dashboard/automation", icon: "automation" },
-      { label: "Scans", href: "/dashboard/scans", icon: "scans" },
-      { label: "Reports", href: "/dashboard/reports", icon: "reports" }
-    ]
-  },
-  {
-    label: "Administration",
-    items: [
-      { label: "Settings", href: "/dashboard/settings", icon: "settings", roles: ["OWNER", "ADMIN"] },
-      { label: "Members", href: "/dashboard/settings/members", icon: "members", roles: ["OWNER", "ADMIN"] }
-    ]
-  }
-];
-
-function canSee(item: NavItem, role?: string) {
+function canSee(item: { roles?: string[] }, role?: string) {
   if (!item.roles?.length) return true;
   return item.roles.includes(String(role ?? "").toUpperCase());
 }
@@ -90,9 +46,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const { data } = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
   const user = data.user;
+
+  const { data: commandCenterData } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
+
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
 
@@ -104,14 +64,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => media.removeEventListener("change", handler);
   }, []);
 
-  const toggleMenu = () => {
-    if (isDesktop) {
-      setCollapsed(prev => !prev);
-    } else {
-      setMobileOpen(prev => !prev);
-    }
-  };
-
   useEffect(() => {
     const saved = window.localStorage.getItem("cloudshield.sidebar.collapsed");
     if (saved === "true") setCollapsed(true);
@@ -122,19 +74,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [collapsed]);
 
   const visibleGroups = useMemo(() => {
-    return navGroups
+    return NAV_GROUPS
       .map((group) => ({ ...group, items: group.items.filter((item) => canSee(item, user?.role)) }))
       .filter((group) => group.items.length);
   }, [user?.role]);
 
   useEffect(() => {
-    setMobileOpen(false);
     setProfileOpen(false);
+    setWorkspaceOpen(false);
     setNotificationsOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    const links = navGroups.flatMap((group) => group.items.map((item) => item.href));
+    const links = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
     links.forEach((href) => router.prefetch(href));
   }, [router]);
 
@@ -153,15 +105,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const userName = user?.name ?? user?.email ?? "Signed-in user";
   const userRole = user?.role ? user.role.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()) : "Member";
 
+  const connectedAccounts = commandCenterData?.executiveSummary?.connectedAccounts;
+  const totalAccounts = commandCenterData?.executiveSummary?.totalAccounts;
+  const connectorStatus = commandCenterData?.accountHealth?.length ?
+    (commandCenterData.accountHealth.some(a => a.connectionStatus === "VALIDATION_SUCCEEDED") ? "CONNECTED" : "NOT_CONFIGURED")
+    : "NOT_CONFIGURED";
+
   const sidebar = (
     <aside className="portal-sidebar" data-collapsed={collapsed}>
       <div className="portal-brand">
         <Link href="/dashboard" aria-label="CloudShield dashboard">
-          <span><ShieldCheck size={20} /></span>
+          <span className="portal-brand-mark"><ShieldCheck size={20} /></span>
           {!collapsed ? <strong>CloudShield</strong> : null}
         </Link>
-        <button className="portal-icon-button portal-mobile-close" onClick={() => setMobileOpen(false)} type="button" aria-label="Close navigation">
-          <X size={18} />
+        <button
+          className="portal-icon-button"
+          onClick={() => {
+            if (isDesktop) setCollapsed(v => !v);
+            else setMobileOpen(false);
+          }}
+          type="button"
+          aria-label={isDesktop ? (collapsed ? "Expand sidebar" : "Collapse sidebar") : "Close sidebar"}
+        >
+          {isDesktop ? (collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />) : <PanelLeftClose size={18} />}
         </button>
       </div>
 
@@ -187,10 +153,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       <div className="portal-sidebar-footer">
-        <button className="portal-collapse" onClick={() => setCollapsed((value) => !value)} type="button" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          {!collapsed ? <span>Collapse</span> : null}
-        </button>
       </div>
     </aside>
   );
@@ -198,34 +160,72 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="portal-shell" data-collapsed={collapsed}>
       <div className="portal-desktop-sidebar">{sidebar}</div>
-      {mobileOpen ? <div className="portal-mobile-backdrop" onClick={() => setMobileOpen(false)} /> : null}
-      <div className="portal-mobile-sidebar" data-open={mobileOpen}>{sidebar}</div>
-
       <div className="portal-main">
         <header className="portal-topbar">
-          <div className="portal-topbar-left flex-1 flex items-center">
-            <button className="portal-icon-button portal-sidebar-toggle" onClick={toggleMenu} type="button" aria-label="Toggle navigation">
-              <Menu size={18} />
-            </button>
-            <GlobalSearchBar />
+          <div className="portal-topbar-left flex-1 flex items-center relative">
+            {!mobileOpen && (
+              <button
+                className="portal-icon-button lg:hidden mr-2"
+                onClick={() => setMobileOpen(true)}
+                type="button"
+                aria-label="Open sidebar"
+              >
+                <PanelLeftOpen size={18} />
+              </button>
+            )}
+            <div className="ml-4 flex-1">
+              <GlobalSearchBar />
+            </div>
           </div>
-          <div className="portal-topbar-right">
-            <button className="portal-icon-button" onClick={() => setNotificationsOpen((value) => !value)} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
+          <div className="portal-topbar-right relative">
+            <button className="portal-icon-button relative" onClick={() => { setNotificationsOpen(v => !v); setWorkspaceOpen(false); setProfileOpen(false); }} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
               <Bell size={17} />
             </button>
-            {notificationsOpen ? (
-              <div className="portal-popover portal-notifications">
-                <strong>Notifications</strong>
-                <p>No new notifications.</p>
-              </div>
-            ) : null}
-            <button className="portal-icon-button" type="button" aria-label="Help">
+            {notificationsOpen ? <NotificationFeed /> : null}
+            <button className="portal-icon-button" onClick={() => window.open('/docs', '_blank')} type="button" aria-label="Help">
               <HelpCircle size={17} />
             </button>
-            <div className="portal-org" aria-label="Organization">
+
+            <button className="portal-org hover:border-slate-300 transition-colors" onClick={() => { setWorkspaceOpen(v => !v); setProfileOpen(false); setNotificationsOpen(false); }} aria-label="Workspace" aria-expanded={workspaceOpen}>
               <span>{organizationName}</span>
-            </div>
-            <button className="portal-user" onClick={() => setProfileOpen((value) => !value)} type="button" aria-haspopup="menu" aria-expanded={profileOpen}>
+            </button>
+            {workspaceOpen ? (
+              <div className="portal-popover absolute right-16 top-[52px] w-80 bg-white rounded-xl shadow-[0_35px_80px_-25px_rgba(15,23,42,0.6)] border border-[#d9dee7] z-50 overflow-hidden" role="menu">
+                <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                    <Building size={20} />
+                  </div>
+                  <div>
+                    <strong className="block text-slate-900 text-sm">{organizationName}</strong>
+                    <span className="text-xs text-slate-500">{userRole} • Single workspace</span>
+                  </div>
+                </div>
+                <div className="p-4 border-b border-slate-100 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600 font-semibold">AWS Accounts</span>
+                    <span className="text-sm font-bold text-slate-900">{totalAccounts !== undefined ? totalAccounts : "Unavailable"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600 font-semibold">Connected</span>
+                    <span className="text-sm font-bold text-slate-900">{connectedAccounts !== undefined ? connectedAccounts : "Unavailable"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600 font-semibold">Connector State</span>
+                    <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-700 rounded-sm font-bold uppercase tracking-wider">{connectorStatus.replace(/_/g, ' ')}</span>
+                  </div>
+                </div>
+                <div className="p-2 flex flex-col">
+                  <Link href="/dashboard/accounts" onClick={() => setWorkspaceOpen(false)} className="px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-md font-medium flex items-center gap-2">
+                    <Cloud size={16} className="text-slate-400" /> Manage AWS accounts
+                  </Link>
+                  <Link href="/dashboard/settings" onClick={() => setWorkspaceOpen(false)} className="px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-md font-medium flex items-center gap-2">
+                    <Settings size={16} className="text-slate-400" /> Workspace settings
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+
+            <button className="portal-user" onClick={() => { setProfileOpen((value) => !value); setWorkspaceOpen(false); setNotificationsOpen(false); }} type="button" aria-haspopup="menu" aria-expanded={profileOpen}>
               <span>{userName.slice(0, 1).toUpperCase()}</span>
               <div>
                 <strong>{userName}</strong>
@@ -233,28 +233,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             </button>
             {profileOpen ? (
-              <div className="portal-popover portal-profile" role="menu">
-                <div className="portal-profile-head">
-                  <span>{userName.slice(0, 1).toUpperCase()}</span>
-                  <div>
-                    <strong>{userName}</strong>
-                    <p>{user?.email ?? "No email reported"}</p>
+              <div className="portal-popover absolute right-0 top-[52px] w-72 bg-white rounded-xl shadow-[0_35px_80px_-25px_rgba(15,23,42,0.6)] border border-[#d9dee7] z-50 overflow-hidden" role="menu">
+                <div className="p-4 border-b border-[#d9dee7] flex items-start gap-3 bg-white">
+                  <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-inner">
+                    {userName.slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="flex flex-col overflow-hidden">
+                    <strong className="text-slate-900 text-sm truncate">{userName}</strong>
+                    <span className="text-slate-500 text-xs truncate">{user?.email ?? "No email"}</span>
                   </div>
                 </div>
-                <dl>
-                  <div><dt>Organization</dt><dd>{organizationName}</dd></div>
-                  <div><dt>Role</dt><dd>{userRole}</dd></div>
-                </dl>
-                <button className="portal-profile-logout" onClick={logout} type="button" role="menuitem">
-                  <LogOut size={15} />
-                  Sign out
-                </button>
+                <div className="p-2">
+                  <Link href="/dashboard/profile" onClick={() => setProfileOpen(false)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-md font-semibold transition-colors">
+                    <User size={16} className="text-slate-400" /> Profile settings
+                  </Link>
+                </div>
+                <div className="p-2 border-t border-[#d9dee7] bg-slate-50">
+                  <button className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-lg font-bold transition-all shadow-sm" onClick={logout} type="button" role="menuitem">
+                    <LogOut size={16} /> Sign out
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>
         </header>
         <main className="portal-content">{children}</main>
       </div>
+
+      {mobileOpen ? <div className="portal-mobile-backdrop" onClick={() => setMobileOpen(false)} /> : null}
+      <div className="portal-mobile-sidebar" data-open={mobileOpen}>{sidebar}</div>
     </div>
   );
 }
