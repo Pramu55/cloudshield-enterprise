@@ -11,6 +11,7 @@ export type GovernedAwsChangeJob = {
   planId: string;
   requestedById: string;
   idempotencyKey: string;
+  correlationId?: string;
 };
 
 export const governedAwsChangeQueue = process.env.DISABLE_QUEUE_CONNECTIONS_FOR_TESTS === "true"

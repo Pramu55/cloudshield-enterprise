@@ -471,6 +471,8 @@ model CloudResource {
   @@index([organizationId, staleAt])
   @@index([organizationId, archivedAt])
   @@index([organizationId, lastScanRunId])
+  @@index([organizationId, ownerTeamId])
+  @@index([organizationId, status])
 }
 
 model ResourceRelationship {
@@ -556,6 +558,8 @@ model SecurityFinding {
   @@index([organizationId, source])
   @@index([organizationId, awsAccountId])
   @@index([organizationId, resourceId])
+  @@index([organizationId, status, archivedAt])
+  @@index([organizationId, severity, status, archivedAt])
 }
 
 model CostFinding {
@@ -754,6 +758,9 @@ model ScanRun {
   @@index([organizationId, createdAt])
   @@index([organizationId, scannerType])
   @@index([organizationId, dedupeKey])
+  @@index([organizationId, jobType])
+  @@index([organizationId, awsAccountId, jobType, status])
+  @@index([organizationId, status, createdAt])
 }
 
 model AuditEvent {
@@ -832,6 +839,8 @@ model RemediationPlan {
   @@index([organizationId, approvalStatus])
   @@index([organizationId, executionStatus])
   @@index([organizationId, lifecycleState])
+  @@index([organizationId, resourceId])
+  @@index([organizationId, createdById])
 }
 
 model ApprovalRequest {
@@ -856,6 +865,7 @@ model ApprovalRequest {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, remediationPlanId])
+  @@index([organizationId, requestedById])
 }
 
 model ReportExport {

@@ -1,6 +1,6 @@
 import { Queue, Worker as BullWorker } from "bullmq";
 import { CreateTagsCommand, DescribeInstancesCommand, EC2Client } from "@aws-sdk/client-ec2";
-import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
+import { AssumeRoleCommand, GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import { createLogger } from "@cloudshield/logger";
 import { executeEc2Scan } from "./aws-ec2-scanner.js";
 import {
@@ -22,21 +22,10 @@ const connection = {
   maxRetriesPerRequest: null
 };
 
-export const cloudScanQueue = new Queue(CLOUD_SCAN_QUEUE_NAME, {
-  connection
-});
-
-export const cloudInventorySyncQueue = new Queue(CLOUD_INVENTORY_SYNC_QUEUE_NAME, {
-  connection
-});
-
-export const cloudAssessmentQueue = new Queue(CLOUD_ASSESSMENT_QUEUE_NAME, {
-  connection
-});
-
-export const governedAwsChangeQueue = new Queue(GOVERNED_AWS_CHANGE_QUEUE_NAME, {
-  connection
-});
+export const cloudScanQueue = process.env.NODE_ENV === "test" ? {} as any : new Queue(CLOUD_SCAN_QUEUE_NAME, { connection });
+export const cloudInventorySyncQueue = process.env.NODE_ENV === "test" ? {} as any : new Queue(CLOUD_INVENTORY_SYNC_QUEUE_NAME, { connection });
+export const cloudAssessmentQueue = process.env.NODE_ENV === "test" ? {} as any : new Queue(CLOUD_ASSESSMENT_QUEUE_NAME, { connection });
+export const governedAwsChangeQueue = process.env.NODE_ENV === "test" ? {} as any : new Queue(GOVERNED_AWS_CHANGE_QUEUE_NAME, { connection });
 
 type CloudScanJob = {
   type: CloudScanJobType;
@@ -53,6 +42,7 @@ type CloudAssessmentJob = {
   organizationId: string;
   requestedById: string;
   mode: "EVALUATION" | "AWS_STS_ONLY" | "AWS_READONLY_SCAN";
+  correlationId?: string;
 };
 
 type GovernedAwsChangeJob = {
@@ -60,6 +50,7 @@ type GovernedAwsChangeJob = {
   planId: string;
   requestedById: string;
   idempotencyKey: string;
+  correlationId?: string;
 };
 
 type AwsTag = {
@@ -67,7 +58,7 @@ type AwsTag = {
   Value: string;
 };
 
-const worker = new BullWorker<CloudScanJob>(
+const worker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWorker<CloudScanJob>(
   CLOUD_INVENTORY_SYNC_QUEUE_NAME,
   async (job) => {
     const jobType = CloudScanJobTypeSchema.parse(job.data.type);
@@ -98,22 +89,20 @@ const worker = new BullWorker<CloudScanJob>(
         status: "blocked",
         code: "AWS_INVENTORY_SCANNER_DISABLED",
         awsApiCallExecuted: false,
-        reason:
-          "AWS inventory scanning is disabled in this milestone. No inventory APIs were called."
+        reason: "AWS inventory scanning is disabled in this milestone. No inventory APIs were called."
       };
     }
 
     return {
       status: "skipped",
       awsApiCallExecuted: false,
-      reason:
-        "CloudShield worker foundation received the job but did not execute AWS API calls."
+      reason: "CloudShield worker foundation received the job but did not execute AWS API calls."
     };
   },
   { connection }
 );
 
-const assessmentWorker = new BullWorker<CloudAssessmentJob>(
+const assessmentWorker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWorker<CloudAssessmentJob>(
   CLOUD_ASSESSMENT_QUEUE_NAME,
   async (job) => {
     logger.info(
@@ -121,7 +110,8 @@ const assessmentWorker = new BullWorker<CloudAssessmentJob>(
         jobId: job.id,
         assessmentId: job.data.assessmentId,
         organizationId: job.data.organizationId,
-        mode: job.data.mode
+        mode: job.data.mode,
+        correlationId: job.data.correlationId
       },
       "Received CloudShield automated assessment job"
     );
@@ -133,115 +123,172 @@ const assessmentWorker = new BullWorker<CloudAssessmentJob>(
       mutationExecuted: false,
       terraformApplyExecuted: false,
       automaticRemediationExecuted: false,
-      reason:
-        "CloudShield assessment worker hook is installed. Backend deterministic engine handles evaluation-mode assessments without AWS execution."
+      reason: "CloudShield assessment worker hook is installed. Backend deterministic engine handles evaluation-mode assessments without AWS execution."
     };
   },
   { connection }
 );
 
-const governedAwsChangeWorker = new BullWorker<GovernedAwsChangeJob>(
-  GOVERNED_AWS_CHANGE_QUEUE_NAME,
-  async (job) => {
-    const plan = await prisma.remediationPlan.findFirst({
-      where: {
-        id: job.data.planId,
-        organizationId: job.data.organizationId
+export const processGovernedAwsChangeJob = async (job: any) => {
+  // Step 5: Strengthen idempotency and concurrency
+  const existingCompleted = await prisma.remediationPlan.findFirst({
+    where: {
+      idempotencyKey: job.data.idempotencyKey,
+      lifecycleState: { in: ["SUCCEEDED", "FAILED", "BLOCKED", "ROLLED_BACK", "EXECUTING", "ROLLBACK_AVAILABLE"] }
+    }
+  });
+
+  if (existingCompleted) {
+    if (existingCompleted.id !== job.data.planId) {
+      return { status: "BLOCKED", reason: "Another operation used the same idempotency key." };
+    }
+    if (["SUCCEEDED", "ROLLBACK_AVAILABLE"].includes(existingCompleted.lifecycleState)) {
+       return { status: existingCompleted.lifecycleState, mutationExecuted: false };
+    }
+    if (existingCompleted.lifecycleState === "EXECUTING") {
+      return { status: "STALE_OPERATION_STATE", reason: "Operation is currently executing." };
+    }
+    return { status: existingCompleted.lifecycleState, mutationExecuted: false };
+  }
+
+  const plan = await prisma.remediationPlan.findUnique({
+    where: { id: job.data.planId },
+    include: {
+      finding: {
+        include: {
+          awsAccount: {
+            include: { organization: { select: { awsChangeExecutionEnabled: true } } }
+          }
+        }
       },
-      include: {
-        finding: {
-          include: {
-            awsAccount: {
-              include: {
-                organization: { select: { awsChangeExecutionEnabled: true } }
-              }
-            }
-          }
-        },
-        resource: true
-      }
-    });
-
-    if (!plan) {
-      return { status: "FAILED", reason: "Plan not found for organization." };
+      resource: true
     }
+  });
 
-    if (plan.lifecycleState !== "QUEUED") {
-      return await blockGovernedPlan(plan.id, "Plan is not queued for worker execution.");
-    }
+  if (!plan || plan.organizationId !== job.data.organizationId) {
+    return { status: "FAILED", reason: "Plan not found for organization." };
+  }
 
-    await prisma.remediationPlan.update({
-      where: { id: plan.id },
-      data: {
-        lifecycleState: "PREFLIGHT_VALIDATING",
-        executionStartedAt: new Date(),
-        preflightEvidence: {
-          ...(typeof plan.preflightEvidence === "object" && plan.preflightEvidence ? plan.preflightEvidence : {}),
-          workerJobId: job.id,
-          workerPreflightStartedAt: new Date().toISOString(),
-          awsApiCallExecuted: false,
-          mutationExecuted: false
-        }
-      }
-    });
+  if (plan.lifecycleState !== "QUEUED") {
+    return await blockGovernedPlan(plan.id, "Plan is not queued for worker execution.", prisma);
+  }
 
-    const mode = getAwsChangeExecutionMode();
-    const blockedReason = validateWorkerGate(plan, mode, job.data.idempotencyKey);
-    if (blockedReason) {
-      return await blockGovernedPlan(plan.id, blockedReason);
-    }
+  if (plan.approvalStatus !== "APPROVED") {
+    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", prisma);
+  }
 
-    if (mode === "simulation") {
-      const updated = await prisma.remediationPlan.update({
-        where: { id: plan.id },
-        data: {
-          lifecycleState: "SUCCEEDED",
-          executionStatus: "READY_FOR_EXECUTION",
-          executionCompletedAt: new Date(),
-          executionEvidence: {
-            workerJobId: job.id,
-            mode,
-            simulatedWorkerExecution: true,
-            awsApiCallExecuted: false,
-            mutationExecuted: false,
-            message: "Simulation mode completed without AWS mutation."
-          }
-        }
-      });
-      await audit(plan.organizationId, job.data.requestedById, plan.id, "governance.aws_change.worker_simulated", {
-        mode,
+  if (plan.approvalExpiresAt && plan.approvalExpiresAt < new Date()) {
+    return await failGovernedPlan(plan.id, "APPROVAL_EXPIRED", prisma);
+  }
+
+  if (plan.idempotencyKey !== job.data.idempotencyKey) {
+    return await failGovernedPlan(plan.id, "IDEMPOTENCY_KEY_MISMATCH", prisma);
+  }
+
+  if (plan.createdById && plan.approvedById && plan.createdById === plan.approvedById) {
+    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", prisma);
+  }
+
+  const mode = getAwsChangeExecutionMode();
+  const blockedReason = validateWorkerGate(plan, mode);
+  if (blockedReason) {
+    return await blockGovernedPlan(plan.id, blockedReason, prisma);
+  }
+
+  // Atomically claim the plan
+  const updateResult = await prisma.remediationPlan.updateMany({
+    where: {
+      id: plan.id,
+      organizationId: job.data.organizationId,
+      idempotencyKey: job.data.idempotencyKey,
+      lifecycleState: "QUEUED",
+      approvalStatus: "APPROVED",
+      OR: [
+        { approvalExpiresAt: null },
+        { approvalExpiresAt: { gt: new Date() } }
+      ]
+    },
+    data: {
+      lifecycleState: "EXECUTING",
+      executionStartedAt: new Date(),
+      preflightEvidence: {
+        ...(typeof plan.preflightEvidence === "object" && plan.preflightEvidence ? plan.preflightEvidence : {}),
+        workerJobId: job.id,
+        workerPreflightStartedAt: new Date().toISOString(),
         awsApiCallExecuted: false,
         mutationExecuted: false
-      });
-      return { status: updated.lifecycleState, mutationExecuted: false };
+      }
     }
+  });
 
-    return await executeGovernedEc2Tagging(plan, job.data, mode);
-  },
+  if (updateResult.count === 0) {
+    const reloaded = await prisma.remediationPlan.findUnique({ where: { id: plan.id }});
+    if (reloaded && ["SUCCEEDED", "ROLLBACK_AVAILABLE"].includes(reloaded.lifecycleState)) {
+       return { status: reloaded.lifecycleState, mutationExecuted: false };
+    }
+    return { status: "STALE_OPERATION_STATE", reason: "Atomic claim failed or state became stale." };
+  }
+
+  if (mode === "simulation") {
+    const updated = await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        lifecycleState: "SUCCEEDED",
+        executionStatus: "READY_FOR_EXECUTION",
+        executionCompletedAt: new Date(),
+        executionEvidence: {
+          workerJobId: job.id,
+          mode,
+          simulatedWorkerExecution: true,
+          awsApiCallExecuted: false,
+          mutationExecuted: false,
+          message: "Simulation mode completed without AWS mutation."
+        }
+      }
+    });
+    await audit(plan.organizationId, job.data.requestedById, plan.id, "governance.aws_change.worker_simulated", {
+      mode,
+      awsApiCallExecuted: false,
+      mutationExecuted: false
+    }, prisma);
+    return { status: updated.lifecycleState, mutationExecuted: false };
+  }
+
+  return await executeGovernedEc2Tagging(plan, job.data, mode, prisma);
+};
+
+type TestSafeWorker = { on: (event: string, handler: any) => void };
+function createWorkerStub(): TestSafeWorker {
+  return { on: () => {} };
+}
+
+const governedAwsChangeWorker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWorker<GovernedAwsChangeJob>(
+  GOVERNED_AWS_CHANGE_QUEUE_NAME,
+  processGovernedAwsChangeJob,
   { connection, concurrency: 1 }
 );
 
-worker.on("completed", (job) => {
+worker.on("completed", (job: any) => {
   logger.info({ jobId: job.id }, "CloudShield worker job completed");
 });
 
-worker.on("failed", (job, error) => {
+worker.on("failed", (job: any, error: any) => {
   logger.error({ jobId: job?.id, error }, "CloudShield worker job failed");
 });
 
-assessmentWorker.on("completed", (job) => {
+assessmentWorker.on("completed", (job: any) => {
   logger.info({ jobId: job.id }, "CloudShield assessment worker job completed");
 });
 
-assessmentWorker.on("failed", (job, error) => {
+assessmentWorker.on("failed", (job: any, error: any) => {
   logger.error({ jobId: job?.id, error }, "CloudShield assessment worker job failed");
 });
 
-governedAwsChangeWorker.on("completed", (job) => {
+governedAwsChangeWorker.on("completed", (job: any) => {
   logger.info({ jobId: job.id }, "Governed AWS change worker job completed");
 });
 
-governedAwsChangeWorker.on("failed", (job, error) => {
+governedAwsChangeWorker.on("failed", (job: any, error: any) => {
   logger.error({ jobId: job?.id, error }, "Governed AWS change worker job failed");
 });
 
@@ -281,16 +328,13 @@ function getAwsChangeExecutionMode() {
   return "disabled";
 }
 
-function validateWorkerGate(
-  plan: any,
-  mode: string,
-  idempotencyKey: string
-) {
+function parseCsv(value: string | undefined): string[] {
+  return (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function validateWorkerGate(plan: any, mode: string) {
   if (mode === "disabled") return "AWS_CHANGE_EXECUTION_MODE is disabled.";
   if (mode === "production") return "Production execution is not enabled in this pilot.";
-  if (plan.idempotencyKey !== idempotencyKey) return "Worker idempotency key mismatch.";
-  if (plan.approvalStatus !== "APPROVED") return "Approval is missing.";
-  if (plan.approvalExpiresAt && plan.approvalExpiresAt < new Date()) return "Approval has expired.";
   if (!plan.finding?.awsAccount?.organization?.awsChangeExecutionEnabled) return "Organization is not enabled for governed AWS changes.";
   if (!plan.finding?.awsAccount?.changeExecutionEnabled) return "AWS account is not enabled for governed AWS changes.";
   if (mode === "staging" && !["staging", "sandbox"].includes(String(plan.finding.awsAccount.environment))) {
@@ -311,27 +355,106 @@ function validateWorkerGate(
 async function executeGovernedEc2Tagging(
   plan: any,
   jobData: GovernedAwsChangeJob,
-  mode: string
+  mode: string,
+  tx: any
 ) {
   const payload = plan.normalizedPayload;
   const region = payload.region || plan.resource.region;
   const instanceId = payload.resourceId || plan.resource.resourceId;
-  const tags: AwsTag[] = (payload.tags ?? []).map((tag: any) => ({
+  const requestedTags: AwsTag[] = (payload.tags ?? []).map((tag: any) => ({
     Key: String(tag.key),
     Value: String(tag.value)
   }));
 
-  await prisma.remediationPlan.update({
-    where: { id: plan.id },
-    data: { lifecycleState: "EXECUTING" }
-  });
+  const expectedAccountId = plan.finding.awsAccount.accountId;
+  const expectedEnvironment = plan.finding.awsAccount.environment;
+
+  // Step 2: Revalidate global allowlists in worker
+  const allowedAccounts = parseCsv(process.env.AWS_ALLOWED_ACCOUNT_IDS);
+  const allowedRegions = parseCsv(process.env.AWS_ALLOWED_REGIONS);
+
+  if (mode === "staging" && (allowedAccounts.length === 0 || allowedRegions.length === 0)) {
+    return await failGovernedPlan(plan.id, "ALLOWLIST_NOT_CONFIGURED", tx);
+  }
+  if (allowedAccounts.length > 0 && !allowedAccounts.includes(expectedAccountId)) {
+    return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", tx);
+  }
+  if (allowedRegions.length > 0 && !allowedRegions.includes(region)) {
+    return await failGovernedPlan(plan.id, "REGION_NOT_ALLOWLISTED", tx);
+  }
+
+  // Step 4: Revalidate requested tag keys immediately before CreateTags
+  const allowedTagKeys = parseCsv(process.env.CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS);
+  if (mode === "staging" && allowedTagKeys.length === 0) {
+    return await failGovernedPlan(plan.id, "TAG_ALLOWLIST_NOT_CONFIGURED", tx);
+  }
+  if (requestedTags.length === 0) {
+    return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", tx);
+  }
+  const seenKeys = new Set<string>();
+
+  for (const tag of requestedTags) {
+    if (!tag.Key || tag.Key.trim() === "") return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", tx);
+    if (seenKeys.has(tag.Key)) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", tx);
+    seenKeys.add(tag.Key);
+
+    if (tag.Key.length > 128 || tag.Value.length > 256) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", tx);
+
+    if (tag.Key.toLowerCase().startsWith("aws:")) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", tx);
+    if (["CloudShieldManaged", "CloudShieldProtected", "Environment"].includes(tag.Key)) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", tx);
+
+    if (allowedTagKeys.length > 0 && !allowedTagKeys.includes(tag.Key)) {
+      return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", tx);
+    }
+  }
 
   try {
     const credentials = await assumeExecutorRole(region);
+    const sts = new STSClient({ region, credentials });
+
+    // Step 1: Executor identity verification
+    const identity = await sts.send(new GetCallerIdentityCommand({}));
+    const returnedAccount = identity.Account ?? null;
+    const returnedArn = identity.Arn ?? null;
+
+    if (allowedAccounts.length > 0 && returnedAccount && !allowedAccounts.includes(returnedAccount)) {
+      return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", tx);
+    }
+
+    if (returnedAccount !== expectedAccountId) {
+      return await failGovernedPlan(plan.id, "IDENTITY_MISMATCH", tx);
+    }
+
+    const configuredExecutorRoleArn = process.env.AWS_EXECUTOR_ROLE_ARN!;
+    const expectedRoleName = configuredExecutorRoleArn.split("/").pop();
+    if (!expectedRoleName || !returnedArn || !returnedArn.includes(`assumed-role/${expectedRoleName}/`)) {
+       return await failGovernedPlan(plan.id, "ROLE_PRINCIPAL_MISMATCH", tx);
+    }
+
+    const maskedArn = returnedArn.replace(/(arn:aws:sts::\d{12}:assumed-role\/[^\/]+\/).+/, "$1***");
+
     const ec2 = new EC2Client({ region, credentials });
     const before = await fetchInstanceTags(ec2, instanceId);
 
-    const requestedTagsAlreadyPresent = tags.every(
+    // Step 3: Add real-resource tag safety gates
+    if (before["Environment"] === "prod") {
+      return await failGovernedPlan(plan.id, "PRODUCTION_TARGET", tx);
+    }
+    if (before["CloudShieldProtected"] === "true") {
+      return await failGovernedPlan(plan.id, "PROTECTED_TARGET", tx);
+    }
+    if (before["CloudShieldManaged"] !== "true") {
+      return await failGovernedPlan(plan.id, "RESOURCE_NOT_MANAGED", tx);
+    }
+    if (before["Environment"] !== "sandbox") {
+      if (before["Environment"] === "staging" && expectedEnvironment === "staging") {
+        // Allowed
+      } else {
+        return await failGovernedPlan(plan.id, "ENVIRONMENT_MISMATCH", tx);
+      }
+    }
+
+    const requestedTagsAlreadyPresent = requestedTags.every(
       (tag) => before[tag.Key] === tag.Value
     );
 
@@ -340,19 +463,19 @@ async function executeGovernedEc2Tagging(
       const response = await ec2.send(
         new CreateTagsCommand({
           Resources: [instanceId],
-          Tags: tags
+          Tags: requestedTags
         })
       );
       requestId = response.$metadata.requestId;
     }
 
     const after = await fetchInstanceTags(ec2, instanceId);
-    const verified = tags.every((tag) => after[tag.Key] === tag.Value);
+    const verified = requestedTags.every((tag) => after[tag.Key] === tag.Value);
     if (!verified) {
-      return await failGovernedPlan(plan.id, "After-state verification failed.");
+      return await failGovernedPlan(plan.id, "AFTER_STATE_VERIFICATION_FAILED", tx);
     }
 
-    const updated = await prisma.remediationPlan.update({
+    const updated = await tx.remediationPlan.update({
       where: { id: plan.id },
       data: {
         lifecycleState: "ROLLBACK_AVAILABLE",
@@ -360,7 +483,7 @@ async function executeGovernedEc2Tagging(
         beforeState: {
           ...(typeof plan.beforeState === "object" && plan.beforeState ? plan.beforeState : {}),
           currentAwsTags: filterCloudShieldTags(before),
-          rollbackTags: buildRollbackTags(before, tags),
+          rollbackTags: buildRollbackTags(before, requestedTags),
           verifiedAt: new Date().toISOString()
         },
         afterState: {
@@ -371,6 +494,10 @@ async function executeGovernedEc2Tagging(
         executionEvidence: {
           workerJobId: jobData.idempotencyKey,
           mode,
+          executorIdentity: {
+            account: returnedAccount,
+            arnMasked: maskedArn
+          },
           idempotentNoop: requestedTagsAlreadyPresent,
           awsApiCallExecuted: true,
           mutationExecuted: !requestedTagsAlreadyPresent,
@@ -378,6 +505,7 @@ async function executeGovernedEc2Tagging(
           rollbackAction: "ec2:DeleteTags or restore previous values after separate approval",
           cloudTrailCorrelation: {
             requestId: requestId ?? null,
+            correlationId: (jobData as any).correlationId,
             eventName: requestedTagsAlreadyPresent ? "CreateTags.noop" : "CreateTags"
           },
           result: "SUCCEEDED"
@@ -391,11 +519,12 @@ async function executeGovernedEc2Tagging(
       mode,
       awsApiCallExecuted: true,
       mutationExecuted: !requestedTagsAlreadyPresent,
-      awsRequestId: requestId ?? null
-    });
+      awsRequestId: requestId ?? null,
+      correlationId: (jobData as any).correlationId
+    }, tx);
     return { status: updated.lifecycleState, mutationExecuted: !requestedTagsAlreadyPresent };
   } catch (error: any) {
-    return await failGovernedPlan(plan.id, classifyAwsError(error));
+    return await failGovernedPlan(plan.id, classifyAwsError(error), tx);
   }
 }
 
@@ -420,7 +549,9 @@ async function fetchInstanceTags(ec2: EC2Client, instanceId: string) {
   const response = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
   const instance = response.Reservations?.flatMap((reservation) => reservation.Instances ?? [])[0];
   if (!instance?.InstanceId) {
-    throw new Error("EC2 instance was not found during preflight.");
+    const error = new Error("EC2 instance was not found during preflight.");
+    error.name = "NotFound";
+    throw error;
   }
   return Object.fromEntries((instance.Tags ?? []).filter((tag) => tag.Key).map((tag) => [String(tag.Key), String(tag.Value ?? "")]));
 }
@@ -437,8 +568,8 @@ function buildRollbackTags(before: Record<string, string>, requested: AwsTag[]) 
   }));
 }
 
-async function failGovernedPlan(planId: string, failureClassification: string) {
-  const updated = await prisma.remediationPlan.update({
+async function failGovernedPlan(planId: string, failureClassification: string, tx: any) {
+  const updated = await tx.remediationPlan.update({
     where: { id: planId },
     data: {
       lifecycleState: "FAILED",
@@ -456,20 +587,23 @@ async function failGovernedPlan(planId: string, failureClassification: string) {
     failureClassification,
     awsApiCallExecuted: true,
     mutationExecuted: false
-  });
+  }, tx);
   return { status: "FAILED", failureClassification, mutationExecuted: false };
 }
 
 function classifyAwsError(error: any) {
   const name = String(error?.name ?? "AWS_ERROR");
-  if (name.includes("AccessDenied")) return "ACCESS_DENIED";
+  const msg = String(error?.message ?? "");
+  if (name.includes("AccessDenied")) return "AWS_PERMISSION_DENIED";
   if (name.includes("InvalidInstanceID") || name.includes("NotFound")) return "RESOURCE_NOT_FOUND";
-  if (name.includes("Throttl")) return "TRANSIENT_THROTTLE";
+  if (name.includes("Throttl")) return "PROVIDER_NETWORK_FAILURE";
+  if (name.includes("Credentials") || name.includes("ExpiredToken") || msg.includes("expired")) return "AWS_AUTHENTICATION_FAILURE";
+  if (name.includes("Timeout") || name.includes("Networking")) return "PROVIDER_NETWORK_FAILURE";
   return "AWS_EXECUTION_FAILED";
 }
 
-async function blockGovernedPlan(planId: string, blockedReason: string) {
-  const updated = await prisma.remediationPlan.update({
+async function blockGovernedPlan(planId: string, blockedReason: string, tx: any) {
+  const updated = await tx.remediationPlan.update({
     where: { id: planId },
     data: {
       lifecycleState: "BLOCKED",
@@ -487,7 +621,7 @@ async function blockGovernedPlan(planId: string, blockedReason: string) {
     blockedReason,
     awsApiCallExecuted: false,
     mutationExecuted: false
-  });
+  }, tx);
   return { status: "BLOCKED", blockedReason, mutationExecuted: false };
 }
 
@@ -496,9 +630,10 @@ async function audit(
   actorUserId: string | null,
   planId: string,
   action: string,
-  metadata: Record<string, unknown>
+  metadata: Record<string, unknown>,
+  tx: any
 ) {
-  await prisma.auditEvent.create({
+  await tx.auditEvent.create({
     data: {
       organizationId,
       actorUserId,
