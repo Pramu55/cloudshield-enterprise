@@ -29,7 +29,8 @@ export async function registerAwsInventoryRoutes(
         scannerType: body.scannerType,
         dryRun: body.dryRun,
         idempotencyKey: body.idempotencyKey,
-        reason: body.reason
+        reason: body.reason,
+        correlationId: request.id
       });
       if (result.status === "CONFLICT") {
         reply.status(409).send(result);
@@ -144,7 +145,8 @@ export async function registerAwsInventoryRoutes(
         regions: account.regions,
         scannerType: "AWS_EC2_INVENTORY_SCAN",
         dryRun: false,
-        reason: "Requested through account inventory sync endpoint."
+        reason: "Requested through account inventory sync endpoint.",
+        correlationId: request.id
       });
       if (result.status === "CONFLICT") {
         reply.status(409).send(result);
@@ -181,7 +183,7 @@ export async function registerAwsInventoryRoutes(
         return;
       }
 
-      return getInventoryScannerService(app).startScan(auth.organizationId, account.id);
+      return getInventoryScannerService(app).startScan(auth.organizationId, account.id, request.id);
     }
   );
 

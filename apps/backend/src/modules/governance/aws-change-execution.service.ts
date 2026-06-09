@@ -238,7 +238,8 @@ export async function queueGovernedAwsChangeExecution(
       organizationId: actor.organizationId,
       planId: plan.id,
       requestedById: actor.userId,
-      idempotencyKey: body.idempotencyKey
+      idempotencyKey: body.idempotencyKey,
+      correlationId: (body as any).correlationId
     },
     {
       jobId: body.idempotencyKey,
