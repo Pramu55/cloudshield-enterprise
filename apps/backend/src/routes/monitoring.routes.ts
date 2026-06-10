@@ -106,8 +106,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
     await securityMonitoringQueue.add("evaluate-security-monitoring", {
       organizationId: auth.organizationId,
-      trigger,
-      correlationId: request.id
+      trigger
     });
 
     return {
@@ -123,16 +122,16 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const { id } = ParamsSchema.parse(request.params);
     const { note } = LifecycleAcknowledgeSchema.parse(request.body || {});
 
-    const result = await prisma.securityAlert.updateMany({
-      where: { id, organizationId: auth.organizationId },
-      data: { status: 'ACKNOWLEDGED' }
+    const alert = await prisma.securityAlert.findUnique({
+      where: { id, organizationId: auth.organizationId }
     });
 
-    if (result.count === 0) {
-      return reply.status(404).send({ error: "not_found", message: "Alert not found" });
-    }
+    if (!alert) return reply.status(404).send({ error: "not_found", message: "Alert not found" });
 
-    const alertId = id;
+    await prisma.securityAlert.update({
+      where: { id },
+      data: { status: 'ACKNOWLEDGED' }
+    });
 
     await prisma.auditEvent.create({
       data: {
@@ -140,8 +139,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         actorUserId: auth.userId,
         action: 'security_alert',
         targetType: 'ACKNOWLEDGED',
-        targetId: alertId,
-        metadata: { alertId, note: note || null, message: 'Alert acknowledged' }
+        targetId: alert.id,
+        metadata: { alertId: alert.id, note: note || null, message: 'Alert acknowledged' }
       }
     });
 
@@ -155,16 +154,16 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const { id } = ParamsSchema.parse(request.params);
     const { reason } = LifecycleResolveSchema.parse(request.body || {});
 
-    const result = await prisma.securityAlert.updateMany({
-      where: { id, organizationId: auth.organizationId },
-      data: { status: 'RESOLVED', resolvedAt: new Date() }
+    const alert = await prisma.securityAlert.findUnique({
+      where: { id, organizationId: auth.organizationId }
     });
 
-    if (result.count === 0) {
-      return reply.status(404).send({ error: "not_found", message: "Alert not found" });
-    }
+    if (!alert) return reply.status(404).send({ error: "not_found", message: "Alert not found" });
 
-    const alert = { id };
+    await prisma.securityAlert.update({
+      where: { id },
+      data: { status: 'RESOLVED', resolvedAt: new Date() }
+    });
 
     await prisma.auditEvent.create({
       data: {

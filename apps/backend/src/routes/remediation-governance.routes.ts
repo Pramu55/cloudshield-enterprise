@@ -250,7 +250,7 @@ export async function registerRemediationGovernanceRoutes(
         await queueGovernedAwsChangeExecution(
           auth,
           PlanParamsSchema.parse(request.params).planId,
-          { ...GovernedExecuteRequestSchema.parse(request.body ?? {}), correlationId: request.id } as any
+          GovernedExecuteRequestSchema.parse(request.body ?? {})
         )
       );
       }

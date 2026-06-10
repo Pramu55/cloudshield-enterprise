@@ -38,7 +38,6 @@ type PlanInventoryScanInput = {
   dryRun?: boolean;
   idempotencyKey?: string;
   reason?: string;
-  correlationId?: string;
 };
 
 type RegionFailure = {
@@ -199,7 +198,6 @@ export class InventoryOrchestrationService {
           scannerRoleReady: true,
           metadata: toJson({
             reason: input.reason ?? null,
-            correlationId: input.correlationId,
             queueName: CLOUD_INVENTORY_SYNC_QUEUE_NAME,
             safeScannerType: scannerType,
             awsApiCallExecuted: false,
@@ -217,8 +215,7 @@ export class InventoryOrchestrationService {
           scanRunId: scanRun.id,
           regions: requestedRegions.regions,
           scannerType,
-          idempotencyKey: input.idempotencyKey ?? null,
-          correlationId: input.correlationId
+          idempotencyKey: input.idempotencyKey ?? null
         },
         {
           jobId: scanRun.id,

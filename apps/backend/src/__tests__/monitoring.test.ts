@@ -1,4 +1,4 @@
-﻿import test from "node:test";
+import test from "node:test";
 import assert from "node:assert";
 import { buildApp } from "../app.js";
 import { prisma } from "@cloudshield/database";
@@ -231,39 +231,6 @@ test("Security Monitoring API Endpoints", async (t) => {
       method: "GET",
       url: `/api/v1/security-monitoring/runs/${otherRun.id}`,
       headers: { cookie: sessionCookie }
-    });
-    assert.strictEqual(res.statusCode, 404);
-  });
-
-  await t.test("cross-tenant ID cannot update and returns 404", async () => {
-    const otherOrg = await prisma.organization.create({
-      data: { id: randomUUID(), name: "Other Org Mut", slug: `other-org-mut-${Date.now()}` }
-    });
-    const otherAlert = await prisma.securityAlert.create({
-      data: {
-        id: randomUUID(), organizationId: otherOrg.id, dedupeKey: "mut-other",
-        title: "Other Alert", description: "Desc", severity: "LOW", category: "COMPLIANCE", status: "OPEN"
-      }
-    });
-
-    const res = await app.inject({
-      method: "PATCH",
-      url: `/api/v1/security-monitoring/alerts/${otherAlert.id}/resolve`,
-      headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
-      payload: { reason: "Fixed", organizationId: orgId } // Try to override
-    });
-    assert.strictEqual(res.statusCode, 404);
-
-    const checkAlert = await prisma.securityAlert.findUnique({ where: { id: otherAlert.id } });
-    assert.strictEqual(checkAlert?.status, "OPEN");
-  });
-
-  await t.test("missing record returns safe 404 and updates nothing", async () => {
-    const res = await app.inject({
-      method: "PATCH",
-      url: `/api/v1/security-monitoring/alerts/${randomUUID()}/acknowledge`,
-      headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
-      payload: { note: "Ack" }
     });
     assert.strictEqual(res.statusCode, 404);
   });

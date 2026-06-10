@@ -11,7 +11,7 @@ import { isReadonlyInventoryEnabled } from "./aws-inventory.service.js";
 export class AwsInventoryScannerService {
   constructor(private readonly scannerMode: AwsInventoryScannerMode) {}
 
-  async startScan(organizationId: string, accountId: string, correlationId?: string) {
+  async startScan(organizationId: string, accountId: string) {
     if (!isReadonlyInventoryEnabled(this.scannerMode)) {
       return AwsInventoryStartResponseSchema.parse({
         status: "BLOCKED_DISABLED",
@@ -30,7 +30,6 @@ export class AwsInventoryScannerService {
           jobType: "AWS_EC2_INVENTORY_SCAN",
           status: "QUEUED",
           phase: "init",
-          metadata: correlationId ? { correlationId } : {}
         },
       });
 
@@ -38,8 +37,7 @@ export class AwsInventoryScannerService {
         type: "AWS_EC2_INVENTORY_SCAN",
         organizationId: organizationId,
         awsAccountId: accountId,
-        scanRunId: scanRun.id,
-        correlationId
+        scanRunId: scanRun.id
       });
 
       return AwsInventoryStartResponseSchema.parse({

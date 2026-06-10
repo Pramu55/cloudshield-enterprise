@@ -88,7 +88,7 @@ export default function SecurityMonitoringPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">System Status: {health.status}</h2>
-              <p className="text-slate-600">{health.message}</p>
+              <p className="text-slate-600">{health.message || "Environment monitoring is active"}</p>
             </div>
           </div>
         </div>
@@ -150,7 +150,7 @@ export default function SecurityMonitoringPage() {
           ) : alerts.length === 0 ? (
             <div className="p-8 text-center text-slate-500 flex flex-col items-center">
               <CheckCircle className="w-10 h-10 text-emerald-400 mb-3" />
-              <p>No active alerts.</p>
+              <p>No active alerts. Your environment is secure.</p>
             </div>
           ) : (
             alerts.map((alert) => (

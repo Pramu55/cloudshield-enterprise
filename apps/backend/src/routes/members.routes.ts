@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { prisma } from "@cloudshield/database";
 import { requireAuth, getAuthContext } from "../plugins/auth.js";
 import {
@@ -131,7 +131,7 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
     if (process.env.CLOUDSHIELD_DATA_MODE === "development" && process.env.ENABLE_LOCAL_INVITATION_PREVIEW === "true") {
       response.previewToken = rawToken;
     }
-
+    
     return response;
   });
 
@@ -140,13 +140,22 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
     requirePermission(auth.role, PERMISSIONS.MEMBERS_INVITE);
 
     const { id } = request.params as { id: string };
+    
+    const invitation = await prisma.invitation.findFirst({
+      where: { id, organizationId: auth.organizationId }
+    });
+
+    if (!invitation || invitation.acceptedAt) {
+      reply.status(404).send({ error: "not_found", message: "Invitation not found or already accepted." });
+      return;
+    }
 
     const rawToken = newRawToken();
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    const result = await prisma.invitation.updateMany({
-      where: { id, organizationId: auth.organizationId, acceptedAt: null },
+    await prisma.invitation.update({
+      where: { id },
       data: {
         tokenHash,
         expiresAt,
@@ -155,11 +164,6 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
         lastSentAt: new Date()
       }
     });
-
-    if (result.count === 0) {
-      reply.status(404).send({ error: "not_found", message: "Invitation not found or already accepted." });
-      return;
-    }
 
     await prisma.auditEvent.create({
       data: {
@@ -185,15 +189,19 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
 
     const { id } = request.params as { id: string };
 
-    const result = await prisma.invitation.updateMany({
-      where: { id, organizationId: auth.organizationId, acceptedAt: null },
-      data: { revokedAt: new Date() }
+    const invitation = await prisma.invitation.findFirst({
+      where: { id, organizationId: auth.organizationId }
     });
 
-    if (result.count === 0) {
+    if (!invitation || invitation.acceptedAt) {
       reply.status(404).send({ error: "not_found", message: "Invitation not found or already accepted." });
       return;
     }
+
+    await prisma.invitation.update({
+      where: { id },
+      data: { revokedAt: new Date() }
+    });
 
     await prisma.auditEvent.create({
       data: {

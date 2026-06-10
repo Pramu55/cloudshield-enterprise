@@ -42,7 +42,6 @@ type CloudAssessmentJob = {
   organizationId: string;
   requestedById: string;
   mode: "EVALUATION" | "AWS_STS_ONLY" | "AWS_READONLY_SCAN";
-  correlationId?: string;
 };
 
 type GovernedAwsChangeJob = {
@@ -50,7 +49,6 @@ type GovernedAwsChangeJob = {
   planId: string;
   requestedById: string;
   idempotencyKey: string;
-  correlationId?: string;
 };
 
 type AwsTag = {
@@ -110,8 +108,7 @@ const assessmentWorker = process.env.NODE_ENV === "test" ? createWorkerStub() : 
         jobId: job.id,
         assessmentId: job.data.assessmentId,
         organizationId: job.data.organizationId,
-        mode: job.data.mode,
-        correlationId: job.data.correlationId
+        mode: job.data.mode
       },
       "Received CloudShield automated assessment job"
     );
@@ -505,7 +502,6 @@ async function executeGovernedEc2Tagging(
           rollbackAction: "ec2:DeleteTags or restore previous values after separate approval",
           cloudTrailCorrelation: {
             requestId: requestId ?? null,
-            correlationId: (jobData as any).correlationId,
             eventName: requestedTagsAlreadyPresent ? "CreateTags.noop" : "CreateTags"
           },
           result: "SUCCEEDED"
@@ -519,8 +515,7 @@ async function executeGovernedEc2Tagging(
       mode,
       awsApiCallExecuted: true,
       mutationExecuted: !requestedTagsAlreadyPresent,
-      awsRequestId: requestId ?? null,
-      correlationId: (jobData as any).correlationId
+      awsRequestId: requestId ?? null
     }, tx);
     return { status: updated.lifecycleState, mutationExecuted: !requestedTagsAlreadyPresent };
   } catch (error: any) {

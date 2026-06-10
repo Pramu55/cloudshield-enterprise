@@ -1,4 +1,4 @@
-﻿import {
+import {
   DescribeInstancesCommand,
   DescribeRegionsCommand,
   DescribeSecurityGroupsCommand,
@@ -21,7 +21,6 @@ import {
 import type { RuntimeEnv } from "@cloudshield/config";
 import { evaluateComplianceEvidence } from "../compliance-evidence/compliance-evidence.service.js";
 import { isReadonlyInventoryEnabled } from "./aws-inventory.service.js";
-import { classifyInventoryFailure } from "./inventory-orchestration.service.js";
 
 const AllowedApis = [
   "sts:GetCallerIdentity",
@@ -262,18 +261,15 @@ export class AwsInventorySyncService {
         }
       });
     } catch (error) {
-      const sanitized = sanitizeAwsError(error);
+      const message = error instanceof Error ? error.message : "Read-only inventory sync failed.";
       await this.updateScan(scanRun.id, "FAILED", Lifecycle.failed, {
-        errorCode: sanitized.category,
-        errorMessage: sanitized.safeMessage,
-        failureClassification: sanitized.category,
+        errorCode: "AWS_READONLY_SYNC_FAILED",
+        errorMessage: message,
         completedAt: new Date()
       });
       await this.audit(input, "aws.inventory.sync.failed", "ScanRun", scanRun.id, {
-        errorCode: sanitized.category,
-        message: sanitized.safeMessage,
-        requestId: sanitized.requestId,
-        retryable: sanitized.retryable,
+        errorCode: "AWS_READONLY_SYNC_FAILED",
+        message,
         awsApiCallExecuted: true,
         scannerRun: true,
         mutationExecuted: false
@@ -285,7 +281,7 @@ export class AwsInventorySyncService {
         awsApiCallExecuted: true,
         scannerRun: true,
         scanRunId: scanRun.id,
-        message: sanitized.safeMessage,
+        message,
         readiness,
         allowedApis: AllowedApis
       });
@@ -584,27 +580,4 @@ function normalizeInboundRules(permissions: unknown) {
 
 function maskArn(arn: string | null) {
   return arn ? arn.replace(/(arn:aws:iam::\d{12}:[^/]+\/).+/, "$1***") : null;
-}
-
-function sanitizeAwsError(error: unknown) {
-  const isAwsError = error && typeof error === "object" && "name" in error;
-  const rawMessage = error instanceof Error ? error.message : "Unknown error";
-
-  const category = classifyInventoryFailure(rawMessage);
-
-  const safeMessage = category !== "INVENTORY_SCAN_BLOCKED"
-    ? `AWS API Error: ${category}`
-    : "Read-only inventory sync failed.";
-
-  return {
-    category,
-    safeMessage,
-    requestId: isAwsError ? (error as any).$metadata?.requestId ?? "unknown" : "unknown",
-    retryable: isAwsError ? !!(error as any).$fault && (error as any).$fault === "server" : false,
-    operation: isAwsError ? (error as any).$metadata?.operationName ?? "unknown" : "unknown",
-    region: "unknown",
-    safeName: isAwsError ? (error as any).name : "UnknownError",
-    httpStatus: isAwsError ? (error as any).$metadata?.httpStatusCode : 500,
-    attemptCount: isAwsError ? (error as any).$metadata?.attempts ?? 1 : 1
-  };
 }

@@ -37,7 +37,7 @@ export async function registerAutomationRoutes(app: FastifyInstance): Promise<vo
     });
 
     const completed = await runAssessment(app, assessment.id, auth.organizationId, auth.userId);
-    const queueStatus = await enqueueAssessmentHook(assessment.id, auth.organizationId, auth.userId, mode, request.id);
+    const queueStatus = await enqueueAssessmentHook(assessment.id, auth.organizationId, auth.userId, mode);
     return {
       ...AutomationSafety,
       assessment: toAssessmentDto(completed),
@@ -165,16 +165,14 @@ async function enqueueAssessmentHook(
   assessmentId: string,
   organizationId: string,
   requestedById: string,
-  mode: string,
-  correlationId?: string
+  mode: string
 ) {
   try {
     await cloudAssessmentQueue.add(`assessment-${assessmentId}`, {
       assessmentId,
       organizationId,
       requestedById,
-      mode,
-      correlationId
+      mode
     });
     return "queued";
   } catch {
