@@ -3,6 +3,7 @@ import helmet from "@fastify/helmet";
 import fastifyCookie from "@fastify/cookie";
 import fastifyCsrfProtection from "@fastify/csrf-protection";
 import rateLimit from "@fastify/rate-limit";
+import { normalizeOrGenerateCorrelationId } from "@cloudshield/utils";
 import Fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import { registerEnvPlugin } from "./plugins/env.js";
 import { registerErrorPlugin } from "./plugins/errors.js";
@@ -27,7 +28,15 @@ import { registerSearchRoutes } from "./routes/search.routes.js";
 import { registerDashboardRoutes } from "./routes/dashboard.routes.js";
 import { registerMonitoringRoutes } from "./routes/monitoring.routes.js";
 export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
-  const app = Fastify(opts);
+  const app = Fastify({
+    ...opts,
+    genReqId: (request) => normalizeOrGenerateCorrelationId(request.headers["x-correlation-id"])
+  });
+
+  app.addHook("onSend", async (request, reply, payload) => {
+    reply.header("x-correlation-id", request.id);
+    return payload;
+  });
 
   await app.register(helmet);
 

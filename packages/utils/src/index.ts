@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 export function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -25,6 +25,20 @@ export function parsePort(value: string | undefined, fallback: number): number {
 
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+const CORRELATION_ID_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isValidCorrelationId(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && trimmed.length <= 64 && CORRELATION_ID_UUID_PATTERN.test(trimmed);
+}
+
+export function normalizeOrGenerateCorrelationId(value: unknown): string {
+  if (typeof value === "string" && isValidCorrelationId(value)) return value.trim().toLowerCase();
+  return randomUUID();
 }
 
 export const APPROVAL_PAYLOAD_SCHEMA_VERSION = 1;
