@@ -1,7 +1,7 @@
 import { Worker as BullWorker } from "bullmq";
 import { SECURITY_MONITORING_QUEUE_NAME } from "@cloudshield/contracts";
 import { createLogger } from "@cloudshield/logger";
-import { optionalEnv } from "@cloudshield/utils";
+import { optionalEnv, sanitizeProviderError } from "@cloudshield/utils";
 import { MonitoringOrchestrator } from "./monitoring-orchestrator.js";
 
 const logger = createLogger("cloudshield-worker-monitoring");
@@ -63,5 +63,14 @@ securityMonitoringWorker.on("completed", (job: any) => {
 });
 
 securityMonitoringWorker.on("failed", (job: any, error: any) => {
-  logger.error({ jobId: job?.id, error }, "Security monitoring job failed");
+  const sanitized = sanitizeProviderError(error);
+  logger.error({
+    component: "security-monitoring-worker",
+    jobId: job?.id,
+    organizationId: job?.data?.organizationId ?? null,
+    safeCategory: sanitized.category,
+    safeCode: sanitized.safeCode,
+    safeMessage: sanitized.safeMessage,
+    retryable: sanitized.retryable
+  }, "Security monitoring job failed");
 });
