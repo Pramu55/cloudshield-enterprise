@@ -5,6 +5,10 @@ import type {
   RemediationPlanDto
 } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
+import {
+  buildCanonicalApprovalPayload,
+  computeApprovalPayloadHash
+} from "@cloudshield/utils";
 
 type ActorContext = {
   organizationId: string;
@@ -140,6 +144,7 @@ export async function requestApproval(actor: ActorContext, planId: string) {
     return null;
   }
 
+  const payloadHash = approvalPayloadHash(plan);
   const [updatedPlan, approvalRequest] = await prisma.$transaction([
     prisma.remediationPlan.update({
       where: { id: plan.id },
@@ -154,7 +159,8 @@ export async function requestApproval(actor: ActorContext, planId: string) {
         organizationId: actor.organizationId,
         remediationPlanId: plan.id,
         requestedById: actor.userId,
-        status: "PENDING"
+        status: "PENDING",
+        payloadHash
       },
       include: approvalInclude
     })
@@ -316,6 +322,7 @@ async function decidePlan(
     orderBy: { createdAt: "desc" }
   });
 
+  const payloadHash = approvalPayloadHash(plan);
   const [updatedPlan, updatedApproval] = await prisma.$transaction([
     prisma.remediationPlan.update({
       where: { id: plan.id },
@@ -334,6 +341,7 @@ async function decidePlan(
             status,
             approvedById: actor.userId,
             decisionReason: body.decisionReason ?? null,
+            payloadHash,
             decidedAt: new Date()
           },
           include: approvalInclude
@@ -346,6 +354,7 @@ async function decidePlan(
             approvedById: actor.userId,
             status,
             decisionReason: body.decisionReason ?? null,
+            payloadHash,
             decidedAt: new Date()
           },
           include: approvalInclude
@@ -620,6 +629,7 @@ function toApprovalRequestDto(approval: any): ApprovalRequestDto {
     decisionReason: approval.decisionReason,
     expectedImpact: approval.expectedImpact ?? null,
     confirmationToken: approval.confirmationToken ?? null,
+    payloadIntegrityBound: Boolean(approval.payloadHash),
     expiresAt: approval.expiresAt?.toISOString() ?? null,
     createdAt: approval.createdAt.toISOString(),
     decidedAt: approval.decidedAt?.toISOString() ?? null
@@ -636,6 +646,26 @@ function toGovernanceActivityDto(event: any) {
     metadata: event.metadata ?? {},
     createdAt: event.createdAt.toISOString()
   };
+}
+
+function approvalPayloadHash(plan: any) {
+  return computeApprovalPayloadHash(
+    buildCanonicalApprovalPayload({
+      organizationId: plan.organizationId,
+      remediationPlanId: plan.id,
+      createdById: plan.createdById,
+      allowlistedOperation: plan.allowlistedOperation ?? null,
+      confirmationTokenRequired: plan.confirmationTokenRequired ?? null,
+      requestedAction: plan.requestedAction ?? {},
+      normalizedPayload: plan.normalizedPayload ?? {},
+      beforeState: plan.beforeState ?? {},
+      expectedAfterState: plan.expectedAfterState ?? {},
+      rollbackPayload: plan.rollbackPayload ?? {},
+      executionMode: plan.executionMode ?? "disabled",
+      idempotencyKey: plan.idempotencyKey ?? null,
+      approvalExpiresAt: plan.approvalExpiresAt?.toISOString() ?? null
+    })
+  );
 }
 
 function stringArray(value: unknown) {

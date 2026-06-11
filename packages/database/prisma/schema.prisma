@@ -849,6 +849,7 @@ model ApprovalRequest {
   expectedImpact    String?
   confirmationToken String?
   evidenceSnapshot  Json                  @default("{}")
+  payloadHash       String?
   expiresAt         DateTime?
   createdAt         DateTime              @default(now())
   decidedAt         DateTime?

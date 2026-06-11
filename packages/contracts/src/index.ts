@@ -1433,6 +1433,7 @@ export const ApprovalRequestDtoSchema = z.object({
   decisionReason: z.string().nullable(),
   expectedImpact: z.string().nullable().default(null),
   confirmationToken: z.string().nullable().default(null),
+  payloadIntegrityBound: z.boolean().default(false),
   expiresAt: z.string().nullable().default(null),
   createdAt: z.string(),
   decidedAt: z.string().nullable()

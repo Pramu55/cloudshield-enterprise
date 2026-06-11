@@ -5,6 +5,10 @@ import type {
 } from "@cloudshield/contracts";
 import { GovernedExecutionEvidenceResponseSchema } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
+import {
+  buildCanonicalApprovalPayload,
+  computeApprovalPayloadHash
+} from "@cloudshield/utils";
 import { governedAwsChangeQueue } from "./aws-change-execution.queue.js";
 import {
   ALLOWLISTED_GOVERNED_AWS_OPERATIONS,
@@ -127,6 +131,7 @@ export async function requestGovernedAwsChangeApproval(
     return blockedMutation(actor, plan, "Incorrect confirmation token for requested governed change.");
   }
 
+  const payloadHash = approvalPayloadHash(plan);
   const [updatedPlan, approvalRequest, auditEvent] = await prisma.$transaction([
     prisma.remediationPlan.update({
       where: { id: plan.id },
@@ -153,6 +158,7 @@ export async function requestGovernedAwsChangeApproval(
           beforeState: plan.beforeState,
           expectedAfterState: plan.expectedAfterState
         },
+        payloadHash,
         expiresAt: plan.approvalExpiresAt
       }
     }),
@@ -340,6 +346,7 @@ async function decideGovernedAwsChange(
     return blockedMutation(actor, plan, "Approval request has expired.");
   }
 
+  const payloadHash = approvalPayloadHash(plan);
   const [updatedPlan, auditEvent] = await prisma.$transaction([
     prisma.remediationPlan.update({
       where: { id: plan.id },
@@ -367,6 +374,7 @@ async function decideGovernedAwsChange(
             decisionReason: body.reason,
             expectedImpact: body.expectedImpact,
             confirmationToken: body.confirmationToken,
+            payloadHash,
             decidedAt: new Date()
           }
         })
@@ -380,6 +388,7 @@ async function decideGovernedAwsChange(
             decisionReason: body.reason,
             expectedImpact: body.expectedImpact,
             confirmationToken: body.confirmationToken,
+            payloadHash,
             decidedAt: new Date()
           }
         })
@@ -562,6 +571,7 @@ function toApprovalRequestDto(approval: any) {
     decisionReason: approval.decisionReason,
     expectedImpact: approval.expectedImpact ?? null,
     confirmationToken: approval.confirmationToken ?? null,
+    payloadIntegrityBound: Boolean(approval.payloadHash),
     expiresAt: approval.expiresAt?.toISOString() ?? null,
     createdAt: approval.createdAt.toISOString(),
     decidedAt: approval.decidedAt?.toISOString() ?? null
@@ -588,6 +598,26 @@ function auditData(
       terraformApplyExecuted: false
     }
   };
+}
+
+function approvalPayloadHash(plan: ExecutionPlan) {
+  return computeApprovalPayloadHash(
+    buildCanonicalApprovalPayload({
+      organizationId: plan.organizationId,
+      remediationPlanId: plan.id,
+      createdById: plan.createdById,
+      allowlistedOperation: plan.allowlistedOperation,
+      confirmationTokenRequired: plan.confirmationTokenRequired,
+      requestedAction: plan.requestedAction ?? {},
+      normalizedPayload: plan.normalizedPayload ?? {},
+      beforeState: plan.beforeState ?? {},
+      expectedAfterState: plan.expectedAfterState ?? {},
+      rollbackPayload: plan.rollbackPayload ?? {},
+      executionMode: plan.executionMode,
+      idempotencyKey: plan.idempotencyKey,
+      approvalExpiresAt: plan.approvalExpiresAt?.toISOString() ?? null
+    })
+  );
 }
 
 function hashStable(value: unknown) {

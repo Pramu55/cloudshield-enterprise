@@ -5,6 +5,10 @@ import { processGovernedAwsChangeJob } from "../index.js";
 import { randomUUID } from "node:crypto";
 import { EC2Client } from "@aws-sdk/client-ec2";
 import { STSClient } from "@aws-sdk/client-sts";
+import {
+  buildCanonicalApprovalPayload,
+  computeApprovalPayloadHash
+} from "@cloudshield/utils";
 
 const originalEc2Send = EC2Client.prototype.send;
 const originalStsSend = STSClient.prototype.send;
@@ -116,6 +120,17 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
         ...overrides
       }
     });
+    await prisma.approvalRequest.create({
+      data: {
+        organizationId: orgId,
+        remediationPlanId: plan.id,
+        requestedById: userIdDb,
+        approvedById: userIdDb,
+        status: "APPROVED",
+        decidedAt: new Date(),
+        payloadHash: approvalPayloadHash(plan)
+      }
+    });
     return plan;
   };
 
@@ -201,6 +216,22 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     } as any);
   };
 
+  const assertNoAwsSdkCalls = () => {
+    assert.strictEqual(assumeRoleCount, 0);
+    assert.strictEqual(getCallerIdentityCount, 0);
+    assert.strictEqual(describeInstancesCount, 0);
+    assert.strictEqual(createTagsCount, 0);
+  };
+
+  const assertFailureEvidence = async (
+    planId: string,
+    expected: { awsApiCallExecuted: boolean; mutationExecuted: boolean }
+  ) => {
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: planId } });
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.awsApiCallExecuted, expected.awsApiCallExecuted);
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.mutationExecuted, expected.mutationExecuted);
+  };
+
   await t.test("1. mutations disabled by default", async () => {
     process.env.AWS_CHANGE_EXECUTION_MODE = "disabled";
     const plan = await createPlan();
@@ -223,7 +254,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ALLOWLIST_NOT_CONFIGURED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("4. empty region allowlist blocks", async () => {
@@ -232,7 +264,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ALLOWLIST_NOT_CONFIGURED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("5. empty tag-key allowlist blocks", async () => {
@@ -241,7 +274,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "TAG_ALLOWLIST_NOT_CONFIGURED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("6. account outside allowlist blocks", async () => {
@@ -250,7 +284,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ACCOUNT_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("7. region outside allowlist blocks", async () => {
@@ -259,7 +294,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "REGION_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("8. executor identity account mismatch blocks", async () => {
@@ -269,7 +305,11 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "IDENTITY_MISMATCH");
+    assert.strictEqual(assumeRoleCount, 1);
+    assert.strictEqual(getCallerIdentityCount, 1);
+    assert.strictEqual(describeInstancesCount, 0);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("9. executor assumed-role ARN mismatch blocks", async () => {
@@ -278,7 +318,28 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ROLE_PRINCIPAL_MISMATCH");
+    assert.strictEqual(assumeRoleCount, 1);
+    assert.strictEqual(getCallerIdentityCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
+  });
+
+  await t.test("10a. invalid approval records no AWS execution evidence", async () => {
+    const plan = await createPlan({ approvalStatus: "PENDING_APPROVAL" });
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_INVALID");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
+  });
+
+  await t.test("10b. expired approval records no AWS execution evidence", async () => {
+    const plan = await createPlan({ approvalExpiresAt: new Date(Date.now() - 60_000) });
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_EXPIRED");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("10. missing executor role configuration blocks", async () => {
@@ -295,7 +356,11 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "RESOURCE_NOT_MANAGED");
+    assert.strictEqual(assumeRoleCount, 1);
+    assert.strictEqual(getCallerIdentityCount, 1);
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("12. Environment=prod blocks", async () => {
@@ -304,7 +369,9 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "PRODUCTION_TARGET");
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("13. CloudShieldProtected=true blocks", async () => {
@@ -313,7 +380,9 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "PROTECTED_TARGET");
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("14. staging environment mismatch blocks", async () => {
@@ -322,7 +391,9 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ENVIRONMENT_MISMATCH");
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("15. aws: tag key blocks", async () => {
@@ -330,7 +401,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "TAG_KEY_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("16. control-tag modification blocks", async () => {
@@ -338,7 +410,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "TAG_KEY_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("17. non-allowlisted tag key blocks", async () => {
@@ -346,7 +419,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "TAG_KEY_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("18. empty tag key blocks", async () => {
@@ -354,7 +428,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "MALFORMED_TAG_PAYLOAD");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("19. duplicate tag keys block", async () => {
@@ -362,7 +437,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "MALFORMED_TAG_PAYLOAD");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("20. already-present tags produce an idempotent no-op", async () => {
@@ -402,6 +478,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "AFTER_STATE_VERIFICATION_FAILED");
     assert.strictEqual(createTagsCount, originalCreateTagsCount + 1);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("24. missing instance returns safe TARGET_NOT_FOUND", async () => {
@@ -410,7 +487,9 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "RESOURCE_NOT_FOUND");
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("25. no secret credentials or external IDs are persisted in execution evidence", async () => {
@@ -425,4 +504,87 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     assert.strictEqual(assumeRoleCount, 1);
     assert.strictEqual(getCallerIdentityCount, 1);
   });
+
+  await t.test("26. unchanged approved payload passes approval hash verification", async () => {
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual(createTagsCount, 1);
+  });
+
+  await t.test("27. mutated plan payload is rejected before AWS execution", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        normalizedPayload: {
+          operation: "EC2_APPLY_GOVERNANCE_TAGS",
+          region: "us-east-1",
+          resourceId: "i-12345",
+          tags: [{ key: "CloudShieldOwner", value: "tampered" }]
+        }
+      }
+    });
+
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_PAYLOAD_MISMATCH");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
+  });
+
+  await t.test("28. mutated expected after-state is rejected before AWS execution", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: { expectedAfterState: { tags: { CloudShieldOwner: "tampered" }, idempotent: true } }
+    });
+
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_PAYLOAD_MISMATCH");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
+  });
+
+  await t.test("29. mutated target account or region is rejected before AWS execution", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        normalizedPayload: {
+          operation: "EC2_APPLY_GOVERNANCE_TAGS",
+          region: "us-west-2",
+          resourceId: "i-12345",
+          tags: [{ key: "CloudShieldOwner", value: "test" }]
+        }
+      }
+    });
+
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_PAYLOAD_MISMATCH");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
+  });
 });
+
+function approvalPayloadHash(plan: any) {
+  return computeApprovalPayloadHash(
+    buildCanonicalApprovalPayload({
+      organizationId: plan.organizationId,
+      remediationPlanId: plan.id,
+      createdById: plan.createdById,
+      allowlistedOperation: plan.allowlistedOperation,
+      confirmationTokenRequired: plan.confirmationTokenRequired ?? null,
+      requestedAction: plan.requestedAction ?? {},
+      normalizedPayload: plan.normalizedPayload ?? {},
+      beforeState: plan.beforeState ?? {},
+      expectedAfterState: plan.expectedAfterState ?? {},
+      rollbackPayload: plan.rollbackPayload ?? {},
+      executionMode: plan.executionMode ?? "disabled",
+      idempotencyKey: plan.idempotencyKey ?? null,
+      approvalExpiresAt: plan.approvalExpiresAt?.toISOString() ?? null
+    })
+  );
+}

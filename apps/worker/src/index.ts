@@ -12,7 +12,12 @@ import {
   type CloudScanJobType
 } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
-import { optionalEnv } from "@cloudshield/utils";
+import {
+  approvalPayloadHashesEqual,
+  buildCanonicalApprovalPayload,
+  computeApprovalPayloadHash,
+  optionalEnv
+} from "@cloudshield/utils";
 
 const logger = createLogger("cloudshield-worker");
 
@@ -54,6 +59,21 @@ type GovernedAwsChangeJob = {
 type AwsTag = {
   Key: string;
   Value: string;
+};
+
+type ExecutionFacts = {
+  awsApiCallExecuted: boolean;
+  mutationExecuted: boolean;
+};
+
+const NO_AWS_EXECUTION: ExecutionFacts = {
+  awsApiCallExecuted: false,
+  mutationExecuted: false
+};
+
+const AWS_ATTEMPTED_NO_MUTATION: ExecutionFacts = {
+  awsApiCallExecuted: true,
+  mutationExecuted: false
 };
 
 const worker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWorker<CloudScanJob>(
@@ -171,19 +191,24 @@ export const processGovernedAwsChangeJob = async (job: any) => {
   }
 
   if (plan.approvalStatus !== "APPROVED") {
-    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", prisma);
+    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", NO_AWS_EXECUTION, prisma);
   }
 
   if (plan.approvalExpiresAt && plan.approvalExpiresAt < new Date()) {
-    return await failGovernedPlan(plan.id, "APPROVAL_EXPIRED", prisma);
+    return await failGovernedPlan(plan.id, "APPROVAL_EXPIRED", NO_AWS_EXECUTION, prisma);
   }
 
   if (plan.idempotencyKey !== job.data.idempotencyKey) {
-    return await failGovernedPlan(plan.id, "IDEMPOTENCY_KEY_MISMATCH", prisma);
+    return await failGovernedPlan(plan.id, "IDEMPOTENCY_KEY_MISMATCH", NO_AWS_EXECUTION, prisma);
   }
 
   if (plan.createdById && plan.approvedById && plan.createdById === plan.approvedById) {
-    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", prisma);
+    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", NO_AWS_EXECUTION, prisma);
+  }
+
+  const approvalHashFailure = await verifyApprovalPayloadHash(plan.id, job.data.organizationId);
+  if (approvalHashFailure) {
+    return await failGovernedPlan(plan.id, approvalHashFailure, NO_AWS_EXECUTION, prisma);
   }
 
   const mode = getAwsChangeExecutionMode();
@@ -371,37 +396,37 @@ async function executeGovernedEc2Tagging(
   const allowedRegions = parseCsv(process.env.AWS_ALLOWED_REGIONS);
 
   if (mode === "staging" && (allowedAccounts.length === 0 || allowedRegions.length === 0)) {
-    return await failGovernedPlan(plan.id, "ALLOWLIST_NOT_CONFIGURED", tx);
+    return await failGovernedPlan(plan.id, "ALLOWLIST_NOT_CONFIGURED", NO_AWS_EXECUTION, tx);
   }
   if (allowedAccounts.length > 0 && !allowedAccounts.includes(expectedAccountId)) {
-    return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", tx);
+    return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
   }
   if (allowedRegions.length > 0 && !allowedRegions.includes(region)) {
-    return await failGovernedPlan(plan.id, "REGION_NOT_ALLOWLISTED", tx);
+    return await failGovernedPlan(plan.id, "REGION_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
   }
 
   // Step 4: Revalidate requested tag keys immediately before CreateTags
   const allowedTagKeys = parseCsv(process.env.CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS);
   if (mode === "staging" && allowedTagKeys.length === 0) {
-    return await failGovernedPlan(plan.id, "TAG_ALLOWLIST_NOT_CONFIGURED", tx);
+    return await failGovernedPlan(plan.id, "TAG_ALLOWLIST_NOT_CONFIGURED", NO_AWS_EXECUTION, tx);
   }
   if (requestedTags.length === 0) {
-    return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", tx);
+    return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx);
   }
   const seenKeys = new Set<string>();
 
   for (const tag of requestedTags) {
-    if (!tag.Key || tag.Key.trim() === "") return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", tx);
-    if (seenKeys.has(tag.Key)) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", tx);
+    if (!tag.Key || tag.Key.trim() === "") return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx);
+    if (seenKeys.has(tag.Key)) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx);
     seenKeys.add(tag.Key);
 
-    if (tag.Key.length > 128 || tag.Value.length > 256) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", tx);
+    if (tag.Key.length > 128 || tag.Value.length > 256) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx);
 
-    if (tag.Key.toLowerCase().startsWith("aws:")) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", tx);
-    if (["CloudShieldManaged", "CloudShieldProtected", "Environment"].includes(tag.Key)) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", tx);
+    if (tag.Key.toLowerCase().startsWith("aws:")) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
+    if (["CloudShieldManaged", "CloudShieldProtected", "Environment"].includes(tag.Key)) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
 
     if (allowedTagKeys.length > 0 && !allowedTagKeys.includes(tag.Key)) {
-      return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", tx);
+      return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
     }
   }
 
@@ -415,17 +440,17 @@ async function executeGovernedEc2Tagging(
     const returnedArn = identity.Arn ?? null;
 
     if (allowedAccounts.length > 0 && returnedAccount && !allowedAccounts.includes(returnedAccount)) {
-      return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", tx);
+      return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", AWS_ATTEMPTED_NO_MUTATION, tx);
     }
 
     if (returnedAccount !== expectedAccountId) {
-      return await failGovernedPlan(plan.id, "IDENTITY_MISMATCH", tx);
+      return await failGovernedPlan(plan.id, "IDENTITY_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx);
     }
 
     const configuredExecutorRoleArn = process.env.AWS_EXECUTOR_ROLE_ARN!;
     const expectedRoleName = configuredExecutorRoleArn.split("/").pop();
     if (!expectedRoleName || !returnedArn || !returnedArn.includes(`assumed-role/${expectedRoleName}/`)) {
-       return await failGovernedPlan(plan.id, "ROLE_PRINCIPAL_MISMATCH", tx);
+       return await failGovernedPlan(plan.id, "ROLE_PRINCIPAL_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx);
     }
 
     const maskedArn = returnedArn.replace(/(arn:aws:sts::\d{12}:assumed-role\/[^\/]+\/).+/, "$1***");
@@ -435,19 +460,19 @@ async function executeGovernedEc2Tagging(
 
     // Step 3: Add real-resource tag safety gates
     if (before["Environment"] === "prod") {
-      return await failGovernedPlan(plan.id, "PRODUCTION_TARGET", tx);
+      return await failGovernedPlan(plan.id, "PRODUCTION_TARGET", AWS_ATTEMPTED_NO_MUTATION, tx);
     }
     if (before["CloudShieldProtected"] === "true") {
-      return await failGovernedPlan(plan.id, "PROTECTED_TARGET", tx);
+      return await failGovernedPlan(plan.id, "PROTECTED_TARGET", AWS_ATTEMPTED_NO_MUTATION, tx);
     }
     if (before["CloudShieldManaged"] !== "true") {
-      return await failGovernedPlan(plan.id, "RESOURCE_NOT_MANAGED", tx);
+      return await failGovernedPlan(plan.id, "RESOURCE_NOT_MANAGED", AWS_ATTEMPTED_NO_MUTATION, tx);
     }
     if (before["Environment"] !== "sandbox") {
       if (before["Environment"] === "staging" && expectedEnvironment === "staging") {
         // Allowed
       } else {
-        return await failGovernedPlan(plan.id, "ENVIRONMENT_MISMATCH", tx);
+        return await failGovernedPlan(plan.id, "ENVIRONMENT_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx);
       }
     }
 
@@ -469,7 +494,7 @@ async function executeGovernedEc2Tagging(
     const after = await fetchInstanceTags(ec2, instanceId);
     const verified = requestedTags.every((tag) => after[tag.Key] === tag.Value);
     if (!verified) {
-      return await failGovernedPlan(plan.id, "AFTER_STATE_VERIFICATION_FAILED", tx);
+      return await failGovernedPlan(plan.id, "AFTER_STATE_VERIFICATION_FAILED", AWS_ATTEMPTED_NO_MUTATION, tx);
     }
 
     const updated = await tx.remediationPlan.update({
@@ -519,8 +544,55 @@ async function executeGovernedEc2Tagging(
     }, tx);
     return { status: updated.lifecycleState, mutationExecuted: !requestedTagsAlreadyPresent };
   } catch (error: any) {
-    return await failGovernedPlan(plan.id, classifyAwsError(error), tx);
+    return await failGovernedPlan(plan.id, classifyAwsError(error), AWS_ATTEMPTED_NO_MUTATION, tx);
   }
+}
+
+async function verifyApprovalPayloadHash(planId: string, organizationId: string) {
+  const plan = await prisma.remediationPlan.findFirst({
+    where: {
+      id: planId,
+      organizationId,
+      finding: { organizationId },
+      resource: { organizationId }
+    },
+    include: {
+      finding: { include: { awsAccount: true } },
+      resource: true
+    }
+  });
+  const approval = await prisma.approvalRequest.findFirst({
+    where: {
+      organizationId,
+      remediationPlanId: planId,
+      status: "APPROVED"
+    },
+    orderBy: { decidedAt: "desc" }
+  });
+
+  if (!plan || !approval?.payloadHash) return "APPROVAL_PAYLOAD_MISMATCH";
+
+  const currentHash = computeApprovalPayloadHash(
+    buildCanonicalApprovalPayload({
+      organizationId: plan.organizationId,
+      remediationPlanId: plan.id,
+      createdById: plan.createdById,
+      allowlistedOperation: plan.allowlistedOperation,
+      confirmationTokenRequired: plan.confirmationTokenRequired,
+      requestedAction: plan.requestedAction ?? {},
+      normalizedPayload: plan.normalizedPayload ?? {},
+      beforeState: plan.beforeState ?? {},
+      expectedAfterState: plan.expectedAfterState ?? {},
+      rollbackPayload: plan.rollbackPayload ?? {},
+      executionMode: plan.executionMode,
+      idempotencyKey: plan.idempotencyKey,
+      approvalExpiresAt: plan.approvalExpiresAt?.toISOString() ?? null
+    })
+  );
+
+  return approvalPayloadHashesEqual(approval.payloadHash, currentHash)
+    ? null
+    : "APPROVAL_PAYLOAD_MISMATCH";
 }
 
 async function assumeExecutorRole(region: string) {
@@ -563,7 +635,12 @@ function buildRollbackTags(before: Record<string, string>, requested: AwsTag[]) 
   }));
 }
 
-async function failGovernedPlan(planId: string, failureClassification: string, tx: any) {
+async function failGovernedPlan(
+  planId: string,
+  failureClassification: string,
+  executionFacts: ExecutionFacts,
+  tx: any
+) {
   const updated = await tx.remediationPlan.update({
     where: { id: planId },
     data: {
@@ -573,17 +650,21 @@ async function failGovernedPlan(planId: string, failureClassification: string, t
       executionCompletedAt: new Date(),
       executionEvidence: {
         failureClassification,
-        awsApiCallExecuted: true,
-        mutationExecuted: false
+        awsApiCallExecuted: executionFacts.awsApiCallExecuted,
+        mutationExecuted: executionFacts.mutationExecuted
       }
     }
   });
   await audit(updated.organizationId, null, updated.id, "governance.aws_change.worker_failed", {
     failureClassification,
-    awsApiCallExecuted: true,
-    mutationExecuted: false
+    awsApiCallExecuted: executionFacts.awsApiCallExecuted,
+    mutationExecuted: executionFacts.mutationExecuted
   }, tx);
-  return { status: "FAILED", failureClassification, mutationExecuted: false };
+  return {
+    status: "FAILED",
+    failureClassification,
+    mutationExecuted: executionFacts.mutationExecuted
+  };
 }
 
 function classifyAwsError(error: any) {
