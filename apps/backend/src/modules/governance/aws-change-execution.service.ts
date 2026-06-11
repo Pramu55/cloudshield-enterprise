@@ -25,6 +25,10 @@ type ActorContext = {
   userId: string;
 };
 
+type QueueExecutionContext = {
+  correlationId: string;
+};
+
 const APPROVAL_TTL_MS = 1000 * 60 * 60 * 24;
 
 export async function simulateGovernedAwsChange(
@@ -194,7 +198,8 @@ export async function rejectGovernedAwsChange(
 export async function queueGovernedAwsChangeExecution(
   actor: ActorContext,
   planId: string,
-  body: GovernedExecuteRequest
+  body: GovernedExecuteRequest,
+  context: QueueExecutionContext
 ) {
   const plan = await prisma.remediationPlan.findFirst({
     where: { id: planId, organizationId: actor.organizationId },
@@ -233,7 +238,8 @@ export async function queueGovernedAwsChangeExecution(
     }),
     prisma.auditEvent.create({
       data: auditData(actor, plan.id, "governance.aws_change.execution_queued", {
-        idempotencyKey: body.idempotencyKey
+        idempotencyKey: body.idempotencyKey,
+        correlationId: context.correlationId
       })
     })
   ]);
@@ -244,7 +250,8 @@ export async function queueGovernedAwsChangeExecution(
       organizationId: actor.organizationId,
       planId: plan.id,
       requestedById: actor.userId,
-      idempotencyKey: body.idempotencyKey
+      idempotencyKey: body.idempotencyKey,
+      correlationId: context.correlationId
     },
     {
       jobId: body.idempotencyKey,

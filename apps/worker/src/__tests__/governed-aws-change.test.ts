@@ -1,13 +1,20 @@
 import test, { mock } from "node:test";
 import assert from "node:assert";
 import { prisma } from "@cloudshield/database";
-import { buildSafeWorkerErrorLog, processGovernedAwsChangeJob } from "../index.js";
+import {
+  buildCorrelationPersistenceWarning,
+  buildGovernedAwsWorkerLogFields,
+  buildSafeWorkerErrorLog,
+  getPersistedGovernedCorrelationId,
+  processGovernedAwsChangeJob
+} from "../index.js";
 import { randomUUID } from "node:crypto";
 import { EC2Client } from "@aws-sdk/client-ec2";
 import { STSClient } from "@aws-sdk/client-sts";
 import {
   buildCanonicalApprovalPayload,
-  computeApprovalPayloadHash
+  computeApprovalPayloadHash,
+  isValidCorrelationId
 } from "@cloudshield/utils";
 
 const originalEc2Send = EC2Client.prototype.send;
@@ -209,10 +216,27 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     return {};
   }) as any;
 
-  const runJob = async (plan: any) => {
+  const runJob = async (
+    plan: any,
+    options: {
+      correlationId?: string;
+      jobId?: string;
+      updateData?: (data: Record<string, unknown>) => Promise<void>;
+    } = {}
+  ) => {
+    const data: Record<string, unknown> = {
+      planId: plan.id,
+      organizationId: orgId,
+      requestedById: "u1",
+      idempotencyKey: plan.idempotencyKey
+    };
+    if (Object.prototype.hasOwnProperty.call(options, "correlationId")) {
+      data.correlationId = options.correlationId;
+    }
     return await processGovernedAwsChangeJob({
-      id: randomUUID(),
-      data: { planId: plan.id, organizationId: orgId, requestedById: "u1", idempotencyKey: plan.idempotencyKey }
+      id: options.jobId ?? randomUUID(),
+      data,
+      ...(options.updateData ? { updateData: options.updateData } : {})
     } as any);
   };
 
@@ -567,6 +591,165 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     assertNoAwsSdkCalls();
     await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
+
+  await t.test("30. valid queue correlationId reaches structured logs and evidence", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const correlationId = "550e8400-e29b-41d4-a716-446655440000";
+    const jobId = "job-valid-correlation";
+    const plan = await createPlan();
+    const result = await runJob(plan, { correlationId, jobId });
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+    const logPayload = buildGovernedAwsWorkerLogFields(
+      { jobId, correlationId },
+      { organizationId: orgId, planId: plan.id }
+    );
+
+    assert.strictEqual(result.status, "SUCCEEDED");
+    assert.strictEqual((result as any).correlationId, correlationId);
+    assert.strictEqual((dbPlan?.preflightEvidence as any)?.correlationId, correlationId);
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.correlationId, correlationId);
+    assert.strictEqual((logPayload as any).jobId, jobId);
+    assert.strictEqual((logPayload as any).correlationId, correlationId);
+  });
+
+  await t.test("31. missing queue correlationId generates a safe UUID", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+    const correlationId = (result as any).correlationId;
+
+    assert.ok(isValidCorrelationId(correlationId));
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.correlationId, correlationId);
+  });
+
+  await t.test("32. malformed queue correlationId is replaced and never logged", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const malformed = "malformed-queue-correlation";
+    const plan = await createPlan();
+    const result = await runJob(plan, { correlationId: malformed, jobId: "job-malformed-correlation" });
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+    const correlationId = (result as any).correlationId;
+    const logPayload = buildGovernedAwsWorkerLogFields(
+      { jobId: "job-malformed-correlation", correlationId },
+      { organizationId: orgId, planId: plan.id }
+    );
+    const serialized = JSON.stringify(logPayload);
+
+    assert.ok(isValidCorrelationId(correlationId));
+    assert.notStrictEqual(correlationId, malformed);
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.correlationId, correlationId);
+    assert.strictEqual(serialized.includes(malformed), false);
+  });
+
+  await t.test("33. jobId remains separate from correlationId", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const correlationId = "550e8400-e29b-41d4-a716-446655440000";
+    const jobId = "job-separate-from-correlation";
+    const plan = await createPlan();
+    const result = await runJob(plan, { correlationId, jobId });
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+
+    assert.strictEqual((result as any).correlationId, correlationId);
+    assert.strictEqual((dbPlan?.preflightEvidence as any)?.workerJobId, jobId);
+    assert.strictEqual((dbPlan?.preflightEvidence as any)?.correlationId, correlationId);
+    assert.notStrictEqual((dbPlan?.preflightEvidence as any)?.workerJobId, correlationId);
+  });
+
+  await t.test("34. duplicate processing preserves the same normalized job correlationId", async () => {
+    const correlationId = "550e8400-e29b-41d4-a716-446655440000";
+    const plan = await createPlan();
+    const result1 = await runJob(plan, { correlationId, jobId: "job-duplicate-1" });
+    const result2 = await runJob(plan, { correlationId, jobId: "job-duplicate-2" });
+
+    assert.strictEqual(result1.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual(result2.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual((result1 as any).correlationId, correlationId);
+    assert.strictEqual((result2 as any).correlationId, correlationId);
+  });
+
+  await t.test("35. correlationId does not change approval hash verification", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        normalizedPayload: {
+          operation: "EC2_APPLY_GOVERNANCE_TAGS",
+          region: "us-east-1",
+          resourceId: "i-12345",
+          tags: [{ key: "CloudShieldOwner", value: "tampered" }]
+        }
+      }
+    });
+
+    const result = await runJob(plan, {
+      correlationId: "550e8400-e29b-41d4-a716-446655440000"
+    });
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_PAYLOAD_MISMATCH");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("36. updateData failure does not block execution or change the attempt correlationId", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const rawErrorMarker = "RAW_UPDATE_DATA_ERROR_MUST_NOT_BE_LOGGED";
+    const updateData = mock.fn(async () => {
+      throw new Error(rawErrorMarker);
+    });
+    const plan = await createPlan();
+    const result = await runJob(plan, {
+      correlationId: "malformed-correlation",
+      jobId: "job-update-data-failure",
+      updateData
+    });
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+    const correlationId = (result as any).correlationId;
+    const warning = buildCorrelationPersistenceWarning({
+      jobId: "job-update-data-failure",
+      correlationId
+    });
+
+    assert.strictEqual(result.status, "SUCCEEDED");
+    assert.strictEqual(updateData.mock.callCount(), 1);
+    assert.ok(isValidCorrelationId(correlationId));
+    assert.strictEqual((dbPlan?.preflightEvidence as any)?.correlationId, correlationId);
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.correlationId, correlationId);
+    assert.deepStrictEqual(warning, {
+      component: "governed-aws-change-worker",
+      jobId: "job-update-data-failure",
+      correlationId,
+      reason: "correlation_persistence_failed"
+    });
+    assert.strictEqual(JSON.stringify(warning).includes(rawErrorMarker), false);
+  });
+});
+
+test("governed worker event handlers only retain valid persisted correlation IDs", () => {
+  const valid = "550E8400-E29B-41D4-A716-446655440000";
+
+  assert.strictEqual(getPersistedGovernedCorrelationId(undefined), undefined);
+  assert.strictEqual(getPersistedGovernedCorrelationId("malformed-correlation"), undefined);
+  assert.strictEqual(
+    getPersistedGovernedCorrelationId(valid),
+    "550e8400-e29b-41d4-a716-446655440000"
+  );
+
+  const missingLog = buildGovernedAwsWorkerLogFields({ jobId: "job-missing" });
+  const malformedLog = buildGovernedAwsWorkerLogFields({
+    jobId: "job-malformed",
+    correlationId: getPersistedGovernedCorrelationId("malformed-correlation")
+  });
+  const validLog = buildGovernedAwsWorkerLogFields({
+    jobId: "job-valid",
+    correlationId: getPersistedGovernedCorrelationId(valid)
+  });
+
+  assert.strictEqual((missingLog as any).correlationId, undefined);
+  assert.strictEqual((malformedLog as any).correlationId, undefined);
+  assert.strictEqual(
+    (validLog as any).correlationId,
+    "550e8400-e29b-41d4-a716-446655440000"
+  );
 });
 
 test("safe worker AWS error logging strips raw provider context", () => {
