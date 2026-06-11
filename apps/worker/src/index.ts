@@ -9,6 +9,7 @@ import {
   CLOUD_INVENTORY_SYNC_QUEUE_NAME,
   CLOUD_SCAN_QUEUE_NAME,
   CloudScanJobTypeSchema,
+  type GovernedAwsChangeJob,
   type CloudScanJobType
 } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
@@ -16,6 +17,8 @@ import {
   approvalPayloadHashesEqual,
   buildCanonicalApprovalPayload,
   computeApprovalPayloadHash,
+  isValidCorrelationId,
+  normalizeOrGenerateCorrelationId,
   optionalEnv,
   sanitizeProviderError
 } from "@cloudshield/utils";
@@ -50,13 +53,6 @@ type CloudAssessmentJob = {
   mode: "EVALUATION" | "AWS_STS_ONLY" | "AWS_READONLY_SCAN";
 };
 
-type GovernedAwsChangeJob = {
-  organizationId: string;
-  planId: string;
-  requestedById: string;
-  idempotencyKey: string;
-};
-
 type AwsTag = {
   Key: string;
   Value: string;
@@ -77,9 +73,20 @@ const AWS_ATTEMPTED_NO_MUTATION: ExecutionFacts = {
   mutationExecuted: false
 };
 
+export type GovernedJobContext = {
+  jobId?: string | null;
+  correlationId: string;
+};
+
+type GovernedWorkerLogContext = {
+  jobId?: string | null;
+  correlationId?: string;
+};
+
 type SafeWorkerErrorLogInput = {
   component: string;
   jobId?: string | null;
+  correlationId?: string | null;
   organizationId?: string | null;
   planId?: string | null;
   failureClassification?: string | null;
@@ -97,6 +104,7 @@ export function buildSafeWorkerErrorLog(input: SafeWorkerErrorLogInput) {
   return {
     component: input.component,
     ...(input.jobId ? { jobId: input.jobId } : {}),
+    ...(input.correlationId && isValidCorrelationId(input.correlationId) ? { correlationId: input.correlationId } : {}),
     ...(input.organizationId ? { organizationId: input.organizationId } : {}),
     ...(input.planId ? { planId: input.planId } : {}),
     ...(input.failureClassification ? { failureClassification: input.failureClassification } : {}),
@@ -188,29 +196,57 @@ const assessmentWorker = process.env.NODE_ENV === "test" ? createWorkerStub() : 
 );
 
 export const processGovernedAwsChangeJob = async (job: any) => {
+  const jobContext = await normalizeGovernedJobContext(job);
+  const jobData = job.data as GovernedAwsChangeJob;
+
+  logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+    organizationId: jobData.organizationId,
+    planId: jobData.planId
+  }), "Governed AWS change worker job started");
+
   // Step 5: Strengthen idempotency and concurrency
   const existingCompleted = await prisma.remediationPlan.findFirst({
     where: {
-      idempotencyKey: job.data.idempotencyKey,
+      idempotencyKey: jobData.idempotencyKey,
       lifecycleState: { in: ["SUCCEEDED", "FAILED", "BLOCKED", "ROLLED_BACK", "EXECUTING", "ROLLBACK_AVAILABLE"] }
     }
   });
 
   if (existingCompleted) {
-    if (existingCompleted.id !== job.data.planId) {
-      return { status: "BLOCKED", reason: "Another operation used the same idempotency key." };
+    if (existingCompleted.id !== jobData.planId) {
+      logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+        organizationId: jobData.organizationId,
+        planId: jobData.planId,
+        duplicateHandling: "idempotency_key_mismatch"
+      }), "Governed AWS change worker duplicate job blocked");
+      return { status: "BLOCKED", reason: "Another operation used the same idempotency key.", correlationId: jobContext.correlationId };
     }
     if (["SUCCEEDED", "ROLLBACK_AVAILABLE"].includes(existingCompleted.lifecycleState)) {
-       return { status: existingCompleted.lifecycleState, mutationExecuted: false };
+      logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+        organizationId: existingCompleted.organizationId,
+        planId: existingCompleted.id,
+        duplicateHandling: "already_completed"
+      }), "Governed AWS change worker duplicate job completed from existing state");
+      return { status: existingCompleted.lifecycleState, mutationExecuted: false, correlationId: jobContext.correlationId };
     }
     if (existingCompleted.lifecycleState === "EXECUTING") {
-      return { status: "STALE_OPERATION_STATE", reason: "Operation is currently executing." };
+      logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+        organizationId: existingCompleted.organizationId,
+        planId: existingCompleted.id,
+        duplicateHandling: "currently_executing"
+      }), "Governed AWS change worker stale duplicate observed");
+      return { status: "STALE_OPERATION_STATE", reason: "Operation is currently executing.", correlationId: jobContext.correlationId };
     }
-    return { status: existingCompleted.lifecycleState, mutationExecuted: false };
+    logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+      organizationId: existingCompleted.organizationId,
+      planId: existingCompleted.id,
+      duplicateHandling: "terminal_state"
+    }), "Governed AWS change worker duplicate job returned terminal state");
+    return { status: existingCompleted.lifecycleState, mutationExecuted: false, correlationId: jobContext.correlationId };
   }
 
   const plan = await prisma.remediationPlan.findUnique({
-    where: { id: job.data.planId },
+    where: { id: jobData.planId },
     include: {
       finding: {
         include: {
@@ -223,47 +259,52 @@ export const processGovernedAwsChangeJob = async (job: any) => {
     }
   });
 
-  if (!plan || plan.organizationId !== job.data.organizationId) {
-    return { status: "FAILED", reason: "Plan not found for organization." };
+  if (!plan || plan.organizationId !== jobData.organizationId) {
+    logger.error(buildGovernedAwsWorkerLogFields(jobContext, {
+      organizationId: jobData.organizationId,
+      planId: jobData.planId,
+      failureClassification: "PLAN_NOT_FOUND"
+    }), "Governed AWS change worker job failed validation");
+    return { status: "FAILED", reason: "Plan not found for organization.", correlationId: jobContext.correlationId };
   }
 
   if (plan.lifecycleState !== "QUEUED") {
-    return await blockGovernedPlan(plan.id, "Plan is not queued for worker execution.", prisma);
+    return await blockGovernedPlan(plan.id, "Plan is not queued for worker execution.", prisma, jobContext);
   }
 
   if (plan.approvalStatus !== "APPROVED") {
-    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", NO_AWS_EXECUTION, prisma);
+    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", NO_AWS_EXECUTION, prisma, jobContext);
   }
 
   if (plan.approvalExpiresAt && plan.approvalExpiresAt < new Date()) {
-    return await failGovernedPlan(plan.id, "APPROVAL_EXPIRED", NO_AWS_EXECUTION, prisma);
+    return await failGovernedPlan(plan.id, "APPROVAL_EXPIRED", NO_AWS_EXECUTION, prisma, jobContext);
   }
 
-  if (plan.idempotencyKey !== job.data.idempotencyKey) {
-    return await failGovernedPlan(plan.id, "IDEMPOTENCY_KEY_MISMATCH", NO_AWS_EXECUTION, prisma);
+  if (plan.idempotencyKey !== jobData.idempotencyKey) {
+    return await failGovernedPlan(plan.id, "IDEMPOTENCY_KEY_MISMATCH", NO_AWS_EXECUTION, prisma, jobContext);
   }
 
   if (plan.createdById && plan.approvedById && plan.createdById === plan.approvedById) {
-    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", NO_AWS_EXECUTION, prisma);
+    return await failGovernedPlan(plan.id, "APPROVAL_INVALID", NO_AWS_EXECUTION, prisma, jobContext);
   }
 
-  const approvalHashFailure = await verifyApprovalPayloadHash(plan.id, job.data.organizationId);
+  const approvalHashFailure = await verifyApprovalPayloadHash(plan.id, jobData.organizationId);
   if (approvalHashFailure) {
-    return await failGovernedPlan(plan.id, approvalHashFailure, NO_AWS_EXECUTION, prisma);
+    return await failGovernedPlan(plan.id, approvalHashFailure, NO_AWS_EXECUTION, prisma, jobContext);
   }
 
   const mode = getAwsChangeExecutionMode();
   const blockedReason = validateWorkerGate(plan, mode);
   if (blockedReason) {
-    return await blockGovernedPlan(plan.id, blockedReason, prisma);
+    return await blockGovernedPlan(plan.id, blockedReason, prisma, jobContext);
   }
 
   // Atomically claim the plan
   const updateResult = await prisma.remediationPlan.updateMany({
     where: {
       id: plan.id,
-      organizationId: job.data.organizationId,
-      idempotencyKey: job.data.idempotencyKey,
+      organizationId: jobData.organizationId,
+      idempotencyKey: jobData.idempotencyKey,
       lifecycleState: "QUEUED",
       approvalStatus: "APPROVED",
       OR: [
@@ -277,6 +318,7 @@ export const processGovernedAwsChangeJob = async (job: any) => {
       preflightEvidence: {
         ...(typeof plan.preflightEvidence === "object" && plan.preflightEvidence ? plan.preflightEvidence : {}),
         workerJobId: job.id,
+        correlationId: jobContext.correlationId,
         workerPreflightStartedAt: new Date().toISOString(),
         awsApiCallExecuted: false,
         mutationExecuted: false
@@ -287,9 +329,19 @@ export const processGovernedAwsChangeJob = async (job: any) => {
   if (updateResult.count === 0) {
     const reloaded = await prisma.remediationPlan.findUnique({ where: { id: plan.id }});
     if (reloaded && ["SUCCEEDED", "ROLLBACK_AVAILABLE"].includes(reloaded.lifecycleState)) {
-       return { status: reloaded.lifecycleState, mutationExecuted: false };
+      logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+        organizationId: reloaded.organizationId,
+        planId: reloaded.id,
+        duplicateHandling: "claim_observed_completed"
+      }), "Governed AWS change worker atomic claim observed completed state");
+      return { status: reloaded.lifecycleState, mutationExecuted: false, correlationId: jobContext.correlationId };
     }
-    return { status: "STALE_OPERATION_STATE", reason: "Atomic claim failed or state became stale." };
+    logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+      organizationId: plan.organizationId,
+      planId: plan.id,
+      duplicateHandling: "atomic_claim_failed"
+    }), "Governed AWS change worker atomic claim failed");
+    return { status: "STALE_OPERATION_STATE", reason: "Atomic claim failed or state became stale.", correlationId: jobContext.correlationId };
   }
 
   if (mode === "simulation") {
@@ -301,6 +353,7 @@ export const processGovernedAwsChangeJob = async (job: any) => {
         executionCompletedAt: new Date(),
         executionEvidence: {
           workerJobId: job.id,
+          correlationId: jobContext.correlationId,
           mode,
           simulatedWorkerExecution: true,
           awsApiCallExecuted: false,
@@ -309,16 +362,66 @@ export const processGovernedAwsChangeJob = async (job: any) => {
         }
       }
     });
-    await audit(plan.organizationId, job.data.requestedById, plan.id, "governance.aws_change.worker_simulated", {
+    await audit(plan.organizationId, jobData.requestedById, plan.id, "governance.aws_change.worker_simulated", {
+      correlationId: jobContext.correlationId,
       mode,
       awsApiCallExecuted: false,
       mutationExecuted: false
     }, prisma);
-    return { status: updated.lifecycleState, mutationExecuted: false };
+    logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+      organizationId: plan.organizationId,
+      planId: plan.id,
+      mutationExecuted: false
+    }), "Governed AWS change worker job completed");
+    return { status: updated.lifecycleState, mutationExecuted: false, correlationId: jobContext.correlationId };
   }
 
-  return await executeGovernedEc2Tagging(plan, job.data, mode, prisma);
+  return await executeGovernedEc2Tagging(plan, jobData, mode, prisma, jobContext);
 };
+
+async function normalizeGovernedJobContext(job: any): Promise<GovernedJobContext> {
+  const correlationId = normalizeOrGenerateCorrelationId(job?.data?.correlationId);
+  if (job?.data && job.data.correlationId !== correlationId) {
+    job.data = { ...job.data, correlationId };
+    if (typeof job.updateData === "function") {
+      try {
+        await job.updateData(job.data);
+      } catch {
+        logger.warn(buildCorrelationPersistenceWarning({
+          jobId: job?.id ? String(job.id) : null,
+          correlationId
+        }), "Governed AWS change correlation persistence failed");
+      }
+    }
+  }
+  return {
+    jobId: job?.id ? String(job.id) : null,
+    correlationId
+  };
+}
+
+export function buildGovernedAwsWorkerLogFields(
+  context: GovernedWorkerLogContext,
+  fields: Record<string, unknown> = {}
+) {
+  return {
+    component: "governed-aws-change-worker",
+    ...(context.jobId ? { jobId: context.jobId } : {}),
+    ...(context.correlationId ? { correlationId: context.correlationId } : {}),
+    ...fields
+  };
+}
+
+export function buildCorrelationPersistenceWarning(context: GovernedJobContext) {
+  return buildGovernedAwsWorkerLogFields(context, {
+    reason: "correlation_persistence_failed"
+  });
+}
+
+export function getPersistedGovernedCorrelationId(value: unknown): string | undefined {
+  if (typeof value !== "string" || !isValidCorrelationId(value)) return undefined;
+  return value.trim().toLowerCase();
+}
 
 type TestSafeWorker = { on: (event: string, handler: any) => void };
 function createWorkerStub(): TestSafeWorker {
@@ -358,13 +461,20 @@ assessmentWorker.on("failed", (job: any, error: any) => {
 });
 
 governedAwsChangeWorker.on("completed", (job: any) => {
-  logger.info({ jobId: job.id }, "Governed AWS change worker job completed");
+  logger.info(buildGovernedAwsWorkerLogFields({
+    jobId: job?.id ? String(job.id) : null,
+    correlationId: getPersistedGovernedCorrelationId(job?.data?.correlationId)
+  }, {
+    organizationId: job?.data?.organizationId,
+    planId: job?.data?.planId
+  }), "Governed AWS change worker job completed");
 });
 
 governedAwsChangeWorker.on("failed", (job: any, error: any) => {
   logger.error(buildSafeWorkerErrorLog({
     component: "governed-aws-change-worker",
     jobId: job?.id,
+    correlationId: getPersistedGovernedCorrelationId(job?.data?.correlationId),
     organizationId: job?.data?.organizationId ?? null,
     planId: job?.data?.planId ?? null,
     providerError: error
@@ -435,7 +545,8 @@ async function executeGovernedEc2Tagging(
   plan: any,
   jobData: GovernedAwsChangeJob,
   mode: string,
-  tx: any
+  tx: any,
+  jobContext: GovernedJobContext
 ) {
   const payload = plan.normalizedPayload;
   const region = payload.region || plan.resource.region;
@@ -453,37 +564,37 @@ async function executeGovernedEc2Tagging(
   const allowedRegions = parseCsv(process.env.AWS_ALLOWED_REGIONS);
 
   if (mode === "staging" && (allowedAccounts.length === 0 || allowedRegions.length === 0)) {
-    return await failGovernedPlan(plan.id, "ALLOWLIST_NOT_CONFIGURED", NO_AWS_EXECUTION, tx);
+    return await failGovernedPlan(plan.id, "ALLOWLIST_NOT_CONFIGURED", NO_AWS_EXECUTION, tx, jobContext);
   }
   if (allowedAccounts.length > 0 && !allowedAccounts.includes(expectedAccountId)) {
-    return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
+    return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx, jobContext);
   }
   if (allowedRegions.length > 0 && !allowedRegions.includes(region)) {
-    return await failGovernedPlan(plan.id, "REGION_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
+    return await failGovernedPlan(plan.id, "REGION_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx, jobContext);
   }
 
   // Step 4: Revalidate requested tag keys immediately before CreateTags
   const allowedTagKeys = parseCsv(process.env.CLOUDSHIELD_ALLOWED_GOVERNANCE_TAG_KEYS);
   if (mode === "staging" && allowedTagKeys.length === 0) {
-    return await failGovernedPlan(plan.id, "TAG_ALLOWLIST_NOT_CONFIGURED", NO_AWS_EXECUTION, tx);
+    return await failGovernedPlan(plan.id, "TAG_ALLOWLIST_NOT_CONFIGURED", NO_AWS_EXECUTION, tx, jobContext);
   }
   if (requestedTags.length === 0) {
-    return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx);
+    return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx, jobContext);
   }
   const seenKeys = new Set<string>();
 
   for (const tag of requestedTags) {
-    if (!tag.Key || tag.Key.trim() === "") return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx);
-    if (seenKeys.has(tag.Key)) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx);
+    if (!tag.Key || tag.Key.trim() === "") return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx, jobContext);
+    if (seenKeys.has(tag.Key)) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx, jobContext);
     seenKeys.add(tag.Key);
 
-    if (tag.Key.length > 128 || tag.Value.length > 256) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx);
+    if (tag.Key.length > 128 || tag.Value.length > 256) return await failGovernedPlan(plan.id, "MALFORMED_TAG_PAYLOAD", NO_AWS_EXECUTION, tx, jobContext);
 
-    if (tag.Key.toLowerCase().startsWith("aws:")) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
-    if (["CloudShieldManaged", "CloudShieldProtected", "Environment"].includes(tag.Key)) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
+    if (tag.Key.toLowerCase().startsWith("aws:")) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx, jobContext);
+    if (["CloudShieldManaged", "CloudShieldProtected", "Environment"].includes(tag.Key)) return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx, jobContext);
 
     if (allowedTagKeys.length > 0 && !allowedTagKeys.includes(tag.Key)) {
-      return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx);
+      return await failGovernedPlan(plan.id, "TAG_KEY_NOT_ALLOWLISTED", NO_AWS_EXECUTION, tx, jobContext);
     }
   }
 
@@ -499,17 +610,17 @@ async function executeGovernedEc2Tagging(
     const returnedArn = identity.Arn ?? null;
 
     if (allowedAccounts.length > 0 && returnedAccount && !allowedAccounts.includes(returnedAccount)) {
-      return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", AWS_ATTEMPTED_NO_MUTATION, tx);
+      return await failGovernedPlan(plan.id, "ACCOUNT_NOT_ALLOWLISTED", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
     }
 
     if (returnedAccount !== expectedAccountId) {
-      return await failGovernedPlan(plan.id, "IDENTITY_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx);
+      return await failGovernedPlan(plan.id, "IDENTITY_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
     }
 
     const configuredExecutorRoleArn = process.env.AWS_EXECUTOR_ROLE_ARN!;
     const expectedRoleName = configuredExecutorRoleArn.split("/").pop();
     if (!expectedRoleName || !returnedArn || !returnedArn.includes(`assumed-role/${expectedRoleName}/`)) {
-       return await failGovernedPlan(plan.id, "ROLE_PRINCIPAL_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx);
+       return await failGovernedPlan(plan.id, "ROLE_PRINCIPAL_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
     }
 
     const maskedArn = returnedArn.replace(/(arn:aws:sts::\d{12}:assumed-role\/[^\/]+\/).+/, "$1***");
@@ -520,19 +631,19 @@ async function executeGovernedEc2Tagging(
 
     // Step 3: Add real-resource tag safety gates
     if (before["Environment"] === "prod") {
-      return await failGovernedPlan(plan.id, "PRODUCTION_TARGET", AWS_ATTEMPTED_NO_MUTATION, tx);
+      return await failGovernedPlan(plan.id, "PRODUCTION_TARGET", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
     }
     if (before["CloudShieldProtected"] === "true") {
-      return await failGovernedPlan(plan.id, "PROTECTED_TARGET", AWS_ATTEMPTED_NO_MUTATION, tx);
+      return await failGovernedPlan(plan.id, "PROTECTED_TARGET", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
     }
     if (before["CloudShieldManaged"] !== "true") {
-      return await failGovernedPlan(plan.id, "RESOURCE_NOT_MANAGED", AWS_ATTEMPTED_NO_MUTATION, tx);
+      return await failGovernedPlan(plan.id, "RESOURCE_NOT_MANAGED", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
     }
     if (before["Environment"] !== "sandbox") {
       if (before["Environment"] === "staging" && expectedEnvironment === "staging") {
         // Allowed
       } else {
-        return await failGovernedPlan(plan.id, "ENVIRONMENT_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx);
+        return await failGovernedPlan(plan.id, "ENVIRONMENT_MISMATCH", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
       }
     }
 
@@ -556,7 +667,7 @@ async function executeGovernedEc2Tagging(
     const after = await fetchInstanceTags(ec2, instanceId);
     const verified = requestedTags.every((tag) => after[tag.Key] === tag.Value);
     if (!verified) {
-      return await failGovernedPlan(plan.id, "AFTER_STATE_VERIFICATION_FAILED", AWS_ATTEMPTED_NO_MUTATION, tx);
+      return await failGovernedPlan(plan.id, "AFTER_STATE_VERIFICATION_FAILED", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
     }
 
     const updated = await tx.remediationPlan.update({
@@ -577,6 +688,7 @@ async function executeGovernedEc2Tagging(
         },
         executionEvidence: {
           workerJobId: jobData.idempotencyKey,
+          correlationId: jobContext.correlationId,
           mode,
           executorIdentity: {
             account: returnedAccount,
@@ -599,18 +711,25 @@ async function executeGovernedEc2Tagging(
       }
     });
     await audit(plan.organizationId, jobData.requestedById, plan.id, "governance.aws_change.tagging_succeeded", {
+      correlationId: jobContext.correlationId,
       mode,
       awsApiCallExecuted: true,
       mutationExecuted: !requestedTagsAlreadyPresent,
       awsRequestId: requestId ?? null
     }, tx);
-    return { status: updated.lifecycleState, mutationExecuted: !requestedTagsAlreadyPresent };
+    logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+      organizationId: plan.organizationId,
+      planId: plan.id,
+      mutationExecuted: !requestedTagsAlreadyPresent
+    }), "Governed AWS change worker job completed");
+    return { status: updated.lifecycleState, mutationExecuted: !requestedTagsAlreadyPresent, correlationId: jobContext.correlationId };
   } catch (error: any) {
     return await failGovernedPlan(
       plan.id,
       classifyAwsError(error),
       AWS_ATTEMPTED_NO_MUTATION,
       tx,
+      jobContext,
       error,
       { operationName: currentOperationName, region }
     );
@@ -709,6 +828,7 @@ async function failGovernedPlan(
   failureClassification: string,
   executionFacts: ExecutionFacts,
   tx: any,
+  jobContext: GovernedJobContext,
   providerError?: unknown,
   providerContext?: {
     operationName?: string;
@@ -723,6 +843,7 @@ async function failGovernedPlan(
       failureClassification,
       executionCompletedAt: new Date(),
       executionEvidence: {
+        correlationId: jobContext.correlationId,
         failureClassification,
         awsApiCallExecuted: executionFacts.awsApiCallExecuted,
         mutationExecuted: executionFacts.mutationExecuted
@@ -730,12 +851,15 @@ async function failGovernedPlan(
     }
   });
   await audit(updated.organizationId, null, updated.id, "governance.aws_change.worker_failed", {
+    correlationId: jobContext.correlationId,
     failureClassification,
     awsApiCallExecuted: executionFacts.awsApiCallExecuted,
     mutationExecuted: executionFacts.mutationExecuted
   }, tx);
   logger.error(buildSafeWorkerErrorLog({
     component: "governed-aws-change-worker",
+    jobId: jobContext.jobId,
+    correlationId: jobContext.correlationId,
     organizationId: updated.organizationId,
     planId: updated.id,
     failureClassification,
@@ -747,7 +871,8 @@ async function failGovernedPlan(
   return {
     status: "FAILED",
     failureClassification,
-    mutationExecuted: executionFacts.mutationExecuted
+    mutationExecuted: executionFacts.mutationExecuted,
+    correlationId: jobContext.correlationId
   };
 }
 
@@ -760,7 +885,12 @@ function classifyAwsError(error: any) {
   return "AWS_EXECUTION_FAILED";
 }
 
-async function blockGovernedPlan(planId: string, blockedReason: string, tx: any) {
+async function blockGovernedPlan(
+  planId: string,
+  blockedReason: string,
+  tx: any,
+  jobContext: GovernedJobContext
+) {
   const updated = await tx.remediationPlan.update({
     where: { id: planId },
     data: {
@@ -769,6 +899,7 @@ async function blockGovernedPlan(planId: string, blockedReason: string, tx: any)
       blockedReason,
       executionCompletedAt: new Date(),
       executionEvidence: {
+        correlationId: jobContext.correlationId,
         blockedReason,
         awsApiCallExecuted: false,
         mutationExecuted: false
@@ -776,11 +907,18 @@ async function blockGovernedPlan(planId: string, blockedReason: string, tx: any)
     }
   });
   await audit(updated.organizationId, null, updated.id, "governance.aws_change.worker_blocked", {
+    correlationId: jobContext.correlationId,
     blockedReason,
     awsApiCallExecuted: false,
     mutationExecuted: false
   }, tx);
-  return { status: "BLOCKED", blockedReason, mutationExecuted: false };
+  logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+    organizationId: updated.organizationId,
+    planId: updated.id,
+    blockedReason,
+    mutationExecuted: false
+  }), "Governed AWS change worker blocked plan");
+  return { status: "BLOCKED", blockedReason, mutationExecuted: false, correlationId: jobContext.correlationId };
 }
 
 async function audit(

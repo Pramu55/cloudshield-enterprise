@@ -131,6 +131,17 @@ export type GovernedExecuteRequest = z.infer<
   typeof GovernedExecuteRequestSchema
 >;
 
+export const GovernedAwsChangeJobSchema = z.object({
+  organizationId: z.string().min(1),
+  planId: z.string().min(1),
+  requestedById: z.string().min(1),
+  idempotencyKey: z.string().min(8).max(160),
+  correlationId: z.uuid().optional()
+});
+export type GovernedAwsChangeJob = z.infer<
+  typeof GovernedAwsChangeJobSchema
+>;
+
 export const GovernedExecutionEvidenceResponseSchema = z.object({
   executionMode: AwsChangeExecutionModeSchema,
   lifecycleState: GovernedLifecycleStateSchema,
