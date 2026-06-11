@@ -141,21 +141,12 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
 
     const { id } = request.params as { id: string };
     
-    const invitation = await prisma.invitation.findFirst({
-      where: { id, organizationId: auth.organizationId }
-    });
-
-    if (!invitation || invitation.acceptedAt) {
-      reply.status(404).send({ error: "not_found", message: "Invitation not found or already accepted." });
-      return;
-    }
-
     const rawToken = newRawToken();
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await prisma.invitation.update({
-      where: { id },
+    const result = await prisma.invitation.updateMany({
+      where: { id, organizationId: auth.organizationId, acceptedAt: null },
       data: {
         tokenHash,
         expiresAt,
@@ -164,6 +155,11 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
         lastSentAt: new Date()
       }
     });
+
+    if (result.count !== 1) {
+      reply.status(404).send({ error: "not_found", message: "Invitation not found or already accepted." });
+      return;
+    }
 
     await prisma.auditEvent.create({
       data: {
@@ -189,19 +185,15 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
 
     const { id } = request.params as { id: string };
 
-    const invitation = await prisma.invitation.findFirst({
-      where: { id, organizationId: auth.organizationId }
+    const result = await prisma.invitation.updateMany({
+      where: { id, organizationId: auth.organizationId, acceptedAt: null },
+      data: { revokedAt: new Date() }
     });
 
-    if (!invitation || invitation.acceptedAt) {
+    if (result.count !== 1) {
       reply.status(404).send({ error: "not_found", message: "Invitation not found or already accepted." });
       return;
     }
-
-    await prisma.invitation.update({
-      where: { id },
-      data: { revokedAt: new Date() }
-    });
 
     await prisma.auditEvent.create({
       data: {
