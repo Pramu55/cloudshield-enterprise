@@ -1,7 +1,7 @@
 import test, { mock } from "node:test";
 import assert from "node:assert";
 import { prisma } from "@cloudshield/database";
-import { processGovernedAwsChangeJob } from "../index.js";
+import { buildSafeWorkerErrorLog, processGovernedAwsChangeJob } from "../index.js";
 import { randomUUID } from "node:crypto";
 import { EC2Client } from "@aws-sdk/client-ec2";
 import { STSClient } from "@aws-sdk/client-sts";
@@ -567,6 +567,168 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     assertNoAwsSdkCalls();
     await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
+});
+
+test("safe worker AWS error logging strips raw provider context", () => {
+  const sensitiveMarkers = [
+    "RAW_AWS_ERROR_MESSAGE_MARKER",
+    "AKIA_TEST_ACCESS_KEY_MARKER",
+    "SECRET_ACCESS_KEY_MARKER",
+    "SESSION_TOKEN_MARKER",
+    "EXTERNAL_ID_MARKER",
+    "AUTHORIZATION_HEADER_MARKER",
+    "SIGV4_SIGNING_CONTEXT_MARKER",
+    "RAW_STACK_MARKER",
+    "RAW_AWS_RESPONSE_BODY_MARKER"
+  ];
+  const error = Object.assign(new Error("RAW_AWS_ERROR_MESSAGE_MARKER"), {
+    name: "AccessDeniedException",
+    code: "AccessDeniedException",
+    stack: "RAW_STACK_MARKER",
+    operationName: "ec2:CreateTags",
+    region: "us-east-1",
+    AccessKeyId: "AKIA_TEST_ACCESS_KEY_MARKER",
+    SecretAccessKey: "SECRET_ACCESS_KEY_MARKER",
+    SessionToken: "SESSION_TOKEN_MARKER",
+    externalId: "EXTERNAL_ID_MARKER",
+    signingContext: "SIGV4_SIGNING_CONTEXT_MARKER",
+    $metadata: {
+      requestId: "req-safe-123",
+      httpStatusCode: 403,
+      attempts: 2
+    },
+    $response: {
+      headers: {
+        Authorization: "AUTHORIZATION_HEADER_MARKER"
+      },
+      body: "RAW_AWS_RESPONSE_BODY_MARKER"
+    }
+  });
+
+  const logPayload = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    jobId: "job-1",
+    organizationId: "org-1",
+    planId: "plan-1",
+    failureClassification: "AWS_PERMISSION_DENIED",
+    awsApiCallExecuted: true,
+    mutationExecuted: false,
+    providerError: error
+  });
+  const serialized = JSON.stringify(logPayload);
+
+  for (const marker of sensitiveMarkers) {
+    assert.strictEqual(serialized.includes(marker), false, marker);
+  }
+  assert.strictEqual((logPayload as any).safeProviderRequestId, "req-safe-123");
+  assert.strictEqual((logPayload as any).safeProviderCode, "AccessDeniedException");
+  assert.strictEqual((logPayload as any).safeHttpStatusCode, 403);
+  assert.strictEqual((logPayload as any).safeMessage, "AWS denied the provider request.");
+  assert.strictEqual((logPayload as any).operationName, undefined);
+  assert.strictEqual((logPayload as any).region, undefined);
+});
+
+test("safe worker error logging uses fixed generic message for unknown errors", () => {
+  const logPayload = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    failureClassification: "AWS_EXECUTION_FAILED",
+    awsApiCallExecuted: true,
+    mutationExecuted: false,
+    providerError: new Error("UNKNOWN_RAW_MESSAGE_SHOULD_NOT_LEAK")
+  });
+  const serialized = JSON.stringify(logPayload);
+
+  assert.strictEqual((logPayload as any).safeCategory, "UNKNOWN");
+  assert.strictEqual((logPayload as any).safeMessage, "Provider operation failed.");
+  assert.strictEqual((logPayload as any).retryable, false);
+  assert.strictEqual(serialized.includes("UNKNOWN_RAW_MESSAGE_SHOULD_NOT_LEAK"), false);
+});
+
+test("safe worker logging uses only trusted operation context", () => {
+  const providerError = Object.assign(new Error("raw context must not be trusted"), {
+    name: "ThrottlingException",
+    operationName: "iam:DeleteUser",
+    region: "us-raw-1",
+    $metadata: { requestId: "req-context-1", httpStatusCode: 429 }
+  });
+  const trusted = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError,
+    providerContext: {
+      operationName: "ec2:CreateTags",
+      region: "us-east-1"
+    }
+  });
+  const malformed = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError,
+    providerContext: {
+      operationName: "ec2:CreateTags with spaces and way too much context that should not be trusted as a bounded operation name",
+      region: "not_a_region"
+    }
+  });
+  const noContext = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError
+  });
+
+  assert.strictEqual((trusted as any).operationName, "ec2:CreateTags");
+  assert.strictEqual((trusted as any).region, "us-east-1");
+  assert.strictEqual((trusted as any).retryable, true);
+  assert.strictEqual(JSON.stringify(trusted).includes("iam:DeleteUser"), false);
+  assert.strictEqual(JSON.stringify(trusted).includes("us-raw-1"), false);
+  assert.strictEqual((malformed as any).operationName, undefined);
+  assert.strictEqual((malformed as any).region, undefined);
+  assert.strictEqual((noContext as any).operationName, undefined);
+  assert.strictEqual((noContext as any).region, undefined);
+});
+
+test("safe worker logging retry and validation classifications are conservative", () => {
+  const rateLimited = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError: Object.assign(new Error("raw throttle"), { name: "ThrottlingException" })
+  });
+  const transientNetwork = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError: Object.assign(new Error("raw timeout"), { name: "TimeoutError" })
+  });
+  const validation = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError: Object.assign(new Error("raw validation details"), { name: "ValidationException" })
+  });
+  const invalidParameter = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError: Object.assign(new Error("raw parameter details"), { name: "InvalidParameter" })
+  });
+
+  assert.strictEqual((rateLimited as any).safeCategory, "RATE_LIMITED");
+  assert.strictEqual((rateLimited as any).retryable, true);
+  assert.strictEqual((transientNetwork as any).safeCategory, "TRANSIENT_NETWORK");
+  assert.strictEqual((transientNetwork as any).retryable, true);
+  assert.strictEqual((validation as any).safeCategory, "UNKNOWN");
+  assert.strictEqual((validation as any).retryable, false);
+  assert.strictEqual((invalidParameter as any).safeCategory, "UNKNOWN");
+  assert.strictEqual((invalidParameter as any).retryable, false);
+});
+
+test("safe governed failure logs preserve execution facts", () => {
+  const payloadMismatch = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    failureClassification: "APPROVAL_PAYLOAD_MISMATCH",
+    awsApiCallExecuted: false,
+    mutationExecuted: false
+  });
+  const postStsFailure = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    failureClassification: "IDENTITY_MISMATCH",
+    awsApiCallExecuted: true,
+    mutationExecuted: false
+  });
+
+  assert.strictEqual((payloadMismatch as any).awsApiCallExecuted, false);
+  assert.strictEqual((payloadMismatch as any).mutationExecuted, false);
+  assert.strictEqual((postStsFailure as any).awsApiCallExecuted, true);
+  assert.strictEqual((postStsFailure as any).mutationExecuted, false);
 });
 
 function approvalPayloadHash(plan: any) {

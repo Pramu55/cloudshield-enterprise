@@ -16,7 +16,8 @@ import {
   approvalPayloadHashesEqual,
   buildCanonicalApprovalPayload,
   computeApprovalPayloadHash,
-  optionalEnv
+  optionalEnv,
+  sanitizeProviderError
 } from "@cloudshield/utils";
 
 const logger = createLogger("cloudshield-worker");
@@ -75,6 +76,46 @@ const AWS_ATTEMPTED_NO_MUTATION: ExecutionFacts = {
   awsApiCallExecuted: true,
   mutationExecuted: false
 };
+
+type SafeWorkerErrorLogInput = {
+  component: string;
+  jobId?: string | null;
+  organizationId?: string | null;
+  planId?: string | null;
+  failureClassification?: string | null;
+  awsApiCallExecuted?: boolean;
+  mutationExecuted?: boolean;
+  providerError?: unknown;
+  providerContext?: {
+    operationName?: string;
+    region?: string;
+  };
+};
+
+export function buildSafeWorkerErrorLog(input: SafeWorkerErrorLogInput) {
+  const sanitized = input.providerError ? sanitizeProviderError(input.providerError, input.providerContext) : null;
+  return {
+    component: input.component,
+    ...(input.jobId ? { jobId: input.jobId } : {}),
+    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+    ...(input.planId ? { planId: input.planId } : {}),
+    ...(input.failureClassification ? { failureClassification: input.failureClassification } : {}),
+    ...(typeof input.awsApiCallExecuted === "boolean" ? { awsApiCallExecuted: input.awsApiCallExecuted } : {}),
+    ...(typeof input.mutationExecuted === "boolean" ? { mutationExecuted: input.mutationExecuted } : {}),
+    ...(sanitized ? {
+      safeCategory: sanitized.category,
+      safeCode: sanitized.safeCode,
+      safeMessage: sanitized.safeMessage,
+      retryable: sanitized.retryable,
+      ...(sanitized.providerCode ? { safeProviderCode: sanitized.providerCode } : {}),
+      ...(sanitized.providerRequestId ? { safeProviderRequestId: sanitized.providerRequestId } : {}),
+      ...(sanitized.httpStatusCode ? { safeHttpStatusCode: sanitized.httpStatusCode } : {}),
+      ...(sanitized.operationName ? { operationName: sanitized.operationName } : {}),
+      ...(sanitized.region ? { region: sanitized.region } : {}),
+      ...(typeof sanitized.attemptCount === "number" ? { attemptCount: sanitized.attemptCount } : {})
+    } : {})
+  };
+}
 
 const worker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWorker<CloudScanJob>(
   CLOUD_INVENTORY_SYNC_QUEUE_NAME,
@@ -295,7 +336,12 @@ worker.on("completed", (job: any) => {
 });
 
 worker.on("failed", (job: any, error: any) => {
-  logger.error({ jobId: job?.id, error }, "CloudShield worker job failed");
+  logger.error(buildSafeWorkerErrorLog({
+    component: "cloud-inventory-worker",
+    jobId: job?.id,
+    organizationId: job?.data?.organizationId ?? null,
+    providerError: error
+  }), "CloudShield worker job failed");
 });
 
 assessmentWorker.on("completed", (job: any) => {
@@ -303,7 +349,12 @@ assessmentWorker.on("completed", (job: any) => {
 });
 
 assessmentWorker.on("failed", (job: any, error: any) => {
-  logger.error({ jobId: job?.id, error }, "CloudShield assessment worker job failed");
+  logger.error(buildSafeWorkerErrorLog({
+    component: "cloud-assessment-worker",
+    jobId: job?.id,
+    organizationId: job?.data?.organizationId ?? null,
+    providerError: error
+  }), "CloudShield assessment worker job failed");
 });
 
 governedAwsChangeWorker.on("completed", (job: any) => {
@@ -311,7 +362,13 @@ governedAwsChangeWorker.on("completed", (job: any) => {
 });
 
 governedAwsChangeWorker.on("failed", (job: any, error: any) => {
-  logger.error({ jobId: job?.id, error }, "Governed AWS change worker job failed");
+  logger.error(buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    jobId: job?.id,
+    organizationId: job?.data?.organizationId ?? null,
+    planId: job?.data?.planId ?? null,
+    providerError: error
+  }), "Governed AWS change worker job failed");
 });
 
 logger.info(
@@ -430,11 +487,13 @@ async function executeGovernedEc2Tagging(
     }
   }
 
+  let currentOperationName = "sts:AssumeRole";
   try {
     const credentials = await assumeExecutorRole(region);
     const sts = new STSClient({ region, credentials });
 
     // Step 1: Executor identity verification
+    currentOperationName = "sts:GetCallerIdentity";
     const identity = await sts.send(new GetCallerIdentityCommand({}));
     const returnedAccount = identity.Account ?? null;
     const returnedArn = identity.Arn ?? null;
@@ -456,6 +515,7 @@ async function executeGovernedEc2Tagging(
     const maskedArn = returnedArn.replace(/(arn:aws:sts::\d{12}:assumed-role\/[^\/]+\/).+/, "$1***");
 
     const ec2 = new EC2Client({ region, credentials });
+    currentOperationName = "ec2:DescribeInstances";
     const before = await fetchInstanceTags(ec2, instanceId);
 
     // Step 3: Add real-resource tag safety gates
@@ -482,6 +542,7 @@ async function executeGovernedEc2Tagging(
 
     let requestId: string | undefined;
     if (!requestedTagsAlreadyPresent) {
+      currentOperationName = "ec2:CreateTags";
       const response = await ec2.send(
         new CreateTagsCommand({
           Resources: [instanceId],
@@ -491,6 +552,7 @@ async function executeGovernedEc2Tagging(
       requestId = response.$metadata.requestId;
     }
 
+    currentOperationName = "ec2:DescribeInstances";
     const after = await fetchInstanceTags(ec2, instanceId);
     const verified = requestedTags.every((tag) => after[tag.Key] === tag.Value);
     if (!verified) {
@@ -544,7 +606,14 @@ async function executeGovernedEc2Tagging(
     }, tx);
     return { status: updated.lifecycleState, mutationExecuted: !requestedTagsAlreadyPresent };
   } catch (error: any) {
-    return await failGovernedPlan(plan.id, classifyAwsError(error), AWS_ATTEMPTED_NO_MUTATION, tx);
+    return await failGovernedPlan(
+      plan.id,
+      classifyAwsError(error),
+      AWS_ATTEMPTED_NO_MUTATION,
+      tx,
+      error,
+      { operationName: currentOperationName, region }
+    );
   }
 }
 
@@ -639,7 +708,12 @@ async function failGovernedPlan(
   planId: string,
   failureClassification: string,
   executionFacts: ExecutionFacts,
-  tx: any
+  tx: any,
+  providerError?: unknown,
+  providerContext?: {
+    operationName?: string;
+    region?: string;
+  }
 ) {
   const updated = await tx.remediationPlan.update({
     where: { id: planId },
@@ -660,6 +734,16 @@ async function failGovernedPlan(
     awsApiCallExecuted: executionFacts.awsApiCallExecuted,
     mutationExecuted: executionFacts.mutationExecuted
   }, tx);
+  logger.error(buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    organizationId: updated.organizationId,
+    planId: updated.id,
+    failureClassification,
+    awsApiCallExecuted: executionFacts.awsApiCallExecuted,
+    mutationExecuted: executionFacts.mutationExecuted,
+    providerError,
+    providerContext
+  }), "Governed AWS change worker failure recorded");
   return {
     status: "FAILED",
     failureClassification,
@@ -668,13 +752,11 @@ async function failGovernedPlan(
 }
 
 function classifyAwsError(error: any) {
-  const name = String(error?.name ?? "AWS_ERROR");
-  const msg = String(error?.message ?? "");
-  if (name.includes("AccessDenied")) return "AWS_PERMISSION_DENIED";
-  if (name.includes("InvalidInstanceID") || name.includes("NotFound")) return "RESOURCE_NOT_FOUND";
-  if (name.includes("Throttl")) return "PROVIDER_NETWORK_FAILURE";
-  if (name.includes("Credentials") || name.includes("ExpiredToken") || msg.includes("expired")) return "AWS_AUTHENTICATION_FAILURE";
-  if (name.includes("Timeout") || name.includes("Networking")) return "PROVIDER_NETWORK_FAILURE";
+  const sanitized = sanitizeProviderError(error);
+  if (sanitized.category === "ACCESS_DENIED") return "AWS_PERMISSION_DENIED";
+  if (sanitized.category === "RESOURCE_NOT_FOUND") return "RESOURCE_NOT_FOUND";
+  if (sanitized.category === "RATE_LIMITED" || sanitized.category === "TRANSIENT_NETWORK") return "PROVIDER_NETWORK_FAILURE";
+  if (sanitized.category === "AUTHENTICATION_FAILED") return "AWS_AUTHENTICATION_FAILURE";
   return "AWS_EXECUTION_FAILED";
 }
 

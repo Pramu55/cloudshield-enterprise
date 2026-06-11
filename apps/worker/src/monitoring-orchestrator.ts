@@ -7,6 +7,7 @@ import {
   MONITORING_RULES
 } from "@cloudshield/security-monitoring";
 import { createLogger } from "@cloudshield/logger";
+import { sanitizeProviderError } from "@cloudshield/utils";
 
 const logger = createLogger("cloudshield-worker-monitoring-orchestrator");
 
@@ -249,14 +250,27 @@ export class MonitoringOrchestrator {
       });
 
     } catch (error: any) {
-      logger.error({ error }, "Error evaluating monitoring rules");
+      const sanitized = sanitizeProviderError(error);
+      logger.error({
+        component: "security-monitoring-orchestrator",
+        organizationId,
+        runId,
+        safeCategory: sanitized.category,
+        safeCode: sanitized.safeCode,
+        safeMessage: sanitized.safeMessage,
+        retryable: sanitized.retryable
+      }, "Error evaluating monitoring rules");
       const failedRun = await db.monitoringRun.update({
         where: { id: run.id },
         data: {
           status: 'FAILED',
           completedAt: new Date(),
           errorCode: 'EVALUATION_ERROR',
-          errorSummary: { message: error.message, stack: error.stack }
+          errorSummary: {
+            category: sanitized.category,
+            safeMessage: sanitized.safeMessage,
+            retryable: sanitized.retryable
+          }
         }
       });
 
