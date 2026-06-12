@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { prisma } from "@cloudshield/database";
+import { loadRuntimeEnv } from "@cloudshield/config";
 import {
   APPROVAL_PAYLOAD_POLICY_VERSION,
   buildCanonicalApprovalPayload,
@@ -14,6 +15,7 @@ import {
   requestGovernedAwsChangeApproval,
   simulateGovernedAwsChange
 } from "../modules/governance/aws-change-execution.service.js";
+import { captureGovernedEc2ResourceState } from "../modules/governance/resource-state-capture.service.js";
 import {
   approvePlan,
   createRemediationPlan,
@@ -150,6 +152,8 @@ test("maker-checker and approval payload hashes are enforced by backend services
   });
   assert.equal((requested as any)?.approvalRequest?.payloadIntegrityBound, true);
 
+  await captureFixture(fixture);
+
   const approved = await approveGovernedAwsChange(fixture.approver, fixture.plan.id, {
     confirmationToken: "APPLY_GOVERNANCE_TAGS",
     reason: "approved",
@@ -198,6 +202,7 @@ test("concurrent approval decisions preserve the exact winning binding", async (
     reason: "request",
     expectedImpact: "tag owner"
   });
+  await captureFixture(fixture);
 
   const decision = {
     confirmationToken: "APPLY_GOVERNANCE_TAGS",
@@ -272,7 +277,7 @@ async function createGovernedFixture(label = "governed") {
       operation: "EC2_APPLY_GOVERNANCE_TAGS" as const,
       awsAccountId: base.awsAccountId,
       region: "us-east-1",
-      resourceId: "i-approval-123",
+      resourceId: "i-12345678",
       tags: [{ key: "CloudShieldOwner" as const, value: "platform" }]
     }
   };
@@ -327,6 +332,7 @@ async function createBase(label: string) {
       name: `${label} sandbox`,
       environment: "sandbox",
       regions: ["us-east-1"],
+      roleArnPlaceholder: "arn:aws:iam::111122223333:role/Scanner",
       changeExecutionEnabled: true,
       executionRoleArnPlaceholder: "arn:aws:iam::111122223333:role/Executor"
     }
@@ -337,7 +343,7 @@ async function createBase(label: string) {
       organizationId: organization.id,
       awsAccountId: account.id,
       resourceType: "EC2_INSTANCE",
-      resourceId: "i-approval-123",
+      resourceId: "i-12345678",
       region: "us-east-1",
       source: "AWS_SYNC",
       metadata: { source: "AWS_SYNC" }
@@ -364,6 +370,34 @@ async function createBase(label: string) {
     requester: { organizationId: organization.id, userId: requesterUser.id },
     approver: { organizationId: organization.id, userId: approverUser.id }
   };
+}
+
+async function captureFixture(fixture: Awaited<ReturnType<typeof createGovernedFixture>>) {
+  return captureGovernedEc2ResourceState(
+    fixture.requester,
+    fixture.plan.id,
+    randomUUID(),
+    loadRuntimeEnv({
+      NODE_ENV: "test",
+      AWS_CONNECTOR_MODE: "readonly-validation",
+      AWS_INVENTORY_SCANNER_MODE: "disabled",
+      AWS_CHANGE_EXECUTION_MODE: "disabled",
+      AWS_REGION_DEFAULT: "us-east-1",
+      AWS_ROLE_ARN: "arn:aws:iam::111122223333:role/Scanner",
+      AWS_EXTERNAL_ID: "server-only",
+      AWS_ALLOWED_ACCOUNT_IDS: "111122223333",
+      AWS_ALLOWED_REGIONS: "us-east-1"
+    }),
+    {
+      provider: async () => ({
+        accountId: "111122223333",
+        resourceId: "i-12345678",
+        tags: { CloudShieldManaged: "true", Environment: "sandbox", Unrelated: "ignored" },
+        providerRequestId: "req-capture-1",
+        maskedPrincipalArn: "arn:aws:sts::111122223333:assumed-role/Scanner/***"
+      })
+    }
+  );
 }
 
 function expectedHash(plan: any) {

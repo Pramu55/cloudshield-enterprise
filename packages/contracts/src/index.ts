@@ -162,6 +162,22 @@ export type GovernedAwsChangeJob = z.infer<
   typeof GovernedAwsChangeJobSchema
 >;
 
+export const ResourceStateCaptureResponseSchema = z.object({
+  status: z.literal("CAPTURED"),
+  approvalRequestId: z.string().min(1),
+  resourceId: z.string().min(1),
+  accountId: z.string().regex(/^\d{12}$/),
+  region: z.string().min(1),
+  source: z.literal("PROVIDER_DESCRIBE_INSTANCES"),
+  capturedAt: z.string().datetime(),
+  schemaVersion: z.number().int().positive(),
+  policyVersion: z.string().min(1),
+  providerRequestId: z.string().nullable(),
+  idempotent: z.boolean(),
+  correlationId: z.uuid()
+});
+export type ResourceStateCaptureResponse = z.infer<typeof ResourceStateCaptureResponseSchema>;
+
 export const GovernedExecutionEvidenceResponseSchema = z.object({
   executionMode: AwsChangeExecutionModeSchema,
   lifecycleState: GovernedLifecycleStateSchema,

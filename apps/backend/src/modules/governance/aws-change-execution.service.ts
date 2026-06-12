@@ -24,6 +24,7 @@ import {
   validateGovernanceTags
 } from "./aws-change-execution.policy.js";
 import { GovernanceSafety } from "./remediation.service.js";
+import { validateAuthoritativeApprovalCapture } from "./resource-state-capture.service.js";
 
 type ActorContext = {
   organizationId: string;
@@ -452,6 +453,11 @@ async function decideGovernedAwsChange(
     return blockedMutation(actor, plan, "Approval request has expired.");
   }
 
+  if (status === "APPROVED" && plan.allowlistedOperation === "EC2_APPLY_GOVERNANCE_TAGS") {
+    const captureFailure = validateAuthoritativeApprovalCapture(plan, approval);
+    if (captureFailure) return nonMutatingBlockedDecision(actor, plan, captureFailure);
+  }
+
   const payloadHash = approvalPayloadHash(plan);
   const decidedAt = new Date();
   let outcome: Awaited<ReturnType<typeof persistApprovalDecision>> = null;
@@ -474,6 +480,19 @@ async function decideGovernedAwsChange(
 
   async function persistApprovalDecision() {
     return prisma.$transaction(async (tx) => {
+      if (status === "APPROVED" && decidedPlan.allowlistedOperation === "EC2_APPLY_GOVERNANCE_TAGS") {
+        const currentApproval = await tx.approvalRequest.findFirst({
+          where: {
+            id: approval.id,
+            organizationId: actor.organizationId,
+            remediationPlanId: decidedPlan.id,
+            status: "PENDING"
+          }
+        });
+        if (!currentApproval || validateAuthoritativeApprovalCapture(decidedPlan, currentApproval)) {
+          return null;
+        }
+      }
       const approvalUpdate = await tx.approvalRequest.updateMany({
         where: {
           id: approval.id,
