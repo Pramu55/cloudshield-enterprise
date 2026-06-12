@@ -15,11 +15,18 @@ import {
 import { prisma } from "@cloudshield/database";
 import {
   approvalPayloadHashesEqual,
+  buildCanonicalEc2TagSafetyState,
   buildCanonicalApprovalPayload,
+  changedEc2TagSafetyFields,
+  computeEc2TagSafetyFingerprint,
   computeApprovalPayloadHash,
   isValidCorrelationId,
   normalizeOrGenerateCorrelationId,
   optionalEnv,
+  parseCanonicalEc2TagSafetyEvidence,
+  RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+  RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION,
+  resourceStateFingerprintsEqual,
   sanitizeProviderError
 } from "@cloudshield/utils";
 
@@ -255,7 +262,8 @@ export const processGovernedAwsChangeJob = async (job: any) => {
           }
         }
       },
-      resource: true
+      resource: true,
+      approvedByRequest: true
     }
   });
 
@@ -288,9 +296,9 @@ export const processGovernedAwsChangeJob = async (job: any) => {
     return await failGovernedPlan(plan.id, "APPROVAL_INVALID", NO_AWS_EXECUTION, prisma, jobContext);
   }
 
-  const approvalHashFailure = await verifyApprovalPayloadHash(plan.id, jobData.organizationId);
-  if (approvalHashFailure) {
-    return await failGovernedPlan(plan.id, approvalHashFailure, NO_AWS_EXECUTION, prisma, jobContext);
+  const approvalFailure = verifyBoundApproval(plan);
+  if (approvalFailure) {
+    return await failGovernedPlan(plan.id, approvalFailure, NO_AWS_EXECUTION, prisma, jobContext);
   }
 
   const mode = getAwsChangeExecutionMode();
@@ -627,7 +635,43 @@ async function executeGovernedEc2Tagging(
 
     const ec2 = new EC2Client({ region, credentials });
     currentOperationName = "ec2:DescribeInstances";
-    const before = await fetchInstanceTags(ec2, instanceId);
+    const beforeState = await fetchInstanceTags(ec2, instanceId);
+    const before = beforeState.tags;
+    const storedSafetyState = buildStoredSafetyState(plan.approvedByRequest);
+    const currentSafetyState = buildCanonicalEc2TagSafetyState({
+      resourceId: beforeState.instanceId,
+      accountId: expectedAccountId,
+      region,
+      tags: before
+    });
+    const currentFingerprint = computeEc2TagSafetyFingerprint({
+      resourceId: currentSafetyState.resourceId,
+      accountId: currentSafetyState.accountId,
+      region: currentSafetyState.region,
+      tags: controlTagsToInput(currentSafetyState.controlTags)
+    });
+    if (!resourceStateFingerprintsEqual(plan.approvedByRequest.resourceStateFingerprint, currentFingerprint)) {
+      return await failGovernedPlan(
+        plan.id,
+        "RESOURCE_STATE_DRIFTED",
+        AWS_ATTEMPTED_NO_MUTATION,
+        tx,
+        jobContext,
+        undefined,
+        undefined,
+        {
+          approvalRequestId: plan.approvedByRequestId,
+          resourceId: currentSafetyState.resourceId,
+          accountId: currentSafetyState.accountId,
+          region: currentSafetyState.region,
+          storedSchemaVersion: plan.approvedByRequest.resourceStateFingerprintSchemaVersion,
+          currentSchemaVersion: RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION,
+          storedPolicyVersion: plan.approvedByRequest.resourceStateFingerprintPolicyVersion,
+          currentPolicyVersion: RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+          changedControlFields: changedEc2TagSafetyFields(storedSafetyState, currentSafetyState)
+        }
+      );
+    }
 
     // Step 3: Add real-resource tag safety gates
     if (before["Environment"] === "prod") {
@@ -664,7 +708,7 @@ async function executeGovernedEc2Tagging(
     }
 
     currentOperationName = "ec2:DescribeInstances";
-    const after = await fetchInstanceTags(ec2, instanceId);
+    const after = (await fetchInstanceTags(ec2, instanceId)).tags;
     const verified = requestedTags.every((tag) => after[tag.Key] === tag.Value);
     if (!verified) {
       return await failGovernedPlan(plan.id, "AFTER_STATE_VERIFICATION_FAILED", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
@@ -726,7 +770,7 @@ async function executeGovernedEc2Tagging(
   } catch (error: any) {
     return await failGovernedPlan(
       plan.id,
-      classifyAwsError(error),
+      currentOperationName === "ec2:DescribeInstances" ? "RESOURCE_STATE_READ_FAILED" : classifyAwsError(error),
       AWS_ATTEMPTED_NO_MUTATION,
       tx,
       jobContext,
@@ -736,29 +780,16 @@ async function executeGovernedEc2Tagging(
   }
 }
 
-async function verifyApprovalPayloadHash(planId: string, organizationId: string) {
-  const plan = await prisma.remediationPlan.findFirst({
-    where: {
-      id: planId,
-      organizationId,
-      finding: { organizationId },
-      resource: { organizationId }
-    },
-    include: {
-      finding: { include: { awsAccount: true } },
-      resource: true
-    }
-  });
-  const approval = await prisma.approvalRequest.findFirst({
-    where: {
-      organizationId,
-      remediationPlanId: planId,
-      status: "APPROVED"
-    },
-    orderBy: { decidedAt: "desc" }
-  });
-
-  if (!plan || !approval?.payloadHash) return "APPROVAL_PAYLOAD_MISMATCH";
+function verifyBoundApproval(plan: any) {
+  if (!plan.approvedByRequestId) return "APPROVAL_REQUEST_BINDING_MISSING";
+  const approval = plan.approvedByRequest;
+  if (!approval || approval.id !== plan.approvedByRequestId) return "APPROVAL_REQUEST_BINDING_INVALID";
+  if (approval.remediationPlanId !== plan.id) return "APPROVAL_REQUEST_PLAN_MISMATCH";
+  if (approval.organizationId !== plan.organizationId) return "APPROVAL_REQUEST_TENANT_MISMATCH";
+  if (approval.status !== "APPROVED") return "APPROVAL_INVALID";
+  if (!approval.approvedById || approval.requestedById === approval.approvedById) return "APPROVAL_INVALID";
+  if (approval.expiresAt && approval.expiresAt < new Date()) return "APPROVAL_EXPIRED";
+  if (!approval.payloadHash) return "APPROVAL_PAYLOAD_MISMATCH";
 
   const currentHash = computeApprovalPayloadHash(
     buildCanonicalApprovalPayload({
@@ -778,9 +809,56 @@ async function verifyApprovalPayloadHash(planId: string, organizationId: string)
     })
   );
 
-  return approvalPayloadHashesEqual(approval.payloadHash, currentHash)
-    ? null
-    : "APPROVAL_PAYLOAD_MISMATCH";
+  if (!approvalPayloadHashesEqual(approval.payloadHash, currentHash)) return "APPROVAL_PAYLOAD_MISMATCH";
+  if (!approval.resourceStateFingerprint) return "RESOURCE_FINGERPRINT_MISSING";
+  if (!/^[a-f0-9]{64}$/.test(approval.resourceStateFingerprint)) return "RESOURCE_FINGERPRINT_INVALID";
+  if (
+    approval.resourceStateFingerprintSchemaVersion !== RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION ||
+    approval.resourceStateFingerprintPolicyVersion !== RESOURCE_STATE_FINGERPRINT_POLICY_VERSION
+  ) {
+    return "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED";
+  }
+  if (!(approval.resourceStateCapturedAt instanceof Date) || Number.isNaN(approval.resourceStateCapturedAt.getTime())) {
+    return "RESOURCE_FINGERPRINT_INVALID";
+  }
+  try {
+    const storedState = parseCanonicalEc2TagSafetyEvidence(
+      approval.resourceStateEvidence,
+      approval.resourceStateFingerprintSchemaVersion,
+      approval.resourceStateFingerprintPolicyVersion
+    );
+    const evidenceFingerprint = computeEc2TagSafetyFingerprint({
+      resourceId: storedState.resourceId,
+      accountId: storedState.accountId,
+      region: storedState.region,
+      tags: Object.fromEntries(
+        Object.entries(storedState.controlTags).map(([key, value]: [string, any]) => [
+          key,
+          value.present ? value.value : undefined
+        ])
+      )
+    });
+    if (!resourceStateFingerprintsEqual(approval.resourceStateFingerprint, evidenceFingerprint)) {
+      return "RESOURCE_FINGERPRINT_INVALID";
+    }
+  } catch {
+    return "RESOURCE_FINGERPRINT_INVALID";
+  }
+  return null;
+}
+
+function buildStoredSafetyState(approval: any) {
+  return parseCanonicalEc2TagSafetyEvidence(
+    approval?.resourceStateEvidence,
+    approval?.resourceStateFingerprintSchemaVersion,
+    approval?.resourceStateFingerprintPolicyVersion
+  );
+}
+
+function controlTagsToInput(controlTags: ReturnType<typeof buildCanonicalEc2TagSafetyState>["controlTags"]) {
+  return Object.fromEntries(
+    Object.entries(controlTags).map(([key, value]) => [key, value.present ? value.value ?? "" : undefined])
+  );
 }
 
 async function assumeExecutorRole(region: string) {
@@ -808,7 +886,10 @@ async function fetchInstanceTags(ec2: EC2Client, instanceId: string) {
     error.name = "NotFound";
     throw error;
   }
-  return Object.fromEntries((instance.Tags ?? []).filter((tag) => tag.Key).map((tag) => [String(tag.Key), String(tag.Value ?? "")]));
+  return {
+    instanceId: instance.InstanceId,
+    tags: Object.fromEntries((instance.Tags ?? []).filter((tag) => tag.Key).map((tag) => [String(tag.Key), String(tag.Value ?? "")]))
+  };
 }
 
 function filterCloudShieldTags(tags: Record<string, string>) {
@@ -833,7 +914,8 @@ async function failGovernedPlan(
   providerContext?: {
     operationName?: string;
     region?: string;
-  }
+  },
+  additionalEvidence: Record<string, unknown> = {}
 ) {
   const updated = await tx.remediationPlan.update({
     where: { id: planId },
@@ -846,7 +928,8 @@ async function failGovernedPlan(
         correlationId: jobContext.correlationId,
         failureClassification,
         awsApiCallExecuted: executionFacts.awsApiCallExecuted,
-        mutationExecuted: executionFacts.mutationExecuted
+        mutationExecuted: executionFacts.mutationExecuted,
+        ...additionalEvidence
       }
     }
   });
@@ -854,7 +937,8 @@ async function failGovernedPlan(
     correlationId: jobContext.correlationId,
     failureClassification,
     awsApiCallExecuted: executionFacts.awsApiCallExecuted,
-    mutationExecuted: executionFacts.mutationExecuted
+    mutationExecuted: executionFacts.mutationExecuted,
+    ...additionalEvidence
   }, tx);
   logger.error(buildSafeWorkerErrorLog({
     component: "governed-aws-change-worker",

@@ -2,7 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@cloudshield/database";
-import { isValidCorrelationId } from "@cloudshield/utils";
+import {
+  buildCanonicalApprovalPayload,
+  buildCanonicalEc2TagSafetyState,
+  computeApprovalPayloadHash,
+  computeEc2TagSafetyFingerprint,
+  isValidCorrelationId,
+  RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+  RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION
+} from "@cloudshield/utils";
 import { buildApp } from "../app.js";
 import { governedAwsChangeQueue } from "../modules/governance/aws-change-execution.queue.js";
 import { cloudScanQueue } from "../modules/aws-inventory/aws-inventory.queue.js";
@@ -152,6 +160,77 @@ test("governed AWS HTTP execution enqueues canonical correlation IDs", async (t)
     assert.equal(response.statusCode, 404);
     assert.equal(queueCalls.length, before);
   });
+
+  await t.test("concurrent same-approval queue attempts enqueue exactly once", async () => {
+    const plan = await createApprovedPlan(auth.organizationId, auth.userId);
+    const approvedByRequestId = plan.approvedByRequestId;
+    const idempotencyKey = `idem-${randomUUID()}`;
+    const before = queueCalls.length;
+    const request = {
+      method: "POST" as const,
+      url: `/api/v1/governance/remediation-plans/${plan.id}/execute`,
+      headers: {
+        cookie: auth.cookie,
+        "x-csrf-token": auth.csrfToken,
+        "x-correlation-id": VALID_CORRELATION_ID
+      },
+      payload: {
+        confirmationToken: "APPLY_GOVERNANCE_TAGS",
+        idempotencyKey
+      }
+    };
+
+    const responses = await Promise.all([app.inject(request), app.inject(request)]);
+    assert.deepEqual(responses.map((response) => response.statusCode), [200, 200]);
+    assert.equal(queueCalls.length - before, 1);
+    const queued = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.equal(queued.lifecycleState, "QUEUED");
+    assert.equal(queued.approvedByRequestId, approvedByRequestId);
+    assert.equal(queued.idempotencyKey, idempotencyKey);
+  });
+
+  for (const [name, mutateApproval] of [
+    ["expired bound approval with valid plan expiry", (approval: any) => ({ expiresAt: new Date(Date.now() - 60_000) })],
+    ["self-approved bound approval", (approval: any) => ({ approvedById: approval.requestedById })],
+    ["missing bound approver", () => ({ approvedById: null })],
+    ["missing fingerprint schema version", () => ({ resourceStateFingerprintSchemaVersion: null })],
+    ["unsupported fingerprint schema version", () => ({ resourceStateFingerprintSchemaVersion: 99 })],
+    ["missing fingerprint policy version", () => ({ resourceStateFingerprintPolicyVersion: null })],
+    ["unsupported fingerprint policy version", () => ({ resourceStateFingerprintPolicyVersion: "unsupported-policy" })],
+    ["missing resource-state capture time", () => ({ resourceStateCapturedAt: null })],
+    ["malformed safe resource-state evidence", () => ({ resourceStateEvidence: { resourceId: "i-12345678" } })]
+  ] as const) {
+    await t.test(`${name} blocks queueing`, async () => {
+      const plan = await createApprovedPlan(auth.organizationId, auth.userId);
+      const approval = await prisma.approvalRequest.findUniqueOrThrow({ where: { id: plan.approvedByRequestId! } });
+      await prisma.approvalRequest.update({
+        where: { id: approval.id },
+        data: mutateApproval(approval)
+      });
+      const before = queueCalls.length;
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/v1/governance/remediation-plans/${plan.id}/execute`,
+        headers: {
+          cookie: auth.cookie,
+          "x-csrf-token": auth.csrfToken,
+          "x-correlation-id": VALID_CORRELATION_ID
+        },
+        payload: {
+          confirmationToken: "APPLY_GOVERNANCE_TAGS",
+          idempotencyKey: `idem-${randomUUID()}`
+        }
+      });
+
+      assert.equal(response.statusCode, 200, response.body);
+      assert.equal(queueCalls.length, before);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.equal(stored.lifecycleState, "BLOCKED");
+      if (name.includes("expired")) {
+        assert.ok(stored.approvalExpiresAt && stored.approvalExpiresAt > new Date());
+      }
+    });
+  }
 });
 
 async function registerSession(app: Awaited<ReturnType<typeof buildApp>>) {
@@ -233,14 +312,23 @@ async function createApprovedPlan(organizationId: string, userId: string) {
       description: "Missing owner tag"
     }
   });
-  return await prisma.remediationPlan.create({
+  const approver = await prisma.user.create({
+    data: {
+      id: randomUUID(),
+      organizationId,
+      email: `queue-approver-${randomUUID()}@example.com`,
+      emailNormalized: `queue-approver-${randomUUID()}@example.com`,
+      name: "Queue Approver"
+    }
+  });
+  const plan = await prisma.remediationPlan.create({
     data: {
       id: randomUUID(),
       organizationId,
       findingId: finding.id,
       resourceId: resource.id,
       createdById: userId,
-      approvedById: userId,
+      approvedById: approver.id,
       title: "Apply governed owner tag",
       summary: "Apply governed owner tag",
       riskLevel: "LOW",
@@ -261,6 +349,60 @@ async function createApprovedPlan(organizationId: string, userId: string) {
       },
       approvalExpiresAt: new Date(Date.now() + 60_000)
     }
+  });
+  const safetyState = buildCanonicalEc2TagSafetyState({
+    resourceId: resource.resourceId,
+    accountId: accountNumber,
+    region: "us-east-1",
+    tags: {
+      CloudShieldManaged: "true",
+      CloudShieldProtected: "false",
+      Environment: "sandbox"
+    }
+  });
+  const approval = await prisma.approvalRequest.create({
+    data: {
+      organizationId,
+      remediationPlanId: plan.id,
+      requestedById: userId,
+      approvedById: approver.id,
+      status: "APPROVED",
+      payloadHash: computeApprovalPayloadHash(buildCanonicalApprovalPayload({
+        organizationId: plan.organizationId,
+        remediationPlanId: plan.id,
+        createdById: plan.createdById,
+        allowlistedOperation: plan.allowlistedOperation,
+        confirmationTokenRequired: plan.confirmationTokenRequired,
+        requestedAction: plan.requestedAction,
+        normalizedPayload: plan.normalizedPayload,
+        beforeState: plan.beforeState,
+        expectedAfterState: plan.expectedAfterState,
+        rollbackPayload: plan.rollbackPayload,
+        executionMode: plan.executionMode,
+        idempotencyKey: plan.idempotencyKey,
+        approvalExpiresAt: plan.approvalExpiresAt?.toISOString() ?? null
+      })),
+      expiresAt: plan.approvalExpiresAt,
+      decidedAt: new Date(),
+      resourceStateFingerprint: computeEc2TagSafetyFingerprint({
+        resourceId: safetyState.resourceId,
+        accountId: safetyState.accountId,
+        region: safetyState.region,
+        tags: {
+          CloudShieldManaged: "true",
+          CloudShieldProtected: "false",
+          Environment: "sandbox"
+        }
+      }),
+      resourceStateFingerprintSchemaVersion: RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION,
+      resourceStateFingerprintPolicyVersion: RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+      resourceStateCapturedAt: new Date(),
+      resourceStateEvidence: safetyState
+    }
+  });
+  return prisma.remediationPlan.update({
+    where: { id: plan.id },
+    data: { approvedByRequestId: approval.id }
   });
 }
 

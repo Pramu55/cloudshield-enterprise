@@ -156,11 +156,14 @@ test("maker-checker and approval payload hashes are enforced by backend services
   });
   assert.equal(approved?.item.approvalStatus, "APPROVED");
 
-  const approval = await prisma.approvalRequest.findFirstOrThrow({
-    where: { remediationPlanId: fixture.plan.id, status: "APPROVED" },
-    orderBy: { decidedAt: "desc" }
-  });
   const dbPlan = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: fixture.plan.id } });
+  assert.ok(dbPlan.approvedByRequestId);
+  const approval = await prisma.approvalRequest.findUniqueOrThrow({
+    where: { id: dbPlan.approvedByRequestId }
+  });
+  assert.equal(approval.remediationPlanId, fixture.plan.id);
+  assert.equal(approval.organizationId, fixture.organizationId);
+  assert.equal(approval.status, "APPROVED");
   assert.equal(approval.payloadHash, expectedHash(dbPlan));
 
   const manualSelf = await createManualFixture("manual-self");
@@ -179,6 +182,40 @@ test("maker-checker and approval payload hashes are enforced by backend services
   });
   assert.equal(manualApproved?.item.approvalStatus, "APPROVED");
   assert.equal((manualApproved as any)?.approvalRequest?.payloadIntegrityBound, true);
+});
+
+test("concurrent approval decisions preserve the exact winning binding", async () => {
+  process.env.AWS_CHANGE_EXECUTION_MODE = "staging";
+  const fixture = await createGovernedFixture("governed-concurrent");
+  await simulateGovernedAwsChange(fixture.requester, fixture.plan.id, {
+    operation: "EC2_APPLY_GOVERNANCE_TAGS",
+    payload: fixture.payload,
+    expectedImpact: "tag owner"
+  });
+  await requestGovernedAwsChangeApproval(fixture.requester, fixture.plan.id, {
+    confirmationToken: "APPLY_GOVERNANCE_TAGS",
+    reason: "request",
+    expectedImpact: "tag owner"
+  });
+
+  const decision = {
+    confirmationToken: "APPLY_GOVERNANCE_TAGS",
+    reason: "approved concurrently",
+    expectedImpact: "tag owner"
+  };
+  const results = await Promise.all([
+    approveGovernedAwsChange(fixture.approver, fixture.plan.id, decision),
+    approveGovernedAwsChange(fixture.approver, fixture.plan.id, decision)
+  ]);
+
+  const plan = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: fixture.plan.id } });
+  assert.equal(plan.lifecycleState, "APPROVED");
+  assert.equal(plan.approvalStatus, "APPROVED");
+  assert.ok(plan.approvedByRequestId);
+  assert.equal(results.some((result) => result?.item.lifecycleState === "BLOCKED"), false);
+  assert.equal(await prisma.approvalRequest.count({
+    where: { remediationPlanId: fixture.plan.id, status: "APPROVED" }
+  }), 1);
 });
 
 function payload(overrides: Record<string, unknown> = {}) {
