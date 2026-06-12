@@ -141,6 +141,7 @@ test("maker-checker and approval payload hashes are enforced by backend services
     expectedImpact: "tag owner"
   });
   assert.equal(simulated?.item.lifecycleState, "SIMULATED");
+  assert.equal(simulated?.item.mutationOutcome, "NOT_ATTEMPTED");
 
   const requested = await requestGovernedAwsChangeApproval(fixture.requester, fixture.plan.id, {
     confirmationToken: "APPLY_GOVERNANCE_TAGS",

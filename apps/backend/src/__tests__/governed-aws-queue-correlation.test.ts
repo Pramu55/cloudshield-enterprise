@@ -337,6 +337,8 @@ async function createApprovedPlan(organizationId: string, userId: string) {
       executionMode: "staging",
       lifecycleState: "APPROVED",
       approvalStatus: "APPROVED",
+      mutationOutcome: "NOT_ATTEMPTED",
+      reconciliationStatus: "NOT_REQUIRED",
       executionStatus: "READY_FOR_EXECUTION",
       allowlistedOperation: "EC2_APPLY_GOVERNANCE_TAGS",
       confirmationTokenRequired: "APPLY_GOVERNANCE_TAGS",

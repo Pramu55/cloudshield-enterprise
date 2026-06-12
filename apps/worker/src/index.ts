@@ -29,6 +29,10 @@ import {
   resourceStateFingerprintsEqual,
   sanitizeProviderError
 } from "@cloudshield/utils";
+import {
+  runMutationReconciliationBatch,
+  startMutationReconciliationScheduler
+} from "./mutation-reconciliation.js";
 
 const logger = createLogger("cloudshield-worker");
 
@@ -99,6 +103,7 @@ type SafeWorkerErrorLogInput = {
   failureClassification?: string | null;
   awsApiCallExecuted?: boolean;
   mutationExecuted?: boolean;
+  mutationMayHaveExecuted?: boolean;
   providerError?: unknown;
   providerContext?: {
     operationName?: string;
@@ -117,6 +122,7 @@ export function buildSafeWorkerErrorLog(input: SafeWorkerErrorLogInput) {
     ...(input.failureClassification ? { failureClassification: input.failureClassification } : {}),
     ...(typeof input.awsApiCallExecuted === "boolean" ? { awsApiCallExecuted: input.awsApiCallExecuted } : {}),
     ...(typeof input.mutationExecuted === "boolean" ? { mutationExecuted: input.mutationExecuted } : {}),
+    ...(typeof input.mutationMayHaveExecuted === "boolean" ? { mutationMayHaveExecuted: input.mutationMayHaveExecuted } : {}),
     ...(sanitized ? {
       safeCategory: sanitized.category,
       safeCode: sanitized.safeCode,
@@ -228,13 +234,22 @@ export const processGovernedAwsChangeJob = async (job: any) => {
       }), "Governed AWS change worker duplicate job blocked");
       return { status: "BLOCKED", reason: "Another operation used the same idempotency key.", correlationId: jobContext.correlationId };
     }
-    if (["SUCCEEDED", "ROLLBACK_AVAILABLE"].includes(existingCompleted.lifecycleState)) {
+    if (existingCompleted.mutationOutcome === "CONFIRMED_SUCCEEDED" || ["SUCCEEDED", "ROLLBACK_AVAILABLE"].includes(existingCompleted.lifecycleState)) {
       logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
         organizationId: existingCompleted.organizationId,
         planId: existingCompleted.id,
         duplicateHandling: "already_completed"
       }), "Governed AWS change worker duplicate job completed from existing state");
       return { status: existingCompleted.lifecycleState, mutationExecuted: false, correlationId: jobContext.correlationId };
+    }
+    if (["ATTEMPTED", "CONFIRMED_FAILED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"].includes(existingCompleted.mutationOutcome ?? "")) {
+      await ensureMutationReconciliationScheduled(prisma, existingCompleted);
+      logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+        organizationId: existingCompleted.organizationId,
+        planId: existingCompleted.id,
+        duplicateHandling: "mutation_outcome_prevents_replay"
+      }), "Governed AWS change worker duplicate mutation replay blocked");
+      return mutationOutcomeResponse(existingCompleted.mutationOutcome, jobContext.correlationId);
     }
     if (existingCompleted.lifecycleState === "EXECUTING") {
       logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
@@ -280,6 +295,14 @@ export const processGovernedAwsChangeJob = async (job: any) => {
     return await blockGovernedPlan(plan.id, "Plan is not queued for worker execution.", prisma, jobContext);
   }
 
+  if (!plan.mutationOutcome) {
+    return await failGovernedPlan(plan.id, "HISTORICAL_MUTATION_OUTCOME_MISSING", NO_AWS_EXECUTION, prisma, jobContext);
+  }
+  if (plan.mutationOutcome !== "NOT_ATTEMPTED") {
+    await ensureMutationReconciliationScheduled(prisma, plan);
+    return mutationOutcomeResponse(plan.mutationOutcome, jobContext.correlationId);
+  }
+
   if (plan.approvalStatus !== "APPROVED") {
     return await failGovernedPlan(plan.id, "APPROVAL_INVALID", NO_AWS_EXECUTION, prisma, jobContext);
   }
@@ -315,6 +338,7 @@ export const processGovernedAwsChangeJob = async (job: any) => {
       idempotencyKey: jobData.idempotencyKey,
       lifecycleState: "QUEUED",
       approvalStatus: "APPROVED",
+      mutationOutcome: "NOT_ATTEMPTED",
       OR: [
         { approvalExpiresAt: null },
         { approvalExpiresAt: { gt: new Date() } }
@@ -323,6 +347,7 @@ export const processGovernedAwsChangeJob = async (job: any) => {
     data: {
       lifecycleState: "EXECUTING",
       executionStartedAt: new Date(),
+      executionLeaseStartedAt: new Date(),
       preflightEvidence: {
         ...(typeof plan.preflightEvidence === "object" && plan.preflightEvidence ? plan.preflightEvidence : {}),
         workerJobId: job.id,
@@ -359,6 +384,8 @@ export const processGovernedAwsChangeJob = async (job: any) => {
         lifecycleState: "SUCCEEDED",
         executionStatus: "READY_FOR_EXECUTION",
         executionCompletedAt: new Date(),
+        mutationOutcome: "NOT_ATTEMPTED",
+        reconciliationStatus: "NOT_REQUIRED",
         executionEvidence: {
           workerJobId: job.id,
           correlationId: jobContext.correlationId,
@@ -441,6 +468,21 @@ const governedAwsChangeWorker = process.env.NODE_ENV === "test" ? createWorkerSt
   processGovernedAwsChangeJob,
   { connection, concurrency: 1 }
 );
+
+const stopMutationReconciliation = process.env.NODE_ENV === "test" || getAwsChangeExecutionMode() === "disabled"
+  ? () => {}
+  : startMutationReconciliationScheduler(
+      () => runMutationReconciliationBatch({
+        db: prisma,
+        describeCurrentTags: describeCurrentTagsForReconciliation
+      }),
+      {
+        onError: () => logger.error({ component: "mutation-reconciliation" }, "Mutation reconciliation batch failed safely")
+      }
+    );
+
+process.once("SIGTERM", stopMutationReconciliation);
+process.once("SIGINT", stopMutationReconciliation);
 
 worker.on("completed", (job: any) => {
   logger.info({ jobId: job.id }, "CloudShield worker job completed");
@@ -607,6 +649,7 @@ async function executeGovernedEc2Tagging(
   }
 
   let currentOperationName = "sts:AssumeRole";
+  let mutationAttemptRecorded = false;
   try {
     const credentials = await assumeExecutorRole(region);
     const sts = new STSClient({ region, credentials });
@@ -697,28 +740,128 @@ async function executeGovernedEc2Tagging(
 
     let requestId: string | undefined;
     if (!requestedTagsAlreadyPresent) {
+      const attemptedAt = new Date();
+      try {
+        await tx.$transaction(async (db: any) => {
+          const barrier = await db.remediationPlan.updateMany({
+            where: {
+              id: plan.id,
+              organizationId: plan.organizationId,
+              lifecycleState: "EXECUTING",
+              mutationOutcome: "NOT_ATTEMPTED"
+            },
+            data: {
+              mutationOutcome: "ATTEMPTED",
+              mutationAttemptedAt: attemptedAt,
+              reconciliationStatus: "PENDING",
+              executionEvidence: {
+                workerJobId: jobContext.jobId,
+                correlationId: jobContext.correlationId,
+                approvalRequestId: plan.approvedByRequestId,
+                operation: plan.allowlistedOperation,
+                accountId: expectedAccountId,
+                region,
+                resourceId: instanceId,
+                requestedTags,
+                mutationOutcome: "ATTEMPTED",
+                awsApiCallExecuted: false,
+                mutationExecuted: true,
+                mutationMayHaveExecuted: true,
+                operatorGuidance: "Execution is not confirmed. The mutation may have executed and must not be retried.",
+                attemptedAt: attemptedAt.toISOString()
+              }
+            }
+          });
+          if (barrier.count !== 1) throw new Error("MUTATION_ATTEMPT_BARRIER_CONFLICT");
+          await audit(plan.organizationId, jobData.requestedById, plan.id, "governance.aws_change.mutation_attempt_recorded", {
+            correlationId: jobContext.correlationId,
+            approvalRequestId: plan.approvedByRequestId,
+            operation: plan.allowlistedOperation,
+            accountId: expectedAccountId,
+            region,
+            resourceId: instanceId,
+            attemptedAt: attemptedAt.toISOString(),
+            awsApiCallExecuted: false,
+            mutationExecuted: true,
+            mutationMayHaveExecuted: true,
+            operatorGuidance: "Execution is not confirmed. The mutation may have executed and must not be retried."
+          }, db);
+        });
+        mutationAttemptRecorded = true;
+      } catch {
+        return await failGovernedPlan(plan.id, "MUTATION_ATTEMPT_PERSISTENCE_FAILED", NO_AWS_EXECUTION, tx, jobContext);
+      }
+
       currentOperationName = "ec2:CreateTags";
-      const response = await ec2.send(
-        new CreateTagsCommand({
+      let response: any;
+      try {
+        const command = new CreateTagsCommand({
           Resources: [instanceId],
           Tags: requestedTags
-        })
-      );
-      requestId = response.$metadata.requestId;
+        });
+        response = await ec2.send(command);
+      } catch (error) {
+        return isDefinitiveMutationProviderFailure(error)
+          ? await persistMutationOutcome(plan, tx, jobContext, "CONFIRMED_FAILED", "MUTATION_PROVIDER_DEFINITIVE_FAILURE", error, { operationName: currentOperationName, region })
+          : await persistMutationOutcome(plan, tx, jobContext, "OUTCOME_UNKNOWN", "MUTATION_OUTCOME_UNKNOWN", error, { operationName: currentOperationName, region });
+      }
+      if (!response || typeof response !== "object") {
+        return await persistMutationOutcome(plan, tx, jobContext, "OUTCOME_UNKNOWN", "MUTATION_OUTCOME_UNKNOWN");
+      }
+      requestId = safeProviderRequestId(response?.$metadata?.requestId);
+      if (requestId) {
+        const requestPersisted = await tx.remediationPlan.updateMany({
+          where: {
+            id: plan.id,
+            mutationOutcome: "ATTEMPTED",
+            mutationProviderRequestId: null,
+            awsRequestId: null
+          },
+          data: { mutationProviderRequestId: requestId, awsRequestId: requestId }
+        });
+        if (requestPersisted.count !== 1) {
+          const persisted = await tx.remediationPlan.findUnique({ where: { id: plan.id } });
+          if (persisted?.mutationProviderRequestId !== requestId || persisted?.awsRequestId !== requestId) {
+            return await persistMutationOutcome(plan, tx, jobContext, "OUTCOME_UNKNOWN", "PROVIDER_REQUEST_ID_CONFLICT", undefined, undefined, requestId);
+          }
+        }
+      }
     }
 
     currentOperationName = "ec2:DescribeInstances";
-    const after = (await fetchInstanceTags(ec2, instanceId)).tags;
+    let after: Record<string, string>;
+    try {
+      after = (await fetchInstanceTags(ec2, instanceId)).tags;
+    } catch (error) {
+      if (mutationAttemptRecorded) {
+        return await persistMutationOutcome(plan, tx, jobContext, "OUTCOME_UNKNOWN", "MUTATION_CONFIRMATION_READ_FAILED", error, { operationName: currentOperationName, region }, requestId);
+      }
+      throw error;
+    }
     const verified = requestedTags.every((tag) => after[tag.Key] === tag.Value);
     if (!verified) {
+      if (mutationAttemptRecorded) {
+        return await persistMutationOutcome(plan, tx, jobContext, "OUTCOME_UNKNOWN", "MUTATION_OUTCOME_UNKNOWN", undefined, undefined, requestId);
+      }
       return await failGovernedPlan(plan.id, "AFTER_STATE_VERIFICATION_FAILED", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
     }
 
-    const updated = await tx.remediationPlan.update({
-      where: { id: plan.id },
-      data: {
+    const confirmedAt = new Date();
+    try {
+      const result = await tx.$transaction(async (db: any) => {
+        const updatedCount = await db.remediationPlan.updateMany({
+          where: {
+            id: plan.id,
+            mutationOutcome: requestedTagsAlreadyPresent ? "NOT_ATTEMPTED" : "ATTEMPTED"
+          },
+          data: {
         lifecycleState: "ROLLBACK_AVAILABLE",
         executionStatus: "READY_FOR_EXECUTION",
+        mutationOutcome: requestedTagsAlreadyPresent ? "NOT_ATTEMPTED" : "CONFIRMED_SUCCEEDED",
+        mutationConfirmedAt: requestedTagsAlreadyPresent ? null : confirmedAt,
+        reconciliationStatus: requestedTagsAlreadyPresent ? "NOT_REQUIRED" : "RESOLVED",
+        nextReconciliationAt: null,
+        manualReviewReason: null,
         beforeState: {
           ...(typeof plan.beforeState === "object" && plan.beforeState ? plan.beforeState : {}),
           currentAwsTags: filterCloudShieldTags(before),
@@ -749,25 +892,41 @@ async function executeGovernedEc2Tagging(
           },
           result: "SUCCEEDED"
         },
-        awsRequestId: requestId ?? null,
-        executionCompletedAt: new Date(),
-        rollbackAvailableAt: new Date()
+        executionCompletedAt: confirmedAt,
+        rollbackAvailableAt: confirmedAt
       }
-    });
-    await audit(plan.organizationId, jobData.requestedById, plan.id, "governance.aws_change.tagging_succeeded", {
+        });
+        if (updatedCount.count !== 1) throw new Error("MUTATION_CONFIRMATION_CONFLICT");
+        await audit(plan.organizationId, jobData.requestedById, plan.id, requestedTagsAlreadyPresent
+          ? "governance.aws_change.tagging_succeeded"
+          : "governance.aws_change.outcome_confirmed_succeeded", {
       correlationId: jobContext.correlationId,
       mode,
       awsApiCallExecuted: true,
       mutationExecuted: !requestedTagsAlreadyPresent,
-      awsRequestId: requestId ?? null
-    }, tx);
+      providerRequestId: requestId ?? null,
+      mutationOutcome: requestedTagsAlreadyPresent ? "NOT_ATTEMPTED" : "CONFIRMED_SUCCEEDED",
+      confirmedAt: requestedTagsAlreadyPresent ? null : confirmedAt.toISOString()
+        }, db);
+        return db.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      });
+      const updated = result;
     logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
       organizationId: plan.organizationId,
       planId: plan.id,
       mutationExecuted: !requestedTagsAlreadyPresent
     }), "Governed AWS change worker job completed");
     return { status: updated.lifecycleState, mutationExecuted: !requestedTagsAlreadyPresent, correlationId: jobContext.correlationId };
+    } catch {
+      if (mutationAttemptRecorded) {
+        return await persistMutationOutcome(plan, tx, jobContext, "OUTCOME_UNKNOWN", "MUTATION_CONFIRMATION_PERSISTENCE_FAILED", undefined, undefined, requestId);
+      }
+      return await failGovernedPlan(plan.id, "LOCAL_PERSISTENCE_FAILED", AWS_ATTEMPTED_NO_MUTATION, tx, jobContext);
+    }
   } catch (error: any) {
+    if (mutationAttemptRecorded) {
+      return await persistMutationOutcome(plan, tx, jobContext, "OUTCOME_UNKNOWN", "MUTATION_OUTCOME_UNKNOWN", error, { operationName: currentOperationName, region });
+    }
     return await failGovernedPlan(
       plan.id,
       currentOperationName === "ec2:DescribeInstances" ? "RESOURCE_STATE_READ_FAILED" : classifyAwsError(error),
@@ -902,6 +1061,157 @@ function buildRollbackTags(before: Record<string, string>, requested: AwsTag[]) 
     previousValue: before[tag.Key] ?? null,
     rollbackOperation: before[tag.Key] === undefined ? "ec2:DeleteTags" : "ec2:CreateTags"
   }));
+}
+
+async function persistMutationOutcome(
+  plan: any,
+  tx: any,
+  jobContext: GovernedJobContext,
+  mutationOutcome: "CONFIRMED_FAILED" | "OUTCOME_UNKNOWN",
+  failureClassification: string,
+  providerError?: unknown,
+  providerContext?: { operationName?: string; region?: string },
+  knownRequestId?: string
+) {
+  const sanitized = providerError ? sanitizeProviderError(providerError, providerContext) : null;
+  const candidateRequestId = knownRequestId ?? safeProviderRequestId(sanitized?.providerRequestId);
+  const now = new Date();
+  const uncertain = mutationOutcome === "OUTCOME_UNKNOWN";
+  try {
+    const updated = await tx.$transaction(async (db: any) => {
+      const current = await db.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      const existingRequestId = current.mutationProviderRequestId ?? current.awsRequestId ?? null;
+      const requestIdConflict = Boolean(candidateRequestId && existingRequestId && candidateRequestId !== existingRequestId);
+      const providerRequestId = existingRequestId ?? candidateRequestId ?? null;
+      const transition = await db.remediationPlan.updateMany({
+        where: {
+          id: plan.id,
+          mutationOutcome: "ATTEMPTED",
+          mutationProviderRequestId: current.mutationProviderRequestId,
+          awsRequestId: current.awsRequestId
+        },
+        data: {
+          lifecycleState: "FAILED",
+          executionStatus: "EXECUTION_BLOCKED",
+          mutationOutcome,
+          mutationConfirmedAt: uncertain ? null : now,
+          mutationProviderRequestId: current.mutationProviderRequestId === null && !requestIdConflict ? providerRequestId ?? undefined : undefined,
+          awsRequestId: current.awsRequestId === null && !requestIdConflict ? providerRequestId ?? undefined : undefined,
+          reconciliationStatus: uncertain ? "PENDING" : "RESOLVED",
+          nextReconciliationAt: uncertain ? now : null,
+          failureClassification,
+          executionCompletedAt: now,
+          executionEvidence: {
+            correlationId: jobContext.correlationId,
+            approvalRequestId: plan.approvedByRequestId,
+            mutationOutcome,
+            providerRequestId: providerRequestId ?? null,
+            failureClassification,
+            awsApiCallExecuted: true,
+            mutationExecuted: uncertain,
+            mutationMayHaveExecuted: uncertain,
+            operatorGuidance: uncertain ? "Execution is not confirmed. The mutation may have executed and must not be retried." : "The mutation was definitively rejected by the provider."
+          }
+        }
+      });
+      if (transition.count !== 1) throw new Error("MUTATION_OUTCOME_TRANSITION_CONFLICT");
+      const updatedPlan = await db.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      await audit(plan.organizationId, null, plan.id, uncertain
+        ? "governance.aws_change.outcome_unknown"
+        : "governance.aws_change.outcome_confirmed_failed", {
+        correlationId: jobContext.correlationId,
+        approvalRequestId: plan.approvedByRequestId,
+        mutationOutcome,
+        providerRequestId: providerRequestId ?? null,
+        failureClassification,
+        awsApiCallExecuted: true,
+        mutationExecuted: uncertain,
+        mutationMayHaveExecuted: uncertain,
+        operatorGuidance: uncertain ? "Execution is not confirmed. The mutation may have executed and must not be retried." : "The mutation was definitively rejected by the provider."
+      }, db);
+      return updatedPlan;
+    });
+    logger.error(buildSafeWorkerErrorLog({
+      component: "governed-aws-change-worker",
+      jobId: jobContext.jobId,
+      correlationId: jobContext.correlationId,
+      organizationId: plan.organizationId,
+      planId: plan.id,
+      failureClassification,
+      awsApiCallExecuted: true,
+      mutationExecuted: uncertain,
+      mutationMayHaveExecuted: uncertain,
+      providerError,
+      providerContext
+    }), uncertain ? "Governed AWS mutation may have executed; do not retry or replay" : "Governed AWS mutation definitively failed");
+    return {
+      status: updated.mutationOutcome,
+      failureClassification,
+      mutationExecuted: uncertain,
+      mutationMayHaveExecuted: uncertain,
+      mutationOutcome: updated.mutationOutcome,
+      operatorGuidance: uncertain ? "Execution is not confirmed. The mutation may have executed and must not be retried." : "The mutation was definitively rejected by the provider.",
+      correlationId: jobContext.correlationId
+    };
+  } catch {
+    return {
+      status: "OUTCOME_UNKNOWN",
+      failureClassification: "MUTATION_CONFIRMATION_PERSISTENCE_FAILED",
+      mutationExecuted: true,
+      mutationMayHaveExecuted: true,
+      mutationOutcome: "OUTCOME_UNKNOWN",
+      operatorGuidance: "Execution is not confirmed. The mutation may have executed and must not be retried.",
+      correlationId: jobContext.correlationId
+    };
+  }
+}
+
+function isDefinitiveMutationProviderFailure(error: unknown) {
+  const category = sanitizeProviderError(error, { operationName: "ec2:CreateTags" }).category;
+  return ["ACCESS_DENIED", "RESOURCE_NOT_FOUND", "INVALID_PROVIDER_CONFIGURATION", "AUTHENTICATION_FAILED"].includes(category);
+}
+
+function safeProviderRequestId(value: unknown) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(value) ? value : undefined;
+}
+
+function mutationOutcomeResponse(mutationOutcome: string | null, correlationId: string) {
+  const mayHaveExecuted = ["ATTEMPTED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"].includes(mutationOutcome ?? "");
+  return {
+    status: mutationOutcome,
+    mutationOutcome,
+    mutationExecuted: mayHaveExecuted,
+    mutationMayHaveExecuted: mayHaveExecuted,
+    reconciliationRequired: mutationOutcome === "ATTEMPTED" || mutationOutcome === "OUTCOME_UNKNOWN",
+    operatorGuidance: mayHaveExecuted
+      ? "Execution is not confirmed. The mutation may have executed and must not be retried. Use read-only reconciliation or manual review."
+      : "The mutation was definitively rejected and will not be replayed.",
+    correlationId
+  };
+}
+
+async function ensureMutationReconciliationScheduled(db: any, plan: any) {
+  if (!["ATTEMPTED", "OUTCOME_UNKNOWN"].includes(plan.mutationOutcome ?? "")) return;
+  if (["PENDING", "IN_PROGRESS", "FAILED_RETRYABLE"].includes(plan.reconciliationStatus ?? "")) return;
+  await db.remediationPlan.updateMany({
+    where: {
+      id: plan.id,
+      mutationOutcome: plan.mutationOutcome,
+      reconciliationStatus: plan.reconciliationStatus
+    },
+    data: {
+      reconciliationStatus: "PENDING",
+      nextReconciliationAt: new Date()
+    }
+  });
+}
+
+async function describeCurrentTagsForReconciliation(plan: any) {
+  const region = String((plan.normalizedPayload as any)?.region ?? plan.resource?.region ?? "");
+  const instanceId = String((plan.normalizedPayload as any)?.resourceId ?? plan.resource?.resourceId ?? "");
+  const credentials = await assumeExecutorRole(region);
+  const ec2 = new EC2Client({ region, credentials });
+  return fetchInstanceTags(ec2, instanceId);
 }
 
 async function failGovernedPlan(

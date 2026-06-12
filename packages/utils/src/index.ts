@@ -229,6 +229,21 @@ export function changedEc2TagSafetyFields(
   return changed;
 }
 
+export const MUTATION_OUTCOME_TRANSITIONS = {
+  NOT_ATTEMPTED: ["NOT_ATTEMPTED", "ATTEMPTED"],
+  ATTEMPTED: ["ATTEMPTED", "CONFIRMED_SUCCEEDED", "CONFIRMED_FAILED", "OUTCOME_UNKNOWN"],
+  CONFIRMED_SUCCEEDED: ["CONFIRMED_SUCCEEDED"],
+  CONFIRMED_FAILED: ["CONFIRMED_FAILED"],
+  OUTCOME_UNKNOWN: ["OUTCOME_UNKNOWN", "CONFIRMED_SUCCEEDED", "CONFIRMED_FAILED", "MANUAL_REVIEW_REQUIRED"],
+  MANUAL_REVIEW_REQUIRED: ["MANUAL_REVIEW_REQUIRED", "CONFIRMED_SUCCEEDED", "CONFIRMED_FAILED"]
+} as const;
+
+export type MutationOutcomeValue = keyof typeof MUTATION_OUTCOME_TRANSITIONS;
+
+export function canTransitionMutationOutcome(from: MutationOutcomeValue, to: MutationOutcomeValue): boolean {
+  return (MUTATION_OUTCOME_TRANSITIONS[from] as readonly string[]).includes(to);
+}
+
 export const SAFE_PROVIDER_ERROR_MESSAGES = {
   ACCESS_DENIED: "AWS denied the provider request.",
   AUTHENTICATION_FAILED: "AWS authentication failed.",
