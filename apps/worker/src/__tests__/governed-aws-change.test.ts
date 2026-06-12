@@ -13,8 +13,12 @@ import { EC2Client } from "@aws-sdk/client-ec2";
 import { STSClient } from "@aws-sdk/client-sts";
 import {
   buildCanonicalApprovalPayload,
+  buildCanonicalEc2TagSafetyState,
+  computeEc2TagSafetyFingerprint,
   computeApprovalPayloadHash,
-  isValidCorrelationId
+  isValidCorrelationId,
+  RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+  RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION
 } from "@cloudshield/utils";
 
 const originalEc2Send = EC2Client.prototype.send;
@@ -32,6 +36,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
   let findingId = "";
   let resourceIdDb = "";
   let userIdDb = "";
+  let approverIdDb = "";
 
   t.before(async () => {
     const org = await prisma.organization.create({
@@ -80,7 +85,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
         organizationId: orgId,
         awsAccountId: accountId,
         resourceType: "EC2_INSTANCE",
-        resourceId: "i-12345",
+        resourceId: "i-12345678",
         region: "us-east-1",
         environment: "sandbox",
         source: "AWS_SYNC",
@@ -98,6 +103,15 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
       }
     });
     userIdDb = user.id;
+    const approver = await prisma.user.create({
+      data: {
+        id: randomUUID(),
+        email: `approver-${randomUUID()}@example.com`,
+        name: "Test Approver",
+        organizationId: orgId
+      }
+    });
+    approverIdDb = approver.id;
   });
 
   const createPlan = async (overrides: any = {}) => {
@@ -120,25 +134,45 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
         normalizedPayload: {
           operation: "EC2_APPLY_GOVERNANCE_TAGS",
           region: "us-east-1",
-          resourceId: "i-12345",
+          resourceId: "i-12345678",
           tags: [{ key: "CloudShieldOwner", value: "test" }]
         },
         resource: { connect: { id: resourceIdDb } },
+        approvedBy: { connect: { id: approverIdDb } },
         ...overrides
       }
     });
-    await prisma.approvalRequest.create({
+    const safetyState = buildCanonicalEc2TagSafetyState({
+      resourceId: "i-12345678",
+      accountId: "111122223333",
+      region: "us-east-1",
+      tags: ec2MockTags
+    });
+    const approval = await prisma.approvalRequest.create({
       data: {
         organizationId: orgId,
         remediationPlanId: plan.id,
         requestedById: userIdDb,
-        approvedById: userIdDb,
+        approvedById: approverIdDb,
         status: "APPROVED",
         decidedAt: new Date(),
-        payloadHash: approvalPayloadHash(plan)
+        payloadHash: approvalPayloadHash(plan),
+        resourceStateFingerprint: computeEc2TagSafetyFingerprint({
+          resourceId: safetyState.resourceId,
+          accountId: safetyState.accountId,
+          region: safetyState.region,
+          tags: ec2MockTags
+        }),
+        resourceStateFingerprintSchemaVersion: RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION,
+        resourceStateFingerprintPolicyVersion: RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+        resourceStateCapturedAt: new Date(),
+        resourceStateEvidence: safetyState
       }
     });
-    return plan;
+    return prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: { approvedByRequestId: approval.id }
+    });
   };
 
   let assumeRoleCount = 0;
@@ -149,6 +183,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
   let stsMockAccount = "111122223333";
   let stsMockArn = "arn:aws:sts::111122223333:assumed-role/CloudShieldExecutor/session";
   let ec2MockTags: Record<string, string> = {};
+  let ec2MockInstanceId = "i-12345678";
   let simulateDescribeError = false;
   let preventTagSave = false;
 
@@ -164,6 +199,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
       CloudShieldManaged: "true",
       CloudShieldOwner: "old"
     };
+    ec2MockInstanceId = "i-12345678";
     simulateDescribeError = false;
     preventTagSave = false;
 
@@ -198,7 +234,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
       return {
         Reservations: [{
           Instances: [{
-            InstanceId: "i-12345",
+            InstanceId: ec2MockInstanceId,
             Tags: Object.entries(ec2MockTags).map(([Key, Value]) => ({ Key, Value }))
           }]
         }]
@@ -510,7 +546,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const plan = await createPlan();
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
-    assert.strictEqual((result as any).failureClassification, "RESOURCE_NOT_FOUND");
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_STATE_READ_FAILED");
     assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
     await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
@@ -721,6 +757,185 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
       reason: "correlation_persistence_failed"
     });
     assert.strictEqual(JSON.stringify(warning).includes(rawErrorMarker), false);
+  });
+
+  await t.test("37. missing exact approval binding fails before AWS", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({ where: { id: plan.id }, data: { approvedByRequestId: null } });
+    const result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_REQUEST_BINDING_MISSING");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("38. historical null fingerprint fails before AWS", async () => {
+    const plan = await createPlan();
+    await prisma.approvalRequest.update({
+      where: { id: plan.approvedByRequestId! },
+      data: { resourceStateFingerprint: null }
+    });
+    const result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_FINGERPRINT_MISSING");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("39. malformed and unsupported fingerprints fail before AWS", async () => {
+    let plan = await createPlan();
+    await prisma.approvalRequest.update({
+      where: { id: plan.approvedByRequestId! },
+      data: { resourceStateFingerprint: "malformed" }
+    });
+    let result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_FINGERPRINT_INVALID");
+    assertNoAwsSdkCalls();
+
+    plan = await createPlan();
+    await prisma.approvalRequest.update({
+      where: { id: plan.approvedByRequestId! },
+      data: { resourceStateFingerprintSchemaVersion: 99 }
+    });
+    result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("39a. malformed exact approval records fail before AWS", async () => {
+    for (const [name, data, classification] of [
+      ["pending", { status: "PENDING" as const, approvedById: null }, "APPROVAL_INVALID"],
+      ["rejected", { status: "REJECTED" as const }, "APPROVAL_INVALID"],
+      ["self-approved", { approvedById: userIdDb }, "APPROVAL_INVALID"],
+      ["missing approver", { approvedById: null }, "APPROVAL_INVALID"],
+      ["expired bound approval", { expiresAt: new Date(Date.now() - 60_000) }, "APPROVAL_EXPIRED"],
+      ["missing payload hash", { payloadHash: null }, "APPROVAL_PAYLOAD_MISMATCH"],
+      ["missing schema version", { resourceStateFingerprintSchemaVersion: null }, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED"],
+      ["unsupported schema version", { resourceStateFingerprintSchemaVersion: 99 }, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED"],
+      ["missing policy version", { resourceStateFingerprintPolicyVersion: null }, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED"],
+      ["unsupported policy version", { resourceStateFingerprintPolicyVersion: "unsupported-policy" }, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED"],
+      ["missing capturedAt", { resourceStateCapturedAt: null }, "RESOURCE_FINGERPRINT_INVALID"],
+      ["malformed safe evidence", { resourceStateEvidence: { resourceId: "i-12345678" } }, "RESOURCE_FINGERPRINT_INVALID"]
+    ] as const) {
+      const plan = await createPlan();
+      await prisma.approvalRequest.update({
+        where: { id: plan.approvedByRequestId! },
+        data
+      });
+      const result = await runJob(plan);
+      assert.strictEqual((result as any).failureClassification, classification, name);
+      assertNoAwsSdkCalls();
+      assert.strictEqual(createTagsCount, 0);
+    }
+  });
+
+  await t.test("39b. cross-plan and cross-tenant exact bindings fail before AWS", async () => {
+    let plan = await createPlan();
+    const otherPlan = await prisma.remediationPlan.create({
+      data: {
+        id: randomUUID(),
+        organizationId: orgId,
+        findingId,
+        resourceId: resourceIdDb,
+        createdById: userIdDb,
+        approvedById: approverIdDb,
+        title: "Other plan",
+        summary: "Cross-plan binding test",
+        riskLevel: "LOW",
+        actionType: "TAGGING_GOVERNANCE",
+        implementationMode: "FUTURE_GOVERNED_EXECUTION",
+        lifecycleState: "QUEUED",
+        approvalStatus: "APPROVED"
+      }
+    });
+    const otherApproval = await prisma.approvalRequest.create({
+      data: {
+        organizationId: orgId,
+        remediationPlanId: otherPlan.id,
+        requestedById: userIdDb,
+        approvedById: approverIdDb,
+        status: "APPROVED"
+      }
+    });
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: { approvedByRequestId: otherApproval.id }
+    });
+    let result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_REQUEST_PLAN_MISMATCH");
+    assertNoAwsSdkCalls();
+
+    plan = await createPlan();
+    const otherOrganization = await prisma.organization.create({
+      data: { id: randomUUID(), name: "Approval tenant mismatch", slug: `approval-tenant-${randomUUID()}` }
+    });
+    await prisma.approvalRequest.update({
+      where: { id: plan.approvedByRequestId! },
+      data: { organizationId: otherOrganization.id }
+    });
+    result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_REQUEST_TENANT_MISMATCH");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("39c. the foreign key rejects an unknown approval binding", async () => {
+    const plan = await createPlan();
+    await assert.rejects(prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: { approvedByRequestId: randomUUID() }
+    }));
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.approvedByRequestId, plan.approvedByRequestId);
+    assertNoAwsSdkCalls();
+  });
+
+  for (const [name, key, value] of [
+    ["CloudShieldManaged", "CloudShieldManaged", "false"],
+    ["CloudShieldProtected", "CloudShieldProtected", "true"],
+    ["Environment", "Environment", "staging"]
+  ] as const) {
+    await t.test(`40. ${name} drift blocks before CreateTags`, async () => {
+      const plan = await createPlan();
+      ec2MockTags[key] = value;
+      const correlationId = "550e8400-e29b-41d4-a716-446655440000";
+      const result = await runJob(plan, { correlationId });
+      assert.strictEqual((result as any).failureClassification, "RESOURCE_STATE_DRIFTED");
+      assert.strictEqual(createTagsCount, 0);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual((stored.executionEvidence as any).approvalRequestId, plan.approvedByRequestId);
+      assert.strictEqual((stored.executionEvidence as any).correlationId, correlationId);
+      assert.strictEqual((stored.executionEvidence as any).mutationExecuted, false);
+      assert.deepStrictEqual((stored.executionEvidence as any).changedControlFields, [name]);
+    });
+  }
+
+  await t.test("41. resource ID drift blocks and unrelated tags do not", async () => {
+    let plan = await createPlan();
+    ec2MockInstanceId = "i-87654321";
+    let result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_STATE_DRIFTED");
+    assert.strictEqual(createTagsCount, 0);
+
+    ec2MockInstanceId = "i-12345678";
+    plan = await createPlan();
+    ec2MockTags.Unrelated = "changed";
+    result = await runJob(plan);
+    assert.strictEqual(result.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual(createTagsCount, 1);
+  });
+
+  await t.test("42. newer approved records never replace the exact binding", async () => {
+    const plan = await createPlan();
+    await prisma.approvalRequest.create({
+      data: {
+        organizationId: orgId,
+        remediationPlanId: plan.id,
+        requestedById: userIdDb,
+        approvedById: approverIdDb,
+        status: "APPROVED",
+        decidedAt: new Date(Date.now() + 60_000),
+        payloadHash: "0".repeat(64)
+      }
+    });
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual(createTagsCount, 1);
   });
 });
 

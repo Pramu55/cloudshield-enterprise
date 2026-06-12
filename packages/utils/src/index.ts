@@ -98,6 +98,137 @@ export function approvalPayloadHashesEqual(left: string | null | undefined, righ
   return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
 }
 
+export const RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION = 1;
+export const RESOURCE_STATE_FINGERPRINT_POLICY_VERSION = "ec2-governance-tag-safety-v1";
+
+export type Ec2TagSafetyStateInput = {
+  resourceId: string;
+  accountId: string;
+  region: string;
+  tags: Record<string, string | undefined>;
+  schemaVersion?: number;
+  policyVersion?: string;
+};
+
+export function buildCanonicalEc2TagSafetyState(input: Ec2TagSafetyStateInput) {
+  const schemaVersion = input.schemaVersion ?? RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION;
+  const policyVersion = input.policyVersion ?? RESOURCE_STATE_FINGERPRINT_POLICY_VERSION;
+  if (schemaVersion !== RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION) {
+    throw new Error("Unsupported resource state fingerprint schema version.");
+  }
+  if (policyVersion !== RESOURCE_STATE_FINGERPRINT_POLICY_VERSION) {
+    throw new Error("Unsupported resource state fingerprint policy version.");
+  }
+  if (!/^i-[0-9a-f]{8,17}$/.test(input.resourceId)) throw new Error("Invalid EC2 resource ID.");
+  if (!/^\d{12}$/.test(input.accountId)) throw new Error("Invalid AWS account ID.");
+  if (!/^[a-z]{2}(?:-[a-z0-9]+)+-\d$/.test(input.region)) throw new Error("Invalid AWS region.");
+
+  const controlTag = (key: string) => {
+    const value = input.tags[key];
+    if (value === undefined) return { present: false, value: null };
+    if (typeof value !== "string" || value.length > 256) throw new Error("Invalid AWS control tag value.");
+    return { present: true, value };
+  };
+
+  return {
+    schemaVersion,
+    policyVersion,
+    resourceId: input.resourceId,
+    accountId: input.accountId,
+    region: input.region,
+    controlTags: {
+      CloudShieldManaged: controlTag("CloudShieldManaged"),
+      CloudShieldProtected: controlTag("CloudShieldProtected"),
+      Environment: controlTag("Environment")
+    }
+  };
+}
+
+export function computeEc2TagSafetyFingerprint(input: Ec2TagSafetyStateInput): string {
+  return computeApprovalPayloadHash(buildCanonicalEc2TagSafetyState(input));
+}
+
+export function parseCanonicalEc2TagSafetyEvidence(
+  evidence: unknown,
+  schemaVersion: number,
+  policyVersion: string
+) {
+  const value = assertExactJsonObject(
+    evidence,
+    ["schemaVersion", "policyVersion", "resourceId", "accountId", "region", "controlTags"],
+    "resource state evidence"
+  );
+  if (value.schemaVersion !== schemaVersion || value.policyVersion !== policyVersion) {
+    throw new Error("Resource state evidence version mismatch.");
+  }
+  const controlTags = assertExactJsonObject(
+    value.controlTags,
+    ["CloudShieldManaged", "CloudShieldProtected", "Environment"],
+    "resource state control tags"
+  );
+  const tags: Record<string, string | undefined> = {};
+  for (const key of ["CloudShieldManaged", "CloudShieldProtected", "Environment"] as const) {
+    const tag = assertExactJsonObject(controlTags[key], ["present", "value"], "resource state control tag");
+    if (typeof tag.present !== "boolean") throw new Error("Invalid resource state tag presence.");
+    if (tag.present) {
+      if (typeof tag.value !== "string") throw new Error("Invalid resource state tag value.");
+      tags[key] = tag.value;
+    } else if (tag.value !== null) {
+      throw new Error("Missing resource state tags must use null values.");
+    }
+  }
+  return buildCanonicalEc2TagSafetyState({
+    resourceId: value.resourceId as string,
+    accountId: value.accountId as string,
+    region: value.region as string,
+    tags,
+    schemaVersion,
+    policyVersion
+  });
+}
+
+function assertExactJsonObject(
+  input: unknown,
+  expectedKeys: readonly string[],
+  label: string
+): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(`Invalid ${label}.`);
+  const prototype = Object.getPrototypeOf(input);
+  if (prototype !== Object.prototype && prototype !== null) throw new Error(`Invalid ${label}.`);
+
+  const ownKeys = Reflect.ownKeys(input);
+  if (ownKeys.some((key) => typeof key !== "string")) throw new Error(`Invalid ${label}.`);
+  const keys = ownKeys as string[];
+  if (keys.length !== expectedKeys.length || expectedKeys.some((key) => !keys.includes(key))) {
+    throw new Error(`Invalid ${label} fields.`);
+  }
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor?.enumerable || !("value" in descriptor)) throw new Error(`Invalid ${label}.`);
+  }
+  return input as Record<string, unknown>;
+}
+
+export function resourceStateFingerprintsEqual(left: string, right: string): boolean {
+  return approvalPayloadHashesEqual(left, right);
+}
+
+export function changedEc2TagSafetyFields(
+  stored: ReturnType<typeof buildCanonicalEc2TagSafetyState>,
+  current: ReturnType<typeof buildCanonicalEc2TagSafetyState>
+): string[] {
+  const changed: string[] = [];
+  if (stored.resourceId !== current.resourceId) changed.push("resourceId");
+  if (stored.accountId !== current.accountId) changed.push("accountId");
+  if (stored.region !== current.region) changed.push("region");
+  for (const key of ["CloudShieldManaged", "CloudShieldProtected", "Environment"] as const) {
+    const left = stored.controlTags[key];
+    const right = current.controlTags[key];
+    if (left.present !== right.present || left.value !== right.value) changed.push(key);
+  }
+  return changed;
+}
+
 export const SAFE_PROVIDER_ERROR_MESSAGES = {
   ACCESS_DENIED: "AWS denied the provider request.",
   AUTHENTICATION_FAILED: "AWS authentication failed.",
