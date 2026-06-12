@@ -601,6 +601,21 @@ function toRemediationPlanDto(plan: any): RemediationPlanDto {
     queuedAt: plan.queuedAt?.toISOString() ?? null,
     executionStartedAt: plan.executionStartedAt?.toISOString() ?? null,
     executionCompletedAt: plan.executionCompletedAt?.toISOString() ?? null,
+    mutationOutcome: plan.mutationOutcome ?? null,
+    mutationAttemptedAt: plan.mutationAttemptedAt?.toISOString() ?? null,
+    mutationConfirmedAt: plan.mutationConfirmedAt?.toISOString() ?? null,
+    providerRequestId: plan.mutationProviderRequestId ?? null,
+    mutationMayHaveExecuted: ["ATTEMPTED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"].includes(plan.mutationOutcome ?? ""),
+    reconciliationStatus: plan.reconciliationStatus ?? null,
+    reconciliationRequired: ["PENDING", "IN_PROGRESS", "FAILED_RETRYABLE"].includes(plan.reconciliationStatus ?? ""),
+    lastReconciliationAt: plan.lastReconciliationAt?.toISOString() ?? null,
+    reconciliationAttemptCount: plan.reconciliationAttemptCount ?? 0,
+    manualReviewReason: plan.manualReviewReason ?? null,
+    operatorGuidance: plan.mutationOutcome === "MANUAL_REVIEW_REQUIRED"
+      ? "Execution is not confirmed. The mutation may have executed and must not be retried. Review the safe reconciliation evidence."
+      : ["ATTEMPTED", "OUTCOME_UNKNOWN"].includes(plan.mutationOutcome ?? "")
+        ? "Execution is not confirmed. The mutation may have executed and must not be retried. Read-only reconciliation is required."
+        : "No operator action is currently required.",
     createdById: plan.createdById,
     createdByEmail: plan.createdBy?.email ?? null,
     approvedById: plan.approvedById,

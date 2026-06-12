@@ -130,6 +130,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
         allowlistedOperation: "EC2_APPLY_GOVERNANCE_TAGS",
         lifecycleState: "QUEUED",
         approvalStatus: "APPROVED",
+        mutationOutcome: "NOT_ATTEMPTED",
+        reconciliationStatus: "NOT_REQUIRED",
         idempotencyKey: randomUUID(),
         normalizedPayload: {
           operation: "EC2_APPLY_GOVERNANCE_TAGS",
@@ -185,7 +187,12 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
   let ec2MockTags: Record<string, string> = {};
   let ec2MockInstanceId = "i-12345678";
   let simulateDescribeError = false;
+  let simulateAfterMutationDescribeError = false;
   let preventTagSave = false;
+  let createTagsError: Error | null = null;
+  let missingCreateTagsResponse = false;
+  let mutationOutcomeAtCreateTags: string | null = null;
+  let requestIdPersistedBeforeResponse: string | null = null;
 
   t.beforeEach(() => {
     assumeRoleCount = 0;
@@ -201,7 +208,12 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     };
     ec2MockInstanceId = "i-12345678";
     simulateDescribeError = false;
+    simulateAfterMutationDescribeError = false;
     preventTagSave = false;
+    createTagsError = null;
+    missingCreateTagsResponse = false;
+    mutationOutcomeAtCreateTags = null;
+    requestIdPersistedBeforeResponse = null;
 
     process.env.AWS_CHANGE_EXECUTION_MODE = "staging";
     process.env.AWS_ALLOWED_ACCOUNT_IDS = "111122223333";
@@ -226,7 +238,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
   EC2Client.prototype.send = (async (command: any) => {
     if (command.constructor.name === "DescribeInstancesCommand") {
       describeInstancesCount++;
-      if (simulateDescribeError) {
+      if (simulateDescribeError || (simulateAfterMutationDescribeError && createTagsCount > 0)) {
         const error = new Error("Not found");
         error.name = "NotFound";
         throw error;
@@ -242,10 +254,23 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     }
     if (command.constructor.name === "CreateTagsCommand") {
       createTagsCount++;
+      mutationOutcomeAtCreateTags = (await prisma.remediationPlan.findFirst())?.mutationOutcome ?? null;
+      if (createTagsError) throw createTagsError;
+      if (missingCreateTagsResponse) return undefined as any;
       if (!preventTagSave) {
         for (const tag of command.input.Tags) {
           ec2MockTags[tag.Key] = tag.Value;
         }
+      }
+      if (requestIdPersistedBeforeResponse) {
+        const current = await prisma.remediationPlan.findFirstOrThrow();
+        await prisma.remediationPlan.update({
+          where: { id: current.id },
+          data: {
+            mutationProviderRequestId: requestIdPersistedBeforeResponse,
+            awsRequestId: requestIdPersistedBeforeResponse
+          }
+        });
       }
       return { $metadata: { requestId: "req-1" } };
     }
@@ -509,6 +534,10 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     assert.strictEqual((result as any).mutationExecuted, false);
     assert.strictEqual(createTagsCount, 0);
     assert.strictEqual(describeInstancesCount, 2);
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationOutcome, "NOT_ATTEMPTED");
+    assert.strictEqual(stored.reconciliationStatus, "NOT_REQUIRED");
+    assert.strictEqual((stored.executionEvidence as any).mutationExecuted, false);
   });
 
   await t.test("21. duplicate job delivery calls CreateTags exactly once", async () => {
@@ -527,18 +556,151 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
 
     const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
     assert.strictEqual(dbPlan?.awsRequestId, "req-1");
+    assert.strictEqual(dbPlan?.mutationProviderRequestId, "req-1");
+    assert.strictEqual(dbPlan?.mutationOutcome, "CONFIRMED_SUCCEEDED");
+    assert.strictEqual(mutationOutcomeAtCreateTags, "ATTEMPTED");
   });
 
-  await t.test("23. after-state verification failure marks the plan failed", async () => {
+  await t.test("23. after-state verification failure records unknown outcome", async () => {
     const originalCreateTagsCount = createTagsCount;
     preventTagSave = true;
 
     const plan = await createPlan();
     const result = await runJob(plan);
-    assert.strictEqual(result.status, "FAILED");
-    assert.strictEqual((result as any).failureClassification, "AFTER_STATE_VERIFICATION_FAILED");
+    assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+    assert.strictEqual((result as any).failureClassification, "MUTATION_OUTCOME_UNKNOWN");
     assert.strictEqual(createTagsCount, originalCreateTagsCount + 1);
-    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationOutcome, "OUTCOME_UNKNOWN");
+    assert.strictEqual((stored.executionEvidence as any).mutationMayHaveExecuted, true);
+    assert.match((stored.executionEvidence as any).operatorGuidance, /may have executed/i);
+    assert.match((stored.executionEvidence as any).operatorGuidance, /must not be retried/i);
+    assert.doesNotMatch((stored.executionEvidence as any).operatorGuidance, /confirmed success/i);
+    assert.strictEqual((result as any).mutationOutcome, "OUTCOME_UNKNOWN");
+    assert.strictEqual((result as any).mutationMayHaveExecuted, true);
+    assert.match((result as any).operatorGuidance, /must not be retried/i);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: true });
+  });
+
+  await t.test("23a. mutation persistence barrier failure makes zero mutation calls", async () => {
+    const originalTransaction = prisma.$transaction.bind(prisma);
+    (prisma as any).$transaction = async () => { throw new Error("LOCAL_BARRIER_FAILURE"); };
+    try {
+      const plan = await createPlan();
+      const result = await runJob(plan);
+      assert.strictEqual((result as any).failureClassification, "MUTATION_ATTEMPT_PERSISTENCE_FAILED");
+      assert.strictEqual(createTagsCount, 0);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual(stored.mutationOutcome, "NOT_ATTEMPTED");
+    } finally {
+      (prisma as any).$transaction = originalTransaction;
+    }
+  });
+
+  await t.test("23b. definitive provider rejection is confirmed failed", async () => {
+    createTagsError = Object.assign(new Error("RAW_DENIED"), { name: "AccessDeniedException" });
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "CONFIRMED_FAILED");
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationOutcome, "CONFIRMED_FAILED");
+    assert.strictEqual((stored.executionEvidence as any).mutationExecuted, false);
+    assert.strictEqual(JSON.stringify(stored.executionEvidence).includes("RAW_DENIED"), false);
+  });
+
+  await t.test("23c. timeout and missing response are outcome unknown", async () => {
+    for (const setup of [
+      () => { createTagsError = Object.assign(new Error("RAW_TIMEOUT"), { name: "TimeoutError" }); },
+      () => { missingCreateTagsResponse = true; }
+    ]) {
+      const plan = await createPlan();
+      setup();
+      const result = await runJob(plan);
+      assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual(stored.mutationOutcome, "OUTCOME_UNKNOWN");
+      assert.strictEqual((stored.executionEvidence as any).mutationExecuted, true);
+      createTagsError = null;
+      missingCreateTagsResponse = false;
+    }
+  });
+
+  await t.test("23d. after-state read failure is outcome unknown", async () => {
+    simulateAfterMutationDescribeError = true;
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+    assert.strictEqual((result as any).failureClassification, "MUTATION_CONFIRMATION_READ_FAILED");
+    assert.strictEqual(createTagsCount, 1);
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationOutcome, "OUTCOME_UNKNOWN");
+  });
+
+  await t.test("23e. final confirmation persistence failure is outcome unknown", async () => {
+    const plan = await createPlan();
+    const originalTransaction = prisma.$transaction.bind(prisma);
+    let calls = 0;
+    (prisma as any).$transaction = async (...args: any[]) => {
+      calls++;
+      if (calls === 2) throw new Error("FINAL_PERSISTENCE_FAILURE");
+      return (originalTransaction as any)(...args);
+    };
+    try {
+      const result = await runJob(plan);
+      assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+      assert.strictEqual((result as any).failureClassification, "MUTATION_CONFIRMATION_PERSISTENCE_FAILED");
+      assert.strictEqual(createTagsCount, 1);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual(stored.mutationOutcome, "OUTCOME_UNKNOWN");
+    } finally {
+      (prisma as any).$transaction = originalTransaction;
+    }
+  });
+
+  await t.test("23f. terminal and uncertain outcomes never replay mutation", async () => {
+    for (const mutationOutcome of ["ATTEMPTED", "CONFIRMED_FAILED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"] as const) {
+      const plan = await createPlan({ mutationOutcome });
+      const result = await runJob(plan);
+      assert.strictEqual(result.status, mutationOutcome);
+      assert.strictEqual(createTagsCount, 0);
+    }
+  });
+
+  await t.test("23g. provider request IDs are immutable after the first persisted value", async () => {
+    requestIdPersistedBeforeResponse = "req-first";
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+    assert.strictEqual((result as any).failureClassification, "PROVIDER_REQUEST_ID_CONFLICT");
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationProviderRequestId, "req-first");
+    assert.strictEqual(stored.awsRequestId, "req-first");
+    assert.notStrictEqual(stored.mutationProviderRequestId, "req-1");
+  });
+
+  await t.test("23h. duplicate uncertain outcomes return authoritative guidance without replay", async () => {
+    for (const mutationOutcome of ["ATTEMPTED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"] as const) {
+      const plan = await createPlan({
+        mutationOutcome,
+        reconciliationStatus: mutationOutcome === "ATTEMPTED"
+          ? "NOT_REQUIRED"
+          : mutationOutcome === "MANUAL_REVIEW_REQUIRED" ? "MANUAL_REVIEW_REQUIRED" : "PENDING"
+      });
+      const result = await runJob(plan);
+      assert.strictEqual(result.status, mutationOutcome);
+      assert.strictEqual((result as any).mutationOutcome, mutationOutcome);
+      assert.strictEqual((result as any).mutationMayHaveExecuted, true);
+      assert.strictEqual((result as any).mutationExecuted, true);
+      assert.match((result as any).operatorGuidance, /not confirmed/i);
+      assert.match((result as any).operatorGuidance, /must not be retried/i);
+      assert.strictEqual((result as any).reconciliationRequired, mutationOutcome !== "MANUAL_REVIEW_REQUIRED");
+      assert.strictEqual(createTagsCount, 0);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual(
+        stored.reconciliationStatus,
+        mutationOutcome === "ATTEMPTED" ? "PENDING" : mutationOutcome === "OUTCOME_UNKNOWN" ? "PENDING" : "MANUAL_REVIEW_REQUIRED"
+      );
+    }
   });
 
   await t.test("24. missing instance returns safe TARGET_NOT_FOUND", async () => {

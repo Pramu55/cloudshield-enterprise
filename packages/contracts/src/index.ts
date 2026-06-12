@@ -48,6 +48,26 @@ export type GovernedLifecycleState = z.infer<
   typeof GovernedLifecycleStateSchema
 >;
 
+export const MutationOutcomeSchema = z.enum([
+  "NOT_ATTEMPTED",
+  "ATTEMPTED",
+  "CONFIRMED_SUCCEEDED",
+  "CONFIRMED_FAILED",
+  "OUTCOME_UNKNOWN",
+  "MANUAL_REVIEW_REQUIRED"
+]);
+export type MutationOutcome = z.infer<typeof MutationOutcomeSchema>;
+
+export const MutationReconciliationStatusSchema = z.enum([
+  "NOT_REQUIRED",
+  "PENDING",
+  "IN_PROGRESS",
+  "RESOLVED",
+  "MANUAL_REVIEW_REQUIRED",
+  "FAILED_RETRYABLE"
+]);
+export type MutationReconciliationStatus = z.infer<typeof MutationReconciliationStatusSchema>;
+
 export const GOVERNED_CONFIRMATION_TOKENS = {
   EC2_APPLY_GOVERNANCE_TAGS: "APPLY_GOVERNANCE_TAGS",
   EC2_REMOVE_PUBLIC_SSH_INGRESS: "REMOVE_PUBLIC_SSH_RULE"
@@ -165,6 +185,17 @@ export const GovernedExecutionEvidenceResponseSchema = z.object({
   executionCompletedAt: z.string().nullable(),
   awsApiCallExecuted: z.boolean(),
   mutationExecuted: z.boolean(),
+  mutationMayHaveExecuted: z.boolean(),
+  mutationOutcome: MutationOutcomeSchema.nullable(),
+  mutationAttemptedAt: z.string().nullable(),
+  mutationConfirmedAt: z.string().nullable(),
+  providerRequestId: z.string().nullable(),
+  reconciliationStatus: MutationReconciliationStatusSchema.nullable(),
+  reconciliationRequired: z.boolean(),
+  lastReconciliationAt: z.string().nullable(),
+  reconciliationAttemptCount: z.number().int().nonnegative(),
+  manualReviewReason: z.string().nullable(),
+  operatorGuidance: z.string(),
   message: z.string()
 });
 export type GovernedExecutionEvidenceResponse = z.infer<
@@ -1418,6 +1449,17 @@ export const RemediationPlanDtoSchema = z.object({
   queuedAt: z.string().nullable().default(null),
   executionStartedAt: z.string().nullable().default(null),
   executionCompletedAt: z.string().nullable().default(null),
+  mutationOutcome: MutationOutcomeSchema.nullable().default(null),
+  mutationAttemptedAt: z.string().nullable().default(null),
+  mutationConfirmedAt: z.string().nullable().default(null),
+  providerRequestId: z.string().nullable().default(null),
+  mutationMayHaveExecuted: z.boolean().default(false),
+  reconciliationStatus: MutationReconciliationStatusSchema.nullable().default(null),
+  reconciliationRequired: z.boolean().default(false),
+  lastReconciliationAt: z.string().nullable().default(null),
+  reconciliationAttemptCount: z.number().int().nonnegative().default(0),
+  manualReviewReason: z.string().nullable().default(null),
+  operatorGuidance: z.string().default("No operator action is currently required."),
   createdById: z.string(),
   createdByEmail: z.string().nullable(),
   approvedById: z.string().nullable(),

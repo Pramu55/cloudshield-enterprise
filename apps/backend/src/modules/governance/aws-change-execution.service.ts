@@ -87,7 +87,17 @@ export async function simulateGovernedAwsChange(
     simulatedAt: now,
     approvalExpiresAt: new Date(now.getTime() + APPROVAL_TTL_MS),
     approvalStatus: "DRAFT" as const,
-    executionStatus: "EXECUTION_BLOCKED" as const
+    executionStatus: "EXECUTION_BLOCKED" as const,
+    mutationOutcome: "NOT_ATTEMPTED" as const,
+    reconciliationStatus: "NOT_REQUIRED" as const,
+    reconciliationAttemptCount: 0,
+    mutationAttemptedAt: null,
+    mutationConfirmedAt: null,
+    mutationProviderRequestId: null,
+    lastReconciliationAt: null,
+    nextReconciliationAt: null,
+    manualReviewReason: null,
+    executionLeaseStartedAt: null
   };
 
   const [plan, auditEvent] = await prisma.$transaction([
@@ -247,6 +257,7 @@ export async function queueGovernedAwsChangeExecution(
         organizationId: actor.organizationId,
         lifecycleState: "APPROVED",
         approvalStatus: "APPROVED",
+        mutationOutcome: "NOT_ATTEMPTED",
         approvedByRequestId: plan.approvedByRequestId
       },
       data: {
@@ -342,6 +353,7 @@ function validateExecutionReady(plan: ExecutionPlan, body: GovernedExecuteReques
   if (mode === "production") return "Production execution is configured but not enabled in this pilot milestone.";
   if (plan.lifecycleState !== "APPROVED") return "Plan must be approved before execution can be queued.";
   if (plan.approvalStatus !== "APPROVED") return "Approval is missing.";
+  if (plan.mutationOutcome !== "NOT_ATTEMPTED") return "Mutation outcome does not permit queueing or automatic replay.";
   if (!plan.approvedByRequestId || !plan.approvedByRequest) return "Exact approved request binding is missing.";
   if (plan.approvedByRequest.remediationPlanId !== plan.id) return "Bound approval does not belong to this plan.";
   if (plan.approvedByRequest.organizationId !== plan.organizationId) return "Bound approval does not belong to this organization.";
@@ -630,6 +642,17 @@ function evidenceResponse(plan: ExecutionPlan, message: string) {
     executionCompletedAt: plan.executionCompletedAt?.toISOString() ?? null,
     awsApiCallExecuted: Boolean((plan.executionEvidence as any)?.awsApiCallExecuted),
     mutationExecuted: Boolean((plan.executionEvidence as any)?.mutationExecuted),
+    mutationMayHaveExecuted: mutationMayHaveExecuted(plan),
+    mutationOutcome: plan.mutationOutcome,
+    mutationAttemptedAt: plan.mutationAttemptedAt?.toISOString() ?? null,
+    mutationConfirmedAt: plan.mutationConfirmedAt?.toISOString() ?? null,
+    providerRequestId: plan.mutationProviderRequestId,
+    reconciliationStatus: plan.reconciliationStatus,
+    reconciliationRequired: ["PENDING", "IN_PROGRESS", "FAILED_RETRYABLE"].includes(plan.reconciliationStatus ?? ""),
+    lastReconciliationAt: plan.lastReconciliationAt?.toISOString() ?? null,
+    reconciliationAttemptCount: plan.reconciliationAttemptCount,
+    manualReviewReason: plan.manualReviewReason,
+    operatorGuidance: mutationOperatorGuidance(plan),
     message
   });
 }
@@ -673,6 +696,17 @@ function toPlanDto(plan: ExecutionPlan) {
     queuedAt: plan.queuedAt?.toISOString() ?? null,
     executionStartedAt: plan.executionStartedAt?.toISOString() ?? null,
     executionCompletedAt: plan.executionCompletedAt?.toISOString() ?? null,
+    mutationOutcome: plan.mutationOutcome,
+    mutationAttemptedAt: plan.mutationAttemptedAt?.toISOString() ?? null,
+    mutationConfirmedAt: plan.mutationConfirmedAt?.toISOString() ?? null,
+    providerRequestId: plan.mutationProviderRequestId,
+    mutationMayHaveExecuted: mutationMayHaveExecuted(plan),
+    reconciliationStatus: plan.reconciliationStatus,
+    reconciliationRequired: ["PENDING", "IN_PROGRESS", "FAILED_RETRYABLE"].includes(plan.reconciliationStatus ?? ""),
+    lastReconciliationAt: plan.lastReconciliationAt?.toISOString() ?? null,
+    reconciliationAttemptCount: plan.reconciliationAttemptCount,
+    manualReviewReason: plan.manualReviewReason,
+    operatorGuidance: mutationOperatorGuidance(plan),
     createdById: plan.createdById,
     createdByEmail: null,
     approvedById: plan.approvedById,
@@ -684,6 +718,17 @@ function toPlanDto(plan: ExecutionPlan) {
     createdAt: plan.createdAt.toISOString(),
     updatedAt: plan.updatedAt.toISOString()
   };
+}
+
+function mutationOperatorGuidance(plan: ExecutionPlan) {
+  if (plan.mutationOutcome === "MANUAL_REVIEW_REQUIRED") return "Execution is not confirmed. The mutation may have executed and must not be retried. Review the safe reconciliation evidence.";
+  if (plan.mutationOutcome === "OUTCOME_UNKNOWN") return "Execution is not confirmed. The mutation may have executed and must not be retried. Read-only reconciliation is required.";
+  if (plan.mutationOutcome === "ATTEMPTED") return "Execution is not confirmed. The mutation may have executed and must not be retried. Read-only reconciliation is required.";
+  return "No operator action is currently required.";
+}
+
+function mutationMayHaveExecuted(plan: ExecutionPlan) {
+  return ["ATTEMPTED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"].includes(plan.mutationOutcome ?? "");
 }
 
 function toApprovalRequestDto(approval: any) {

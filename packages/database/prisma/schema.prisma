@@ -148,6 +148,24 @@ enum RemediationExecutionStatus {
   COMPLETED_MANUALLY
 }
 
+enum MutationOutcome {
+  NOT_ATTEMPTED
+  ATTEMPTED
+  CONFIRMED_SUCCEEDED
+  CONFIRMED_FAILED
+  OUTCOME_UNKNOWN
+  MANUAL_REVIEW_REQUIRED
+}
+
+enum MutationReconciliationStatus {
+  NOT_REQUIRED
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  MANUAL_REVIEW_REQUIRED
+  FAILED_RETRYABLE
+}
+
 enum ApprovalRequestStatus {
   PENDING
   APPROVED
@@ -817,6 +835,16 @@ model RemediationPlan {
   executionStartedAt        DateTime?
   executionCompletedAt      DateTime?
   rollbackAvailableAt       DateTime?
+  mutationOutcome           MutationOutcome?
+  mutationAttemptedAt       DateTime?
+  mutationConfirmedAt       DateTime?
+  mutationProviderRequestId String?
+  reconciliationStatus      MutationReconciliationStatus?
+  reconciliationAttemptCount Int                         @default(0)
+  lastReconciliationAt      DateTime?
+  nextReconciliationAt      DateTime?
+  manualReviewReason        String?
+  executionLeaseStartedAt   DateTime?
   createdById               String
   createdBy                 User                          @relation("RemediationPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
   approvedById              String?
@@ -834,6 +862,8 @@ model RemediationPlan {
   @@index([organizationId, approvalStatus])
   @@index([organizationId, executionStatus])
   @@index([organizationId, lifecycleState])
+  @@index([mutationOutcome, mutationAttemptedAt])
+  @@index([reconciliationStatus, nextReconciliationAt])
 }
 
 model ApprovalRequest {
