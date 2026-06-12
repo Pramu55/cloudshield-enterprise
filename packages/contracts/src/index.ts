@@ -1975,6 +1975,18 @@ export const AwsIdentityValidationResponseSchema = AwsIdentityValidationSafetyFl
   principalArnMasked: z.string().nullable()
 });
 export type AwsIdentityValidationResponse = z.infer<typeof AwsIdentityValidationResponseSchema>;
+
+export const AwsStsValidationResponseSchema = z.object({
+  status: z.literal("VALIDATED"),
+  accountId: z.string().regex(/^\d{12}$/),
+  maskedPrincipalArn: z.string().min(1).max(256),
+  roleName: z.string().min(1).max(128),
+  validationMode: z.literal("STS_ONLY"),
+  validatedAt: z.iso.datetime(),
+  correlationId: z.uuid(),
+  providerRequestId: z.string().min(1).max(128).optional()
+});
+export type AwsStsValidationResponse = z.infer<typeof AwsStsValidationResponseSchema>;
 export * from './search.js';
 export * from "./dashboard.js";
 export * from "./monitoring.js";
