@@ -26,6 +26,7 @@ import {
   Wallet
 } from "lucide-react";
 import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
+import type { ApiError } from "../../lib/api-error";
 import { AccountDetailWorkspace, AccountsWorkspace } from "./account-workflows";
 import {
   DataTable,
@@ -80,8 +81,8 @@ function sourceFor(item: AnyRecord, parent?: AnyRecord) {
   return item.dataSource ?? item.source ?? parent?.dataSource ?? parent?.source ?? null;
 }
 
-function ErrorAndRefresh({ error, isRefreshing }: { error: string | null; isRefreshing: boolean }) {
-  return <RefreshBadge error={error} isRefreshing={isRefreshing} />;
+function ErrorAndRefresh({ error, isRefreshing, onRetry }: { error: ApiError | null; isRefreshing: boolean; onRetry?: () => void }) {
+  return <RefreshBadge error={error} isRefreshing={isRefreshing} onRetry={onRetry} />;
 }
 
 function ConsoleLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -147,11 +148,11 @@ function PostureBar({ component }: { component: PostureScoreComponent }) {
 }
 
 export function OverviewView() {
-  const { data, error, isRefreshing } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
+  const { data, error, isRefreshing, refetch } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
   const { data: monitoringHealth } = useCloudShieldData<any>("/api/v1/security-monitoring/health", null);
 
   if (error) {
-    return <ErrorAndRefresh error={error} isRefreshing={false} />;
+    return <ErrorAndRefresh error={error} isRefreshing={false} onRetry={refetch} />;
   }
 
   if (!data) {
@@ -525,13 +526,13 @@ export function GovernanceView() {
 }
 
 export function AutomationView() {
-  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/automation/latest", emptyObject);
+  const { data, error, isRefreshing, refetch } = useCloudShieldData<AnyRecord>("/api/v1/automation/latest", emptyObject);
   const jobs = pickArray(data, ["jobs", "runs", "items", "activity"]);
 
   return (
     <>
       <PageHeader breadcrumbs={["Operations", "Automation"]} title="Automation center" description="Latest advisory automation runs, job outcomes, and report workflow status." />
-      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} onRetry={refetch} />
       <StatGroup>
         <MetricTile label="Latest status" value={<StatusBadge status={data.status ?? data.latestStatus} />} />
         <MetricTile label="Runs" value={jobs.length} />

@@ -74,6 +74,22 @@ Direct-fetch bypasses are login and register. CSRF acquisition is also a direct 
 
 Status handling gaps: 401 is not centralized; 403, 409, 429, 500, and 503 have no shared presentation/retry policy. Register alone recognizes 409. Raw backend messages reach register and monitoring alert dialogs. Correlation IDs are neither extracted from headers nor response bodies.
 
+### Central API error and session-state update
+
+`lib/api-error.ts` now defines a frontend-safe error contract containing only kind, HTTP status, fixed safe message, validated UUID correlation ID, bounded Retry-After seconds, read-retry eligibility, and session-expiry state. It stores no raw response body, provider error, stack, credential, token, SQL/Prisma detail, authorization header, or internal path.
+
+`lib/client-api.tsx` remains cookie-session and CSRF based. No Authorization header is added because the existing frontend has no bearer-token model. Requests execute once, support caller cancellation and bounded timeout, safely inspect only small JSON error bodies for the existing `correlationId` field, prefer `x-correlation-id`, and discard invalid identifiers.
+
+Mutation requests now fail closed on CSRF. A mutation endpoint is never called unless a bounded, independently cancellable CSRF request returns a valid non-empty token. CSRF 401 uses the same session-expiry path; network, timeout, cancellation, unavailable, malformed JSON, and missing-token outcomes throw a safe `ApiRequestError`. There is no shared CSRF promise, so one caller's cancellation cannot abort another caller. Cached state is retained only after successful token validation and is cleared after mutation use or any CSRF failure.
+
+Successful empty responses have an explicit contract: HTTP 204/205, `content-length: 0`, and successful blank bodies resolve as `undefined` without JSON parsing. Non-empty successful bodies remain typed JSON; malformed non-empty JSON becomes a safe unknown response error rather than a network failure. Already-aborted signals are rejected before CSRF or endpoint fetches begin.
+
+On 401, the client clears in-memory CSRF and stale presentation state, broadcasts `cloudshield-session-expired`, and redirects once to `/login`. Only `/dashboard` or a pathname beginning `/dashboard/` is retained; query strings are discarded. Prefix lookalikes, external origins, protocol-like values, controls, double slashes, and backslashes are rejected. The HTTP-only session cookie cannot be read or deleted by client JavaScript and remains owned by backend expiry/logout. The shell stops rendering stale identity while redirecting. A 403 never clears session state.
+
+Error presentation distinguishes unauthenticated, forbidden, conflict, validation, rate limit, unavailable, network, timeout, cancelled, and unknown outcomes. Reads expose explicit retry only for network, timeout, 503, or unknown failures. There are no automatic retries, and mutations are never replayed. Integrated surfaces are dashboard overview, automation, monitoring, and the authenticated shell. Registration no longer displays backend-provided messages, and search no longer logs caught request objects.
+
+Remaining direct fetch calls are login, registration, and CSRF bootstrap. Login and registration retain purpose-specific status handling and should migrate to a public-auth safe-client variant later. The base findings above are retained as historical audit context; this milestone resolves them for the central client and integrated surfaces only.
+
 ## Hardcoded, demo, and misleading findings
 
 | Classification | Finding |
@@ -127,18 +143,17 @@ P2: recent search terms in localStorage, `dangerouslySetInnerHTML` for a static 
 
 ## Priority and implementation order
 
-1. `feat/frontend-api-error-session-states` - typed API error, correlation IDs, 401/session expiry, cancellation, and safe status-specific UX.
-2. `feat/frontend-contract-validation` - parse real responses with existing contract schemas; remove `any` from monitoring and mutation paths first.
-3. `feat/frontend-permission-production-guards` - route/action permission states and explicit disabled/production-restricted behavior backed by existing API facts.
-4. `feat/frontend-monitoring-safety` - remove misleading secure/active fallbacks; redact/structure evidence; replace browser alerts and fixed notes.
-5. `feat/frontend-route-state-boundaries` - route loading/error/not-found files and shared empty/error/loading adoption.
-6. `feat/frontend-status-migration` - migrate legacy status badges and all operational surfaces to the semantic registry.
-7. `feat/frontend-accessibility-responsive` - popover focus, keyboard controls, mobile tables/actions, headings, and graph alternatives.
-8. `feat/frontend-server-rendering-performance` - move read-only views toward server components, rationalize prefetch, and measure bundles.
-9. `test/frontend-foundation` - add an agreed frontend test runner, then cover status, ResourceId, and state components.
+1. `feat/frontend-contract-validation` - parse real responses with existing contract schemas; remove `any` from monitoring and mutation paths first.
+2. `feat/frontend-permission-production-guards` - route/action permission states and explicit disabled/production-restricted behavior backed by existing API facts.
+3. `feat/frontend-monitoring-safety` - remove misleading secure/active fallbacks; redact/structure evidence; replace fixed notes.
+4. `feat/frontend-route-state-boundaries` - route loading/error/not-found files and shared empty/error/loading adoption.
+5. `feat/frontend-status-migration` - migrate legacy status badges and all operational surfaces to the semantic registry.
+6. `feat/frontend-accessibility-responsive` - popover focus, keyboard controls, mobile tables/actions, headings, and graph alternatives.
+7. `feat/frontend-server-rendering-performance` - move read-only views toward server components, rationalize prefetch, and measure bundles.
+8. `test/frontend-foundation` - add an agreed frontend test runner, then cover status, ResourceId, and state components.
 
 Backend dependencies for those branches: documented error envelope and correlation header; authoritative permission/capability fields; session-expiry semantics; freshness timestamps and coverage; production-account restriction facts; redacted alert evidence DTO; and runtime schemas aligned with `@cloudshield/contracts`.
 
 ## P0 readiness blockers
 
-The milestone foundation itself is reviewable once typecheck/build/hygiene pass. The foundation validates correlation IDs before display/copy and preserves truthful backend status labels, but the application is not production-ready until centralized session expiry, correlation-ID extraction, monitoring response validation/evidence redaction, privileged-action permission states, and misleading health/empty copy are fixed.
+The error/session milestone is reviewable once typecheck/build/hygiene pass. The application is not production-ready until contract validation, monitoring evidence redaction, privileged-action permission states, and misleading health/empty copy are fixed.

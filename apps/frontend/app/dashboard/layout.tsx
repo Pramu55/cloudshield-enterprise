@@ -21,6 +21,7 @@ import { GlobalSearchBar } from "../../components/search/GlobalSearchBar";
 import { NotificationFeed } from "../../components/notifications/NotificationFeed";
 import { NAV_GROUPS } from "../../lib/route-registry";
 import type { CommandCenterResponse } from "@cloudshield/contracts";
+import { ErrorState } from "../../components/ui/error-state";
 
 type CurrentUserPayload = {
   user?: {
@@ -44,8 +45,8 @@ function isActive(pathname: string, href: string) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data } = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
-  const user = data.user;
+  const authState = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
+  const user = authState.data.user;
 
   const { data: commandCenterData } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
 
@@ -92,7 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   async function logout() {
     try {
-      await fetchCloudShieldClient("/api/v1/auth/logout", { method: "POST" });
+      await fetchCloudShieldClient("/api/v1/auth/logout", { method: "POST", handleSessionExpired: false });
     } catch {
       // Session may already be expired; route away either way.
     }
@@ -110,6 +111,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const connectorStatus = commandCenterData?.accountHealth?.length ?
     (commandCenterData.accountHealth.some(a => a.connectionStatus === "VALIDATION_SUCCEEDED") ? "CONNECTED" : "NOT_CONFIGURED")
     : "NOT_CONFIGURED";
+
+  if (authState.error?.sessionExpired) {
+    return (
+      <main className="portal-content" aria-live="assertive">
+        <ErrorState title="Session expired" message={authState.error.safeMessage} />
+      </main>
+    );
+  }
 
   const sidebar = (
     <aside className="portal-sidebar" data-collapsed={collapsed}>

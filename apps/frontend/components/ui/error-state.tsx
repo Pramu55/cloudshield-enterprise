@@ -3,9 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { AlertTriangle, Check, Copy, RefreshCw } from "lucide-react";
 import { cn } from "../../lib/cn";
+import { normalizeCorrelationId } from "../../lib/api-error";
 
 const UNSAFE_ERROR_CONTENT = /(access[_-]?key|secret|credential|authorization|bearer|stack|at\s+\S+\s*\()/i;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function normalizeSafeErrorMessage(message?: string): string {
   const firstLine = message?.split(/\r?\n/, 1)[0]?.trim();
@@ -13,13 +13,6 @@ export function normalizeSafeErrorMessage(message?: string): string {
     return "The request could not be completed. Try again or contact support with the reference ID.";
   }
   return firstLine.slice(0, 240);
-}
-
-export function normalizeCorrelationId(value?: string): string | null {
-  if (!value || value.length > 36) return null;
-  if (!UUID_PATTERN.test(value)) return null;
-  if (UNSAFE_ERROR_CONTENT.test(value)) return null;
-  return value;
 }
 
 export interface ErrorStateProps {
