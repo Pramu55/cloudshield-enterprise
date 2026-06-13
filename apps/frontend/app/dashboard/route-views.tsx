@@ -27,6 +27,13 @@ import {
 } from "lucide-react";
 import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
 import type { ApiError } from "../../lib/api-error";
+import {
+  FrontendAutomationLatestSchema,
+  FrontendCommandCenterResponseSchema,
+  FrontendMonitoringHealthSchema,
+  type FrontendAutomationLatest,
+  type FrontendMonitoringHealth
+} from "../../lib/response-contracts";
 import { AccountDetailWorkspace, AccountsWorkspace } from "./account-workflows";
 import {
   DataTable,
@@ -148,8 +155,8 @@ function PostureBar({ component }: { component: PostureScoreComponent }) {
 }
 
 export function OverviewView() {
-  const { data, error, isRefreshing, refetch } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
-  const { data: monitoringHealth } = useCloudShieldData<any>("/api/v1/security-monitoring/health", null);
+  const { data, error, isRefreshing, refetch } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null, { schema: FrontendCommandCenterResponseSchema });
+  const { data: monitoringHealth } = useCloudShieldData<FrontendMonitoringHealth | null>("/api/v1/security-monitoring/health", null, { schema: FrontendMonitoringHealthSchema });
 
   if (error) {
     return <ErrorAndRefresh error={error} isRefreshing={false} onRetry={refetch} />;
@@ -526,26 +533,26 @@ export function GovernanceView() {
 }
 
 export function AutomationView() {
-  const { data, error, isRefreshing, refetch } = useCloudShieldData<AnyRecord>("/api/v1/automation/latest", emptyObject);
-  const jobs = pickArray(data, ["jobs", "runs", "items", "activity"]);
+  const { data, error, isRefreshing, refetch } = useCloudShieldData<FrontendAutomationLatest | null>("/api/v1/automation/latest", null, { schema: FrontendAutomationLatestSchema });
+  const jobs = data?.events ?? [];
 
   return (
     <>
       <PageHeader breadcrumbs={["Operations", "Automation"]} title="Automation center" description="Latest advisory automation runs, job outcomes, and report workflow status." />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} onRetry={refetch} />
       <StatGroup>
-        <MetricTile label="Latest status" value={<StatusBadge status={data.status ?? data.latestStatus} />} />
+        <MetricTile label="Latest status" value={<StatusBadge status={data?.assessment?.status ?? "NOT_CONFIGURED"} />} />
         <MetricTile label="Runs" value={jobs.length} />
-        <MetricTile label="Updated" value={formatDate(data.updatedAt ?? data.createdAt)} />
+        <MetricTile label="Updated" value={formatDate(data?.assessment?.updatedAt)} />
       </StatGroup>
       <Section title="Automation runs">
         <DataTable
           columns={["Run", "Status", "Summary", "Updated"]}
-          rows={jobs.map((job: AnyRecord) => [
-            text(job.name ?? job.id ?? job.type, "Automation run"),
-            <StatusBadge key="status" status={job.status ?? job.state} />,
-            text(job.summary ?? job.description),
-            formatDate(job.updatedAt ?? job.createdAt)
+          rows={jobs.map((job) => [
+            text(job.type ?? job.id, "Automation event"),
+            <StatusBadge key="status" status={job.status} />,
+            text(job.message),
+            formatDate(job.createdAt)
           ])}
         />
       </Section>

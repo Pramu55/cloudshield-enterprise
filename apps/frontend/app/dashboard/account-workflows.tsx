@@ -31,6 +31,7 @@ import type {
   UpdateAwsAccountRequest
 } from "@cloudshield/contracts";
 import { fetchCloudShieldClient, RefreshBadge, useCloudShieldData } from "../../lib/client-api";
+import { FrontendAwsAccountListSchema, FrontendAwsAccountMutationSchema } from "../../lib/response-contracts";
 import {
   DataTable,
   DetailList,
@@ -144,7 +145,7 @@ export function AccountsWorkspace() {
   const [activeAction, setActiveAction] = useState<ActionState>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  const accountsState = useCloudShieldData<AwsAccountListResponse>(accountListPath(refreshNonce), { sampleData: false, sampleDataLabel: "", items: [] });
+  const accountsState = useCloudShieldData<AwsAccountListResponse>(accountListPath(refreshNonce), { sampleData: false, sampleDataLabel: "", items: [] }, { schema: FrontendAwsAccountListSchema });
   const connectorState = useCloudShieldData<AwsConnectorStatusResponse>("/api/v1/aws/connector/status", defaultConnectorStatus);
   const inventoryPlanState = useCloudShieldData<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan", defaultInventoryPlan);
   const currentUserState = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
@@ -169,7 +170,7 @@ export function AccountsWorkspace() {
       const payload = toPayload(form);
       const result = await fetchCloudShieldClient<AwsAccountMutationResponse>(
         form.id ? `/api/v1/aws/accounts/${form.id}` : "/api/v1/aws/accounts",
-        { method: form.id ? "PATCH" : "POST", body: payload }
+        { method: form.id ? "PATCH" : "POST", body: payload, schema: FrontendAwsAccountMutationSchema }
       );
       setFeedback({ tone: "success", title: "Account saved", message: result.message });
       setForm(emptyForm);
@@ -235,7 +236,7 @@ export function AccountsWorkspace() {
     setFeedback({ tone: "info", title: "Archiving registry record", message: "Archiving registry record..." });
     setActiveAction({ key: "archive", accountRecordId: account.id, label: "Archiving registry record..." });
     try {
-      const result = await fetchCloudShieldClient<AwsAccountMutationResponse>(`/api/v1/aws/accounts/${account.id}/archive`, { method: "PATCH" });
+      const result = await fetchCloudShieldClient<AwsAccountMutationResponse>(`/api/v1/aws/accounts/${account.id}/archive`, { method: "PATCH", schema: FrontendAwsAccountMutationSchema });
       setFeedback({ tone: "success", title: "Registry record archived", message: result.message });
       refresh();
     } catch (error) {

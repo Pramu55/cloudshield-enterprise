@@ -22,6 +22,7 @@ import { NotificationFeed } from "../../components/notifications/NotificationFee
 import { NAV_GROUPS } from "../../lib/route-registry";
 import type { CommandCenterResponse } from "@cloudshield/contracts";
 import { ErrorState } from "../../components/ui/error-state";
+import { FrontendCommandCenterResponseSchema } from "../../lib/response-contracts";
 
 type CurrentUserPayload = {
   user?: {
@@ -48,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const authState = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
   const user = authState.data.user;
 
-  const { data: commandCenterData } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
+  const { data: commandCenterData } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null, { schema: FrontendCommandCenterResponseSchema });
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);

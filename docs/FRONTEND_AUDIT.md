@@ -90,6 +90,26 @@ Error presentation distinguishes unauthenticated, forbidden, conflict, validatio
 
 Remaining direct fetch calls are login, registration, and CSRF bootstrap. Login and registration retain purpose-specific status handling and should migrate to a public-auth safe-client variant later. The base findings above are retained as historical audit context; this milestone resolves them for the central client and integrated surfaces only.
 
+### Runtime contract-validation update
+
+TypeScript validates frontend source code but cannot prove that a live HTTP response matches its declared type. The central client now parses successful non-empty JSON as `unknown`; when a schema is supplied, only successful Zod `safeParse` output is returned to React. Validation failure becomes `CONTRACT_INVALID` with the fixed message "CloudShield received a response that did not match the expected contract." Zod issues, field paths, raw JSON, provider payloads, and response bodies are not retained or rendered. A valid UUID from `x-correlation-id` is preserved; malformed IDs are discarded. Contract failures do not clear sessions or redirect. Reads may expose explicit retry, while mutations execute once and are never replayed.
+
+| Frontend surface | Endpoint | Runtime schema | Notes |
+|---|---|---|---|
+| Dashboard overview and shell summary | `/api/v1/dashboard/command-center` | `CommandCenterResponseSchema` plus `FrontendCommandCenterResponseSchema` | Source objects strip unknown keys. The frontend returns an explicit top-level projection and enforces known account connection status, ISO timestamps, finite non-negative counts/durations/ages, and no default-to-zero fallback after failure. |
+| Dashboard monitoring badge | `/api/v1/security-monitoring/health` | `MonitoringHealthResponseSchema` plus `FrontendMonitoringHealthSchema` | Source object strips unknown keys; the frontend projection retains only known health, message, timestamp, and metric fields. |
+| Monitoring alerts | `/api/v1/security-monitoring/alerts` | `SecurityAlertsListResponseSchema` plus frontend refinement/projection | Validates enums/counts/timestamps and removes `mappedEvidence` before data reaches React state. |
+| Monitoring runs | `/api/v1/security-monitoring/runs` | `MonitoringRunsListResponseSchema` plus frontend refinement/projection | Validates status/counts/timestamps and removes `errorSummary` before state. |
+| Automation latest | `/api/v1/automation/latest` | `FrontendAutomationLatestSchema` | No authoritative response schema exists. A narrow frontend-only projection uses authoritative ID, assessment status/mode, and safety schemas. Event type/status are bounded non-control strings; event messages are bounded and reject control, credential, provider-error, and stack-shaped content. |
+| AWS account list | `/api/v1/aws/accounts` | `AwsAccountListResponseSchema` plus `FrontendAwsAccountListSchema` | Source object strips unknown keys. A reusable projected account-item schema enforces 12-digit account ID, known status/connection enums, ISO/null timestamps, and bounded non-negative scores. |
+| AWS create/update/archive result | account mutation endpoints | `AwsAccountMutationResponseSchema` plus frontend item projection | Reuses account-item validation directly, independent of list metadata. It creates no synthetic list envelope or sample label and never infers connection success. |
+
+All authoritative schemas above are ordinary Zod objects: they strip unknown object properties rather than passing them through or rejecting the whole response. Frontend schemas nevertheless return explicit allowlisted projections. This is required for the monitoring `mappedEvidence` and `errorSummary` records because their source fields intentionally accept arbitrary record values. Focused assertions inject `AccessKeyId`, `SecretAccessKey`, `SessionToken`, `rawResponse`, `rawError`, `providerError`, `stack`, `credentials`, and `authorization` at top-level and nested positions and prove none survive in parsed frontend results.
+
+Governed execution evidence is not currently consumed by a frontend call site, so no speculative request was added. The authoritative `GovernedExecutionEvidenceResponseSchema`, `MutationOutcomeSchema`, and `MutationReconciliationStatusSchema` were inspected and asserted: `OUTCOME_UNKNOWN` and `MANUAL_REVIEW_REQUIRED` remain exact, unknown outcomes/states fail, approval is not execution success, evidence is not inferred, and `providerRequestId` is never promoted to correlation ID. Existing governed evidence records contain provider-shaped record fields, so a future consuming UI must add a narrow redacted projection before placing evidence in React state.
+
+Remaining unvalidated successful responses include auth/me and profile, invitations, notifications, search, connector status, inventory plan/sync/detail, account detail/validation, teams/members, inventory/resources and resource detail, findings, governance plans/approvals/activity, compliance, cost, recommendations, graph, scans, reports, platform settings, alert detail, and monitoring mutation responses. Routes retain current behavior until migrated; schema validation remains optional to avoid broad breakage in this milestone.
+
 ## Hardcoded, demo, and misleading findings
 
 | Classification | Finding |
@@ -143,17 +163,17 @@ P2: recent search terms in localStorage, `dangerouslySetInnerHTML` for a static 
 
 ## Priority and implementation order
 
-1. `feat/frontend-contract-validation` - parse real responses with existing contract schemas; remove `any` from monitoring and mutation paths first.
-2. `feat/frontend-permission-production-guards` - route/action permission states and explicit disabled/production-restricted behavior backed by existing API facts.
-3. `feat/frontend-monitoring-safety` - remove misleading secure/active fallbacks; redact/structure evidence; replace fixed notes.
+1. `feat/frontend-permission-production-guards` - route/action permission states and explicit disabled/production-restricted behavior backed by existing API facts.
+2. `feat/frontend-monitoring-safety` - remove misleading secure/active fallbacks; validate alert detail/mutations, structure evidence, and replace fixed notes.
+3. `feat/frontend-route-contract-migration` - migrate remaining authoritative schemas, starting with auth, connector/inventory, governance, and reports.
 4. `feat/frontend-route-state-boundaries` - route loading/error/not-found files and shared empty/error/loading adoption.
 5. `feat/frontend-status-migration` - migrate legacy status badges and all operational surfaces to the semantic registry.
 6. `feat/frontend-accessibility-responsive` - popover focus, keyboard controls, mobile tables/actions, headings, and graph alternatives.
 7. `feat/frontend-server-rendering-performance` - move read-only views toward server components, rationalize prefetch, and measure bundles.
-8. `test/frontend-foundation` - add an agreed frontend test runner, then cover status, ResourceId, and state components.
+8. `test/frontend-foundation` - add an agreed frontend test runner, then cover status, ResourceId, state, and contract schemas.
 
 Backend dependencies for those branches: documented error envelope and correlation header; authoritative permission/capability fields; session-expiry semantics; freshness timestamps and coverage; production-account restriction facts; redacted alert evidence DTO; and runtime schemas aligned with `@cloudshield/contracts`.
 
 ## P0 readiness blockers
 
-The error/session milestone is reviewable once typecheck/build/hygiene pass. The application is not production-ready until contract validation, monitoring evidence redaction, privileged-action permission states, and misleading health/empty copy are fixed.
+The selected high-value responses now have runtime contract validation and redacted monitoring list projections. The application is not production-ready until remaining route contracts, alert-detail evidence projection, privileged-action permission states, and misleading health/empty copy are fixed.
