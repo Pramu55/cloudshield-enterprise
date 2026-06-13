@@ -29,9 +29,15 @@ import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
 import type { ApiError } from "../../lib/api-error";
 import {
   FrontendAutomationLatestSchema,
+  FrontendCapabilitySessionSchema,
   FrontendCommandCenterResponseSchema,
+  FrontendGovernanceApprovalsSchema,
   FrontendMonitoringHealthSchema,
+  FrontendRemediationPlanListSchema,
   type FrontendAutomationLatest,
+  type FrontendCapabilitySession,
+  type FrontendGovernanceApprovals,
+  type FrontendRemediationPlanList,
   type FrontendMonitoringHealth
 } from "../../lib/response-contracts";
 import { AccountDetailWorkspace, AccountsWorkspace } from "./account-workflows";
@@ -52,10 +58,27 @@ import {
   StatusBadge,
   Timeline
 } from "./shared";
+import {
+  permissionCapability,
+  resolveApprovalCapability,
+  resolvePlanExecutionCapability,
+  unknownBlockReasonCapability,
+  type AuthoritativePermission
+} from "../../lib/action-capability";
+import {
+  CapabilityNotice,
+  GuardedAction,
+  PermissionRestriction,
+} from "../../components/ui/guarded-action";
 
 type AnyRecord = Record<string, any>;
 
 const emptyObject: AnyRecord = {};
+
+function reportedPermission(session: FrontendCapabilitySession | null, permission: string): AuthoritativePermission {
+  const value = session?.capabilities?.[permission];
+  return value === true ? "ALLOWED" : value === false ? "DENIED" : "UNKNOWN";
+}
 
 function pickArray(data: any, keys: string[] = []) {
   if (Array.isArray(data)) return data;
@@ -488,18 +511,34 @@ export function SecurityView() {
   );
 }
 
+function GovernancePlanAction({ capability, guidance }: { capability: ReturnType<typeof resolvePlanExecutionCapability>; guidance: string }) {
+  const showGuidance = capability.blockedReason === "OUTCOME_UNKNOWN" || capability.blockedReason === "MANUAL_REVIEW_REQUIRED" || capability.blockedReason === "RECONCILIATION_PENDING";
+  return (
+    <div className="flex flex-col gap-2">
+      <GuardedAction capability={capability}>Queue execution</GuardedAction>
+      {showGuidance ? <CapabilityNotice capability={capability} title="Operator action required" /> : null}
+      {showGuidance ? <p className="text-xs text-slate-600">{guidance}</p> : null}
+    </div>
+  );
+}
+
 export function GovernanceView() {
-  const plans = useCloudShieldData<AnyRecord>("/api/v1/remediation/plans", { plans: [] });
-  const approvals = useCloudShieldData<AnyRecord>("/api/v1/governance/approvals", { approvals: [] });
+  const plans = useCloudShieldData<FrontendRemediationPlanList | null>("/api/v1/remediation/plans", null, { schema: FrontendRemediationPlanListSchema });
+  const approvals = useCloudShieldData<FrontendGovernanceApprovals | null>("/api/v1/governance/approvals", null, { schema: FrontendGovernanceApprovalsSchema });
   const activity = useCloudShieldData<AnyRecord>("/api/v1/governance/activity", { events: [] });
-  const planRows = pickArray(plans.data, ["plans", "items"]);
-  const approvalRows = pickArray(approvals.data, ["approvals", "items"]);
+  const session = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
+  const planRows = plans.data?.items ?? [];
+  const approvalRows = approvals.data?.items ?? [];
+  const preparePermission = reportedPermission(session.data, "operations.prepare");
+  const approvalPermission = reportedPermission(session.data, "approvals.decide");
+  const permissionNotice = permissionCapability(preparePermission);
 
   return (
     <>
       <PageHeader breadcrumbs={["Governance"]} title="Governed operations" description="Remediation plans, approvals, owners, and audit events for manual cloud operations." />
-      <ErrorAndRefresh error={plans.error || approvals.error || activity.error} isRefreshing={plans.isRefreshing || approvals.isRefreshing || activity.isRefreshing} />
+      <ErrorAndRefresh error={plans.error || approvals.error || activity.error || session.error} isRefreshing={plans.isRefreshing || approvals.isRefreshing || activity.isRefreshing || session.isRefreshing} />
       <InlineNotice title="Approval required" tone="info">Operational work is tracked through plans, approvals, owners, and completion evidence.</InlineNotice>
+      <PermissionRestriction capability={permissionNotice} />
       <StatGroup>
         <MetricTile label="Plans" value={planRows.length} />
         <MetricTile label="Pending approvals" value={approvalRows.filter((row: AnyRecord) => String(row.status).toUpperCase().includes("PENDING")).length} tone="warning" />
@@ -508,12 +547,39 @@ export function GovernanceView() {
       <div className="cs-two-column">
         <Section title="Remediation plans">
           <DataTable
-            columns={["Plan", "Owner", "Status", "Updated"]}
-            rows={planRows.map((plan: AnyRecord) => [
-              text(plan.title ?? plan.name),
-              text(plan.ownerName ?? plan.ownerEmail ?? plan.assignee),
-              <StatusBadge key="status" status={plan.executionStatus ?? plan.status} />,
-              formatDate(plan.updatedAt ?? plan.createdAt)
+            columns={["Plan", "Approval", "Execution", "Updated", "Action availability"]}
+            rows={planRows.map((plan) => [
+              text(plan.title),
+              <StatusBadge key="approval" status={plan.approvalStatus} />,
+              <StatusBadge key="status" status={plan.mutationOutcome ?? plan.executionStatus} />,
+              formatDate(plan.updatedAt),
+              <GovernancePlanAction key="action" capability={resolvePlanExecutionCapability({
+                permission: preparePermission,
+                executionMode: plan.executionMode,
+                lifecycleState: plan.lifecycleState,
+                approvalStatus: plan.approvalStatus,
+                approvalExpiresAt: plan.approvalExpiresAt,
+                mutationOutcome: plan.mutationOutcome,
+                reconciliationStatus: plan.reconciliationStatus
+              })} guidance={plan.operatorGuidance} />
+            ])}
+          />
+        </Section>
+        <Section title="Approval requests">
+          <DataTable
+            columns={["Plan", "Status", "Requested", "Decision availability"]}
+            rows={approvalRows.map((approval) => [
+              text(approval.remediationPlanTitle, "Remediation plan"),
+              <StatusBadge key="status" status={approval.status} />,
+              formatDate(approval.createdAt),
+              <GuardedAction key="action" capability={resolveApprovalCapability({
+                permission: approvalPermission,
+                status: approval.status,
+                requestedById: approval.requestedById,
+                currentUserId: session.data?.user.id,
+                payloadIntegrityBound: approval.payloadIntegrityBound,
+                expiresAt: approval.expiresAt
+              })}>Review approval</GuardedAction>
             ])}
           />
         </Section>
@@ -540,6 +606,7 @@ export function AutomationView() {
     <>
       <PageHeader breadcrumbs={["Operations", "Automation"]} title="Automation center" description="Latest advisory automation runs, job outcomes, and report workflow status." />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} onRetry={refetch} />
+      <CapabilityNotice capability={unknownBlockReasonCapability()} title="Automation action unavailable" />
       <StatGroup>
         <MetricTile label="Latest status" value={<StatusBadge status={data?.assessment?.status ?? "NOT_CONFIGURED"} />} />
         <MetricTile label="Runs" value={jobs.length} />
@@ -555,6 +622,9 @@ export function AutomationView() {
             formatDate(job.createdAt)
           ])}
         />
+      </Section>
+      <Section title="Mutation automation">
+        <GuardedAction capability={unknownBlockReasonCapability()}>Start mutation automation</GuardedAction>
       </Section>
     </>
   );

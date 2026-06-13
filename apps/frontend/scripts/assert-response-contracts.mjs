@@ -4,6 +4,7 @@ import {
   FrontendAutomationLatestSchema,
   FrontendAwsAccountListSchema,
   FrontendAwsAccountMutationSchema,
+  FrontendCapabilitySessionSchema,
   FrontendCommandCenterResponseSchema,
   FrontendMonitoringHealthSchema,
   FrontendMonitoringRunsListSchema,
@@ -275,6 +276,20 @@ const parsedResults = [
 for (const [result, label] of parsedResults) {
   assertUnsafeFieldsRemoved(result, label);
 }
+
+const capabilitySession = FrontendCapabilitySessionSchema.parse({
+  user: { id: "user-1", email: "operator@example.com", name: "Operator", role: "OWNER", organizationId: "org-1", ...unsafeFields },
+  organization: { id: "org-1", name: "CloudShield", slug: "cloudshield", ...unsafeFields },
+  capabilities: { "accounts.manage": false },
+  ...unsafeFields
+});
+assertUnsafeFieldsRemoved(capabilitySession, "capability session");
+assert.equal(capabilitySession.capabilities?.["accounts.manage"], false);
+assert.equal(FrontendCapabilitySessionSchema.safeParse({
+  user: { id: "user-1", email: "operator@example.com", name: "Operator", role: "OWNER", organizationId: "org-1" },
+  organization: { id: "org-1", name: "CloudShield", slug: "cloudshield" },
+  capabilities: { "accounts.manage": "yes" }
+}).success, false);
 
 const ordinaryEvent = {
   ...automation.events[0],

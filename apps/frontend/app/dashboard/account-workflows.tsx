@@ -31,7 +31,26 @@ import type {
   UpdateAwsAccountRequest
 } from "@cloudshield/contracts";
 import { fetchCloudShieldClient, RefreshBadge, useCloudShieldData } from "../../lib/client-api";
-import { FrontendAwsAccountListSchema, FrontendAwsAccountMutationSchema } from "../../lib/response-contracts";
+import {
+  FrontendAwsAccountListSchema,
+  FrontendAwsAccountMutationSchema,
+  FrontendCapabilitySessionSchema,
+  type FrontendCapabilitySession
+} from "../../lib/response-contracts";
+import {
+  permissionCapability,
+  resolveAccountMutationCapability,
+  runtimeDisabledCapability,
+  type ActionCapability,
+  type AuthoritativePermission
+} from "../../lib/action-capability";
+import {
+  CapabilityNotice,
+  GuardedAction,
+  PermissionRestriction,
+  ProductionRestrictionNotice,
+  RuntimeModeRestrictionNotice
+} from "../../components/ui/guarded-action";
 import {
   DataTable,
   DetailList,
@@ -45,15 +64,6 @@ import {
   StatGroup,
   StatusBadge
 } from "./shared";
-
-type CurrentUserPayload = {
-  user?: {
-    role?: string;
-    name?: string;
-    email?: string;
-    organizationName?: string;
-  };
-};
 
 type ActionKey = "save" | "registry" | "identity" | "sync" | "archive";
 
@@ -109,18 +119,9 @@ const environmentOptions: AwsAccountEnvironment[] = [
   "SANDBOX"
 ];
 
-const rolePermissions: Record<string, string[]> = {
-  OWNER: ["accounts.manage", "inventory.scan.request"],
-  ADMIN: ["accounts.manage", "inventory.scan.request"],
-  CLOUD_OPERATOR: ["accounts.manage", "inventory.scan.request"],
-  SECURITY_OPERATOR: [],
-  AUDITOR: [],
-  VIEWER: [],
-  MEMBER: []
-};
-
-function hasPermission(role: string | undefined, permission: "accounts.manage" | "inventory.scan.request") {
-  return Boolean(rolePermissions[String(role ?? "VIEWER").toUpperCase()]?.includes(permission));
+function authoritativePermission(payload: FrontendCapabilitySession | null, permission: "accounts.manage" | "inventory.scan.request"): AuthoritativePermission {
+  const reported = payload?.capabilities?.[permission];
+  return reported === true ? "ALLOWED" : reported === false ? "DENIED" : "UNKNOWN";
 }
 
 function actionId(action: ActionKey, accountRecordId?: string) {
@@ -148,10 +149,12 @@ export function AccountsWorkspace() {
   const accountsState = useCloudShieldData<AwsAccountListResponse>(accountListPath(refreshNonce), { sampleData: false, sampleDataLabel: "", items: [] }, { schema: FrontendAwsAccountListSchema });
   const connectorState = useCloudShieldData<AwsConnectorStatusResponse>("/api/v1/aws/connector/status", defaultConnectorStatus);
   const inventoryPlanState = useCloudShieldData<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan", defaultInventoryPlan);
-  const currentUserState = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
+  const currentUserState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
   const accounts = accountsState.data.items;
-  const canManageAccounts = hasPermission(currentUserState.data.user?.role, "accounts.manage");
-  const canRequestScan = hasPermission(currentUserState.data.user?.role, "inventory.scan.request");
+  const manageCapability = permissionCapability(authoritativePermission(currentUserState.data, "accounts.manage"));
+  const scanCapability = permissionCapability(authoritativePermission(currentUserState.data, "inventory.scan.request"));
+  const canManageAccounts = manageCapability.allowed;
+  const canRequestScan = scanCapability.allowed;
   const connectedCount = accounts.filter((account) => account.connectionStatus === "VALIDATION_SUCCEEDED").length;
   const failureCount = accounts.filter((account) => ["AUTH_FAILED", "VALIDATION_FAILED", "PERMISSION_DENIED"].includes(account.connectionStatus)).length;
   const editingAccount = useMemo(() => accounts.find((account) => account.id === form.id), [accounts, form.id]);
@@ -258,7 +261,7 @@ export function AccountsWorkspace() {
           <>
             <span>Connector <StatusBadge status={connectorState.data.status} /></span>
             <span>Scanner <StatusBadge status={connectorState.data.scannerStatus} /></span>
-            <span>Role {currentUserState.data.user?.role ?? "Member"}</span>
+            <span>Role {currentUserState.data?.user.role ?? "Member"}</span>
           </>
         }
       />
@@ -270,9 +273,8 @@ export function AccountsWorkspace() {
         <MetricTile label="Validation issues" value={failureCount} tone={failureCount ? "danger" : "neutral"} icon={<ShieldAlert size={16} />} />
         <MetricTile label="Resource count" value={connectorState.data.resourceCount} detail="AWS_SYNC records" icon={<Radar size={16} />} />
       </StatGroup>
-      {!canManageAccounts ? (
-        <InlineNotice title="Read-only account access" tone="info">Your role can view account records. Account registration, validation, synchronization, and archive actions require account management permissions.</InlineNotice>
-      ) : null}
+      <PermissionRestriction capability={manageCapability} />
+      {!connectorState.isRefreshing && !connectorState.data.executionEligibility.eligible && connectorState.data.executionEligibility.mode === "disabled" ? <RuntimeModeRestrictionNotice /> : null}
       <div className="cs-account-workspace mt-8 gap-8">
         <Section title="Account registry" description="Clean account table with workflow commands kept in a compact action area." icon={<Cloud size={16} />} variant="operational">
           <DataTable
@@ -292,8 +294,8 @@ export function AccountsWorkspace() {
                 key="actions"
                 account={account}
                 activeAction={activeAction}
-                canManageAccounts={canManageAccounts}
-                canRequestScan={canRequestScan}
+                manageCapability={manageCapability}
+                scanCapability={scanCapability}
                 connector={connectorState.data}
                 inventoryPlan={inventoryPlanState.data}
                 onEdit={() => setForm(fromAccount(account))}
@@ -308,7 +310,7 @@ export function AccountsWorkspace() {
         </Section>
         <AccountFormPanel
           activeAction={activeAction}
-          canManageAccounts={canManageAccounts}
+          manageCapability={manageCapability}
           editingAccount={editingAccount}
           form={form}
           teams={teamsState.data.teams}
@@ -351,10 +353,10 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
   const accountState = useCloudShieldData<{ item?: AwsAccountDto }>(accountDetailPath(accountId, refreshNonce), {});
   const connectorState = useCloudShieldData<AwsConnectorStatusResponse>("/api/v1/aws/connector/status", defaultConnectorStatus);
   const inventoryPlanState = useCloudShieldData<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan", defaultInventoryPlan);
-  const currentUserState = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
+  const currentUserState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
   const account = accountState.data.item;
-  const canManageAccounts = hasPermission(currentUserState.data.user?.role, "accounts.manage");
-  const canRequestScan = hasPermission(currentUserState.data.user?.role, "inventory.scan.request");
+  const manageCapability = permissionCapability(authoritativePermission(currentUserState.data, "accounts.manage"));
+  const scanCapability = permissionCapability(authoritativePermission(currentUserState.data, "inventory.scan.request"));
 
   function refresh() {
     setRefreshNonce((value) => value + 1);
@@ -408,6 +410,9 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
       />
       <RefreshBadge error={accountState.error || connectorState.error || inventoryPlanState.error || currentUserState.error} isRefreshing={accountState.isRefreshing || connectorState.isRefreshing || inventoryPlanState.isRefreshing || currentUserState.isRefreshing} />
       {feedback ? <InlineNotice title={feedback.title} tone={feedback.tone}>{feedback.message}</InlineNotice> : null}
+      <PermissionRestriction capability={manageCapability} />
+      {account?.environment === "PRODUCTION" ? <ProductionRestrictionNotice /> : null}
+      {!connectorState.isRefreshing && !connectorState.data.executionEligibility.eligible && connectorState.data.executionEligibility.mode === "disabled" ? <RuntimeModeRestrictionNotice /> : null}
       {account ? (
         <>
           <Section title="Account command center" description="Actions are permission-gated and show per-command progress." icon={<Cloud size={16} />} variant="action">
@@ -415,8 +420,8 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
               <AccountCommandBar
                 account={account}
                 activeAction={activeAction}
-                canManageAccounts={canManageAccounts}
-                canRequestScan={canRequestScan}
+                manageCapability={manageCapability}
+                scanCapability={scanCapability}
                 connector={connectorState.data}
                 inventoryPlan={inventoryPlanState.data}
                 onEdit={undefined}
@@ -485,8 +490,8 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
 function AccountCommandBar({
   account,
   activeAction,
-  canManageAccounts,
-  canRequestScan,
+  manageCapability,
+  scanCapability,
   connector,
   inventoryPlan,
   onEdit,
@@ -497,8 +502,8 @@ function AccountCommandBar({
 }: {
   account: AwsAccountDto;
   activeAction: ActionState;
-  canManageAccounts: boolean;
-  canRequestScan: boolean;
+  manageCapability: ActionCapability;
+  scanCapability: ActionCapability;
   connector: AwsConnectorStatusResponse;
   inventoryPlan: AwsInventoryPlanResponse;
   onEdit?: () => void;
@@ -507,52 +512,46 @@ function AccountCommandBar({
   onSync: () => void;
   onArchive: () => void;
 }) {
-  const identityDisabledReason = !canManageAccounts
-    ? "Requires accounts.manage permission."
-    : !connector.enabled || !connector.configured
-      ? connector.message
-      : undefined;
-  const syncDisabledReason = !canRequestScan
-    ? "Requires inventory.scan.request permission."
-    : !inventoryPlan.inventoryScanningEnabled
-      ? inventoryPlan.message
-      : undefined;
+  const identityCapability = !connector.enabled || !connector.configured ? runtimeDisabledCapability() : manageCapability;
+  const syncCapability = !inventoryPlan.inventoryScanningEnabled ? runtimeDisabledCapability() : scanCapability;
+  const productionMutationCapability = resolveAccountMutationCapability({ permission: manageCapability.allowed ? "ALLOWED" : "UNKNOWN", environment: account.environment, runtimeEnabled: connector.executionEligibility.eligible });
   return (
     <div className="cs-account-actions gap-3">
       <Link className="cs-button-secondary" href={`/dashboard/accounts/${account.id}`}>Open</Link>
-      {onEdit ? <ActionButton icon={<Edit3 size={14} />} label="Edit" disabled={!canManageAccounts || Boolean(activeAction)} onClick={onEdit} /> : null}
-      <ActionButton icon={<CheckCircle2 size={14} />} label="Validate registry" active={actionMatches(activeAction, "registry", account.id)} activeLabel="Validating registry..." disabled={!canManageAccounts || Boolean(activeAction)} onClick={onRegistry} />
-      <ActionButton icon={<ShieldCheck size={14} />} label="Validate identity" active={actionMatches(activeAction, "identity", account.id)} activeLabel="Validating AWS identity..." disabled={Boolean(identityDisabledReason) || Boolean(activeAction)} title={identityDisabledReason ?? "Uses AWS STS GetCallerIdentity only."} onClick={onIdentity} />
-      <ActionButton icon={<RotateCw size={14} />} label="Read-only sync" active={actionMatches(activeAction, "sync", account.id)} activeLabel="Starting read-only sync..." disabled={Boolean(syncDisabledReason) || Boolean(activeAction)} title={syncDisabledReason ?? "Starts read-only inventory synchronization."} onClick={onSync} />
-      <ActionButton icon={<Archive size={14} />} label="Archive" active={actionMatches(activeAction, "archive", account.id)} activeLabel="Archiving registry record..." disabled={!canManageAccounts || Boolean(activeAction)} danger onClick={onArchive} />
+      {onEdit ? <ActionButton capability={manageCapability} icon={<Edit3 size={14} />} label="Edit" disabled={Boolean(activeAction)} onClick={onEdit} /> : null}
+      <ActionButton capability={manageCapability} icon={<CheckCircle2 size={14} />} label="Validate registry" active={actionMatches(activeAction, "registry", account.id)} activeLabel="Validating registry..." disabled={Boolean(activeAction)} onClick={onRegistry} />
+      <ActionButton capability={identityCapability} icon={<ShieldCheck size={14} />} label="Validate identity" active={actionMatches(activeAction, "identity", account.id)} activeLabel="Validating AWS identity..." disabled={Boolean(activeAction)} onClick={onIdentity} />
+      <ActionButton capability={syncCapability} icon={<RotateCw size={14} />} label="Read-only sync" active={actionMatches(activeAction, "sync", account.id)} activeLabel="Starting read-only sync..." disabled={Boolean(activeAction)} onClick={onSync} />
+      <ActionButton capability={productionMutationCapability.restrictionLayer === "ENVIRONMENT" ? manageCapability : productionMutationCapability} icon={<Archive size={14} />} label="Archive" active={actionMatches(activeAction, "archive", account.id)} activeLabel="Archiving registry record..." disabled={Boolean(activeAction)} danger onClick={onArchive} />
+      {account.environment === "PRODUCTION" ? <CapabilityNotice capability={productionMutationCapability} /> : null}
     </div>
   );
 }
 
 function ActionButton({
   icon,
+  capability,
   label,
   active,
   activeLabel,
   disabled,
   danger,
-  title,
   onClick
 }: {
   icon: React.ReactNode;
+  capability: ActionCapability;
   label: string;
   active?: boolean;
   activeLabel?: string;
   disabled?: boolean;
   danger?: boolean;
-  title?: string;
   onClick: () => void;
 }) {
   return (
-    <button className={danger ? "cs-action-danger" : "cs-button-secondary"} disabled={disabled} onClick={onClick} title={title} type="button">
+    <GuardedAction capability={capability} className={danger ? "cs-action-danger" : "cs-button-secondary"} disabled={disabled} onClick={onClick}>
       {active ? <Loader2 size={14} className="animate-spin" /> : icon}
       {active ? activeLabel : label}
-    </button>
+    </GuardedAction>
   );
 }
 
@@ -560,7 +559,7 @@ function AccountFormPanel({
   form,
   editingAccount,
   activeAction,
-  canManageAccounts,
+  manageCapability,
   teams,
   allowedRegions,
   onChange,
@@ -570,13 +569,14 @@ function AccountFormPanel({
   form: AccountFormState;
   editingAccount?: AwsAccountDto;
   activeAction: ActionState;
-  canManageAccounts: boolean;
+  manageCapability: ActionCapability;
   teams?: any[];
   allowedRegions?: string[];
   onChange: (form: AccountFormState) => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const canManageAccounts = manageCapability.allowed;
   return (
     <Section title={editingAccount ? "Edit account" : "Register account"} description="CloudShield registry metadata only. Do not enter credentials or secrets." icon={<Plus size={16} />} variant="action">
       <div className="cs-account-form gap-6">
@@ -624,10 +624,10 @@ function AccountFormPanel({
           <textarea className="min-h-[120px]" disabled={!canManageAccounts} value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} />
         </label>
         <div className="cs-form-actions mt-4 gap-4">
-          <button className="cs-button" disabled={!canManageAccounts || Boolean(activeAction)} onClick={onSave} type="button">
+          <GuardedAction capability={manageCapability} className="cs-button" disabled={Boolean(activeAction)} onClick={onSave}>
             {actionMatches(activeAction, "save", form.id) ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
             {actionMatches(activeAction, "save", form.id) ? "Saving registry metadata..." : editingAccount ? "Save changes" : "Register account"}
-          </button>
+          </GuardedAction>
           {form.id ? <button className="cs-button-secondary" onClick={onCancel} type="button">Cancel</button> : null}
         </div>
       </div>
