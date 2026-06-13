@@ -8,6 +8,7 @@ export type ApiErrorKind =
   | "NETWORK"
   | "TIMEOUT"
   | "CANCELLED"
+  | "CONTRACT_INVALID"
   | "UNKNOWN";
 
 export interface ApiError {
@@ -33,6 +34,7 @@ export const API_ERROR_MESSAGES: Record<ApiErrorKind, string> = {
   NETWORK: "CloudShield could not reach the service.",
   TIMEOUT: "The request took too long to complete.",
   CANCELLED: "The request was cancelled.",
+  CONTRACT_INVALID: "CloudShield received a response that did not match the expected contract.",
   UNKNOWN: "The request could not be completed safely. Try again later."
 };
 

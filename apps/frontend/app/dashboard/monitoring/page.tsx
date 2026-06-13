@@ -7,12 +7,20 @@ import Link from "next/link";
 import { ErrorState } from "../../../components/ui/error-state";
 import { LoadingState } from "../../../components/ui/loading-state";
 import { toApiError, type ApiError } from "../../../lib/api-error";
+import {
+  FrontendMonitoringHealthSchema,
+  FrontendMonitoringRunsListSchema,
+  FrontendSecurityAlertsListSchema,
+  type FrontendMonitoringHealth,
+  type FrontendMonitoringRunsList,
+  type FrontendSecurityAlertsList
+} from "../../../lib/response-contracts";
 
 export default function SecurityMonitoringPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "alerts" | "runs">("overview");
-  const [health, setHealth] = useState<any>(null);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [runs, setRuns] = useState<any[]>([]);
+  const [health, setHealth] = useState<FrontendMonitoringHealth | null>(null);
+  const [alerts, setAlerts] = useState<FrontendSecurityAlertsList["items"]>([]);
+  const [runs, setRuns] = useState<FrontendMonitoringRunsList["items"]>([]);
   const [loading, setLoading] = useState(true);
   const [readError, setReadError] = useState<ApiError | null>(null);
   const [actionError, setActionError] = useState<ApiError | null>(null);
@@ -22,13 +30,13 @@ export default function SecurityMonitoringPage() {
     setReadError(null);
     try {
       if (activeTab === "overview") {
-        const h = await fetchCloudShieldClient<any>("/api/v1/security-monitoring/health");
+        const h = await fetchCloudShieldClient<FrontendMonitoringHealth>("/api/v1/security-monitoring/health", { schema: FrontendMonitoringHealthSchema });
         setHealth(h);
       } else if (activeTab === "alerts") {
-        const a = await fetchCloudShieldClient<any>("/api/v1/security-monitoring/alerts");
+        const a = await fetchCloudShieldClient<FrontendSecurityAlertsList>("/api/v1/security-monitoring/alerts", { schema: FrontendSecurityAlertsListSchema });
         setAlerts(a.items || []);
       } else if (activeTab === "runs") {
-        const r = await fetchCloudShieldClient<any>("/api/v1/security-monitoring/runs");
+        const r = await fetchCloudShieldClient<FrontendMonitoringRunsList>("/api/v1/security-monitoring/runs", { schema: FrontendMonitoringRunsListSchema });
         setRuns(r.items || []);
       }
     } catch (error) {
@@ -142,7 +150,7 @@ export default function SecurityMonitoringPage() {
               </div>
               <h3 className="font-medium text-slate-900">Active Monitors</h3>
             </div>
-            <p className="text-3xl font-bold text-slate-900">{health.activeMonitors ?? 0}</p>
+            <p className="text-3xl font-bold text-slate-900">{health.monitoredAccounts}</p>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
@@ -150,9 +158,9 @@ export default function SecurityMonitoringPage() {
               <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                 <List className="w-5 h-5" />
               </div>
-              <h3 className="font-medium text-slate-900">Connected Accounts</h3>
+              <h3 className="font-medium text-slate-900">Degraded Accounts</h3>
             </div>
-            <p className="text-3xl font-bold text-slate-900">{health.connectedAccounts ?? 0}</p>
+            <p className="text-3xl font-bold text-slate-900">{health.degradedAccounts}</p>
           </div>
         </div>
       </div>
@@ -189,7 +197,7 @@ export default function SecurityMonitoringPage() {
                   </div>
                   <h3 className="text-base font-medium text-slate-900">
                     <Link href={`/dashboard/monitoring/alerts/${alert.id}`} className="hover:underline hover:text-indigo-600">
-                      {alert.title || alert.ruleKey}
+                      {alert.title}
                     </Link>
                   </h3>
                   {alert.description && <p className="text-sm text-slate-600 mt-1 line-clamp-2">{alert.description}</p>}
@@ -237,8 +245,8 @@ export default function SecurityMonitoringPage() {
                   </div>
                   <div>
                     <h3 className="font-medium text-slate-900">Evaluation Run</h3>
-                    <p className="text-sm text-slate-500">Started: {new Date(run.startedAt || run.createdAt).toLocaleString()}</p>
-                    {run.errorDetails && <p className="text-xs text-red-500 mt-1">Evaluation did not complete.</p>}
+                    <p className="text-sm text-slate-500">Started: {new Date(run.startedAt).toLocaleString()}</p>
+                    {run.errorCode && <p className="text-xs text-red-500 mt-1">Evaluation did not complete.</p>}
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -285,7 +293,7 @@ export default function SecurityMonitoringPage() {
 
       {readError ? (
         <ErrorState
-          title={readError.kind === "FORBIDDEN" ? "Permission required" : "Monitoring unavailable"}
+          title={readError.kind === "FORBIDDEN" ? "Permission required" : readError.kind === "CONTRACT_INVALID" ? "Invalid service response" : "Monitoring unavailable"}
           message={readError.safeMessage}
           correlationId={readError.correlationId}
           onRetry={readError.retryableRead ? loadData : undefined}

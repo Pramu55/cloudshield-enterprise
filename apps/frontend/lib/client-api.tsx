@@ -25,12 +25,21 @@ type ClientDataState<T> = {
   refetch: () => void;
 };
 
-type ClientRequestOptions = {
+export interface ResponseSchema<T> {
+  safeParse(value: unknown): { success: true; data: T } | { success: false };
+}
+
+type ClientRequestOptions<T = unknown> = {
   method?: string;
   body?: unknown;
   signal?: AbortSignal;
   timeoutMs?: number;
   handleSessionExpired?: boolean;
+  schema?: ResponseSchema<T>;
+};
+
+type ClientDataOptions<T> = {
+  schema?: ResponseSchema<T>;
 };
 
 let cachedCsrfToken: string | null = null;
@@ -154,7 +163,7 @@ async function readSafeErrorPayload(response: Response): Promise<{ correlationId
   }
 }
 
-export async function fetchCloudShieldClient<T>(path: string, options: ClientRequestOptions = {}): Promise<T> {
+export async function fetchCloudShieldClient<T>(path: string, options: ClientRequestOptions<T> = {}): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
   const isMutation = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
   if (options.signal?.aborted) {
@@ -200,17 +209,34 @@ export async function fetchCloudShieldClient<T>(path: string, options: ClientReq
     }
     const body = await response.text();
     if (!body.trim()) return undefined as T;
+    let payload: unknown;
     try {
-      return JSON.parse(body) as T;
+      payload = JSON.parse(body);
     } catch {
       throw new ApiRequestError({
-        kind: "UNKNOWN",
+        kind: options.schema ? "CONTRACT_INVALID" : "UNKNOWN",
         status: response.status,
-        safeMessage: "CloudShield received an invalid service response.",
+        safeMessage: options.schema
+          ? "CloudShield received a response that did not match the expected contract."
+          : "CloudShield received an invalid service response.",
+        correlationId: normalizeCorrelationId(response.headers.get("x-correlation-id")),
         retryableRead: !isMutation,
         sessionExpired: false
       });
     }
+    if (!options.schema) return payload as T;
+    const validation = options.schema.safeParse(payload);
+    if (!validation.success) {
+      throw new ApiRequestError({
+        kind: "CONTRACT_INVALID",
+        status: response.status,
+        safeMessage: "CloudShield received a response that did not match the expected contract.",
+        correlationId: normalizeCorrelationId(response.headers.get("x-correlation-id")),
+        retryableRead: !isMutation,
+        sessionExpired: false
+      });
+    }
+    return validation.data;
   } catch (error) {
     if (error instanceof ApiRequestError) throw error;
     throw new ApiRequestError(classifyRequestFailure(error, request.didTimeOut(), method));
@@ -220,7 +246,7 @@ export async function fetchCloudShieldClient<T>(path: string, options: ClientReq
   }
 }
 
-export function useCloudShieldData<T>(path: string, instantData: T): ClientDataState<T> {
+export function useCloudShieldData<T>(path: string, instantData: T, options: ClientDataOptions<T> = {}): ClientDataState<T> {
   const [data, setData] = useState(instantData);
   const [error, setError] = useState<ApiError | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(true);
@@ -232,7 +258,7 @@ export function useCloudShieldData<T>(path: string, instantData: T): ClientDataS
     let isActive = true;
     setIsRefreshing(true);
 
-    fetchCloudShieldClient<T>(path, { signal: controller.signal })
+    fetchCloudShieldClient<T>(path, { signal: controller.signal, schema: options.schema })
       .then((payload) => {
         if (isActive) {
           setData(payload);
@@ -253,7 +279,7 @@ export function useCloudShieldData<T>(path: string, instantData: T): ClientDataS
       isActive = false;
       controller.abort();
     };
-  }, [path, fetchCounter]);
+  }, [path, fetchCounter, options.schema]);
 
   useEffect(() => {
     const handleRefetch = (event: Event) => {
@@ -276,7 +302,7 @@ export function RefreshBadge({ isRefreshing, error, onRetry }: { isRefreshing: b
     return (
       <div className="mb-4">
         <ErrorState
-          title={apiError?.kind === "FORBIDDEN" ? "Permission required" : "Data unavailable"}
+          title={apiError?.kind === "FORBIDDEN" ? "Permission required" : apiError?.kind === "CONTRACT_INVALID" ? "Invalid service response" : "Data unavailable"}
           message={typeof error === "string" ? error : error.safeMessage}
           correlationId={apiError?.correlationId}
           onRetry={apiError?.retryableRead ? onRetry : undefined}

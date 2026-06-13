@@ -95,6 +95,16 @@ Mutations fail closed when CSRF cannot be established. CSRF retrieval has its ow
 
 Successful empty API responses return `undefined`. Components and callers must not assume every successful mutation or read has a JSON body. HTTP 204/205, declared zero-length bodies, and blank successful bodies are valid completion states.
 
+## Runtime response contracts
+
+Generic TypeScript parameters describe expected data but do not validate network data. `fetchCloudShieldClient` accepts an optional structural Zod schema. Non-empty success bodies are parsed as `unknown`, validated with `safeParse`, and only parsed output may enter React state. Unmigrated routes may omit a schema temporarily. Empty 204/205 responses remain `undefined` and do not run body validation.
+
+Contract failure uses kind `CONTRACT_INVALID`, title `Invalid service response`, and the fixed safe message. It never contains Zod issues, paths, internal field names, raw JSON, provider errors, stacks, credentials, or tokens. It does not clear session state or redirect. A valid UUID correlation header is retained. Explicit retry is allowed only for reads; mutations are never retried.
+
+Frontend safety schemas refine authoritative contracts without coercion. Counts are finite non-negative integers where they represent totals. Timestamps must be existing ISO datetime values or explicitly nullable. Unknown health, account, automation, mutation-outcome, and reconciliation enums fail validation; they never become healthy, connected, approved-as-succeeded, or succeeded. Malformed data never becomes zero, current time, sample data, or a fallback success state.
+
+Selected response source schemas use Zod object stripping for unknown properties, and the frontend additionally returns explicit allowlisted projections for command center, monitoring health, alerts, runs, automation latest, and AWS account list/mutation results. Monitoring projections remove mapped evidence and raw error-summary objects before state. The automation latest endpoint lacks an authoritative response schema, so its frontend-only projection is intentionally narrow: identifiers use the authoritative ID schema, event descriptors are bounded non-control strings, and messages reject provider-error, stack, credential, and authorization-shaped content. AWS list and mutation schemas share item-level validation without creating synthetic list metadata. Governed evidence is not yet rendered; any future consumer must project the authoritative schema into an allowlisted view model and must never treat `providerRequestId` as a correlation ID.
+
 Read retry is explicit and keyboard accessible, and is offered only for network, timeout, 503, and unknown read failures. There are no hidden retries. Mutations are never automatically retried, including governed operations, conflicts, and unknown outcomes.
 
 ## Sample-data honesty
@@ -116,11 +126,11 @@ Semantic tokens change under `prefers-color-scheme: dark`; components consume to
 
 ## Roadmap
 
-1. Contract-parsed data boundary.
-2. Permission, disabled-mode, stale, and production-restriction panels.
+1. Permission, disabled-mode, stale, and production-restriction panels.
+2. Remaining route contract migration and alert-detail evidence projection.
 3. Dialog, popover/menu, table, field, button, and notice primitives.
 4. Legacy status migration.
 5. Route loading/error/not-found adoption.
 6. Accessible responsive graph/table patterns.
 7. Full light/dark token migration and removal of legacy decorative gradients.
-8. Component tests after the repository adopts a frontend test runner.
+8. Component and contract tests after the repository adopts a frontend test runner.
