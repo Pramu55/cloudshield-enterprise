@@ -77,8 +77,9 @@ function RegisterForm() {
       }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || "Server unavailable. Please try again.");
+        setError(response.status === 422
+          ? "The registration details could not be validated. Review them and try again."
+          : "Server unavailable. Please try again.");
         return;
       }
 

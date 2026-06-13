@@ -83,6 +83,20 @@ Disabled mode explains which capability is disabled and what remains safe/read-o
 Permission state explains the missing role/capability without exposing controls that will predictably fail.
 Production restriction is a backend-provided fact. It cannot be inferred from account names, IDs, regions, or environment labels.
 
+## API error presentation
+
+The safe API error model lives in `apps/frontend/lib/api-error.ts`. UI code consumes fixed messages and validated metadata only. Mapping is: 401 unauthenticated/session expired; 403 forbidden; 409 conflict; 422 validation; 429 rate limited; 500/503 unavailable; transport failure network; internal timeout timeout; caller abort cancelled; all other failures unknown.
+
+Correlation IDs are accepted only as UUID values from `x-correlation-id` or the existing JSON `correlationId` field. Invalid values are omitted. `Retry-After` accepts bounded integer seconds or an HTTP date and is capped at one hour.
+
+Session expiry is announced and redirects once to login with only a validated dashboard pathname. The client clears in-memory CSRF and stale presentation state; it cannot read or directly delete the HTTP-only session cookie. Forbidden, conflict, rate-limit, server, timeout, and network outcomes never log the user out.
+
+Mutations fail closed when CSRF cannot be established. CSRF retrieval has its own bounded timeout and caller cancellation, does not share an abortable promise across unrelated callers, validates the token before use, and never permits a mutation request without the header. Missing or malformed tokens use a safe unknown security-session message rather than forbidden semantics.
+
+Successful empty API responses return `undefined`. Components and callers must not assume every successful mutation or read has a JSON body. HTTP 204/205, declared zero-length bodies, and blank successful bodies are valid completion states.
+
+Read retry is explicit and keyboard accessible, and is offered only for network, timeout, 503, and unknown read failures. There are no hidden retries. Mutations are never automatically retried, including governed operations, conflicts, and unknown outcomes.
+
 ## Sample-data honesty
 
 Sample/demo records may render only when the response explicitly marks them as sample data. Label the containing surface and each ambiguous source. Never merge sample and real totals without separate counts. Empty operational surfaces must stay empty; marketing previews remain outside authenticated application data.
@@ -102,12 +116,11 @@ Semantic tokens change under `prefers-color-scheme: dark`; components consume to
 
 ## Roadmap
 
-1. API error/session state adapter and correlation-ID presentation.
-2. Contract-parsed data boundary.
-3. Permission, disabled-mode, stale, and production-restriction panels.
-4. Dialog, popover/menu, table, field, button, and notice primitives.
-5. Legacy status migration.
-6. Route loading/error/not-found adoption.
-7. Accessible responsive graph/table patterns.
-8. Full light/dark token migration and removal of legacy decorative gradients.
-9. Component tests after the repository adopts a frontend test runner.
+1. Contract-parsed data boundary.
+2. Permission, disabled-mode, stale, and production-restriction panels.
+3. Dialog, popover/menu, table, field, button, and notice primitives.
+4. Legacy status migration.
+5. Route loading/error/not-found adoption.
+6. Accessible responsive graph/table patterns.
+7. Full light/dark token migration and removal of legacy decorative gradients.
+8. Component tests after the repository adopts a frontend test runner.

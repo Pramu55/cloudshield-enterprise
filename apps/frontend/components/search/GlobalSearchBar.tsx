@@ -168,8 +168,7 @@ export function GlobalSearchBar() {
         if (err.name === "AbortError") {
           return;
         }
-        setError(err.message || "Failed to search");
-        console.error("Search API Error:", err);
+        setError(err instanceof Error ? err.message : "Search is temporarily unavailable.");
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);

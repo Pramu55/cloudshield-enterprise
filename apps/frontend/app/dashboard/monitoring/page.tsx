@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { fetchCloudShieldClient } from "../../../lib/client-api";
 import { RefreshCcw, ShieldAlert, CheckCircle, Activity, AlertTriangle, List, History, CheckCircle2, ServerCrash, Clock, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { ErrorState } from "../../../components/ui/error-state";
+import { LoadingState } from "../../../components/ui/loading-state";
+import { toApiError, type ApiError } from "../../../lib/api-error";
 
 export default function SecurityMonitoringPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "alerts" | "runs">("overview");
@@ -11,9 +14,12 @@ export default function SecurityMonitoringPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [readError, setReadError] = useState<ApiError | null>(null);
+  const [actionError, setActionError] = useState<ApiError | null>(null);
 
   const loadData = async () => {
     setLoading(true);
+    setReadError(null);
     try {
       if (activeTab === "overview") {
         const h = await fetchCloudShieldClient<any>("/api/v1/security-monitoring/health");
@@ -26,7 +32,8 @@ export default function SecurityMonitoringPage() {
         setRuns(r.items || []);
       }
     } catch (error) {
-      console.error(error);
+      const normalized = toApiError(error);
+      if (normalized.kind !== "CANCELLED") setReadError(normalized);
     } finally {
       setLoading(false);
     }
@@ -37,23 +44,37 @@ export default function SecurityMonitoringPage() {
   }, [activeTab]);
 
   const handleEvaluate = async () => {
-    await fetchCloudShieldClient("/api/v1/security-monitoring/evaluate", { method: "POST", body: { trigger: "MANUAL" } });
-    alert("Evaluation queued.");
-    setTimeout(loadData, 2000);
+    setActionError(null);
+    try {
+      await fetchCloudShieldClient("/api/v1/security-monitoring/evaluate", { method: "POST", body: { trigger: "MANUAL" } });
+      await loadData();
+    } catch (error) {
+      setActionError(toApiError(error));
+    }
   };
 
   const handleAcknowledge = async (id: string) => {
-    await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/${id}/acknowledge`, { method: "PATCH", body: { note: "Acknowledged via UI" } });
-    loadData();
+    setActionError(null);
+    try {
+      await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/${id}/acknowledge`, { method: "PATCH", body: { note: "Acknowledged via UI" } });
+      await loadData();
+    } catch (error) {
+      setActionError(toApiError(error));
+    }
   };
 
   const handleResolve = async (id: string) => {
-    await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/${id}/resolve`, { method: "PATCH", body: { reason: "Resolved via UI" } });
-    loadData();
+    setActionError(null);
+    try {
+      await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/${id}/resolve`, { method: "PATCH", body: { reason: "Resolved via UI" } });
+      await loadData();
+    } catch (error) {
+      setActionError(toApiError(error));
+    }
   };
 
   const renderOverview = () => {
-    if (loading && !health) return <div className="p-8 text-center text-slate-500">Loading overview...</div>;
+    if (loading && !health) return <LoadingState message="Loading monitoring overview..." />;
     if (!health) return null;
 
     const getHealthIcon = (status: string) => {
@@ -135,6 +156,7 @@ export default function SecurityMonitoringPage() {
           </div>
         </div>
       </div>
+
     );
   };
 
@@ -216,7 +238,7 @@ export default function SecurityMonitoringPage() {
                   <div>
                     <h3 className="font-medium text-slate-900">Evaluation Run</h3>
                     <p className="text-sm text-slate-500">Started: {new Date(run.startedAt || run.createdAt).toLocaleString()}</p>
-                    {run.errorDetails && <p className="text-xs text-red-500 mt-1">{run.errorDetails}</p>}
+                    {run.errorDetails && <p className="text-xs text-red-500 mt-1">Evaluation did not complete.</p>}
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -261,6 +283,18 @@ export default function SecurityMonitoringPage() {
         </div>
       </div>
 
+      {readError ? (
+        <ErrorState
+          title={readError.kind === "FORBIDDEN" ? "Permission required" : "Monitoring unavailable"}
+          message={readError.safeMessage}
+          correlationId={readError.correlationId}
+          onRetry={readError.retryableRead ? loadData : undefined}
+        />
+      ) : null}
+      {actionError ? (
+        <ErrorState title="Action not completed" message={actionError.safeMessage} correlationId={actionError.correlationId} />
+      ) : null}
+
       <div className="border-b border-slate-200">
         <nav className="-mb-px flex space-x-8">
           <button
@@ -302,9 +336,9 @@ export default function SecurityMonitoringPage() {
       </div>
 
       <div className="pt-2">
-        {activeTab === "overview" && renderOverview()}
-        {activeTab === "alerts" && renderAlerts()}
-        {activeTab === "runs" && renderRuns()}
+        {!readError && activeTab === "overview" && renderOverview()}
+        {!readError && activeTab === "alerts" && renderAlerts()}
+        {!readError && activeTab === "runs" && renderRuns()}
       </div>
     </div>
   );
