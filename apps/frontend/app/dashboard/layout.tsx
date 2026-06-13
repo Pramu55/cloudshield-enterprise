@@ -159,6 +159,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="portal-shell" data-collapsed={collapsed}>
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <div className="portal-desktop-sidebar">{sidebar}</div>
       <div className="portal-main">
         <header className="portal-topbar">
@@ -257,7 +258,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ) : null}
           </div>
         </header>
-        <main className="portal-content">{children}</main>
+        <main className="portal-content" id="main-content" tabIndex={-1}>{children}</main>
       </div>
 
       {mobileOpen ? <div className="portal-mobile-backdrop" onClick={() => setMobileOpen(false)} /> : null}
