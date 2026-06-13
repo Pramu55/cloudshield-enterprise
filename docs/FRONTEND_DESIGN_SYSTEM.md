@@ -107,6 +107,20 @@ Selected response source schemas use Zod object stripping for unknown properties
 
 Read retry is explicit and keyboard accessible, and is offered only for network, timeout, 503, and unknown read failures. There are no hidden retries. Mutations are never automatically retried, including governed operations, conflicts, and unknown outcomes.
 
+## Action restrictions
+
+`ActionCapability` separates four restriction layers: permission, policy, environment, and runtime mode. Capability data defaults closed. A missing or unknown value never enables an action, and a role label alone is not permission authority. Backend authorization remains final for every request.
+
+`GuardedAction` renders an enabled button only for `allowed: true`. Disabled controls use `aria-disabled`, native `disabled`, and a unique visible `aria-describedby` explanation; restriction reasons are never tooltip-only. Environment-restricted mutation actions render a note instead of an executable button. `CapabilityNotice` uses `role="note"`, fixed safe copy, and existing semantic styling. Multiple actions use React `useId`, so description IDs remain unique.
+
+- Permission: keep the session active, explain that the current workspace capability does not allow the action, and never present session expiry.
+- Policy: keep the action visible and disabled when approval, maker-checker separation, payload binding, lifecycle, fresh state, or reconciliation is required.
+- Environment: render no executable production mutation control. State that production mutation is intentionally unavailable while read-only assessment, evidence, inventory, and audit remain available.
+- Runtime mode: state that mutation is globally disabled in this deployment while read-only capability remains available. Never suggest a browser-side override.
+- Unknown outcome/manual review: never show success, retry, or replay. Keep fixed operator guidance and read-only reconciliation evidence visible.
+
+Raw provider errors, arbitrary backend blocked-reason strings, credentials, stacks, and authorization data are not capability explanations. Recognized authoritative states map to fixed frontend text; unknown values fail closed as unavailable.
+
 ## Sample-data honesty
 
 Sample/demo records may render only when the response explicitly marks them as sample data. Label the containing surface and each ambiguous source. Never merge sample and real totals without separate counts. Empty operational surfaces must stay empty; marketing previews remain outside authenticated application data.

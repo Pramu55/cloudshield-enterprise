@@ -7,9 +7,13 @@ import {
   AwsConnectionStatusSchema,
   AwsStsValidationResponseSchema,
   CommandCenterResponseSchema,
+  CurrentUserResponseSchema,
+  GovernanceApprovalsResponseSchema,
   MonitoringHealthResponseSchema,
   MonitoringRunsListResponseSchema,
   OrganizationScopedIdSchema,
+  RemediationPlanDtoSchema,
+  RemediationPlanListResponseSchema,
   SecurityAlertsListResponseSchema
 } from "@cloudshield/contracts";
 import { z } from "zod";
@@ -32,6 +36,20 @@ const eventMessage = z.string()
   .max(1000)
   .refine((value) => !controlCharacters.test(value), "Event messages cannot contain control characters.")
   .refine((value) => !providerErrorContent.test(value), "Event messages cannot contain provider error details.");
+
+export const FrontendCapabilitySessionSchema = CurrentUserResponseSchema.extend({
+  capabilities: z.record(z.string().min(1).max(120), z.boolean()).optional()
+}).transform((data) => ({
+  user: {
+    id: data.user.id,
+    name: data.user.name,
+    email: data.user.email,
+    role: data.user.role,
+    organizationId: data.user.organizationId
+  },
+  organization: data.organization,
+  capabilities: data.capabilities
+}));
 
 function isNonNegativeInteger(value: number): boolean {
   return Number.isFinite(value) && Number.isInteger(value) && value >= 0;
@@ -285,8 +303,57 @@ export const FrontendAwsAccountMutationSchema = AwsAccountMutationResponseSchema
   message: data.message
 }));
 
+const safeOperatorGuidance = eventMessage;
+const FrontendRemediationPlanItemSchema = RemediationPlanDtoSchema.extend({ operatorGuidance: safeOperatorGuidance });
+
+export const FrontendRemediationPlanListSchema = RemediationPlanListResponseSchema.extend({
+  items: FrontendRemediationPlanItemSchema.array()
+}).transform((data) => ({
+  items: data.items.map((plan) => ({
+    id: plan.id,
+    title: plan.title,
+    approvalStatus: plan.approvalStatus,
+    executionStatus: plan.executionStatus,
+    executionMode: plan.executionMode,
+    lifecycleState: plan.lifecycleState,
+    approvalExpiresAt: plan.approvalExpiresAt,
+    mutationOutcome: plan.mutationOutcome,
+    reconciliationStatus: plan.reconciliationStatus,
+    reconciliationRequired: plan.reconciliationRequired,
+    operatorGuidance: plan.operatorGuidance,
+    createdById: plan.createdById,
+    updatedAt: plan.updatedAt
+  })),
+  awsApiCallExecuted: data.awsApiCallExecuted,
+  scannerRun: data.scannerRun,
+  mutationExecuted: data.mutationExecuted,
+  terraformApplyExecuted: data.terraformApplyExecuted,
+  automaticRemediationExecuted: data.automaticRemediationExecuted
+}));
+
+export const FrontendGovernanceApprovalsSchema = GovernanceApprovalsResponseSchema.transform((data) => ({
+  items: data.items.map((approval) => ({
+    id: approval.id,
+    remediationPlanId: approval.remediationPlanId,
+    remediationPlanTitle: approval.remediationPlanTitle,
+    requestedById: approval.requestedById,
+    status: approval.status,
+    payloadIntegrityBound: approval.payloadIntegrityBound,
+    expiresAt: approval.expiresAt,
+    createdAt: approval.createdAt
+  })),
+  awsApiCallExecuted: data.awsApiCallExecuted,
+  scannerRun: data.scannerRun,
+  mutationExecuted: data.mutationExecuted,
+  terraformApplyExecuted: data.terraformApplyExecuted,
+  automaticRemediationExecuted: data.automaticRemediationExecuted
+}));
+
 export type FrontendCommandCenterResponse = ReturnType<typeof FrontendCommandCenterResponseSchema.parse>;
 export type FrontendMonitoringHealth = ReturnType<typeof FrontendMonitoringHealthSchema.parse>;
 export type FrontendSecurityAlertsList = ReturnType<typeof FrontendSecurityAlertsListSchema.parse>;
 export type FrontendMonitoringRunsList = ReturnType<typeof FrontendMonitoringRunsListSchema.parse>;
 export type FrontendAutomationLatest = ReturnType<typeof FrontendAutomationLatestSchema.parse>;
+export type FrontendRemediationPlanList = ReturnType<typeof FrontendRemediationPlanListSchema.parse>;
+export type FrontendGovernanceApprovals = ReturnType<typeof FrontendGovernanceApprovalsSchema.parse>;
+export type FrontendCapabilitySession = ReturnType<typeof FrontendCapabilitySessionSchema.parse>;

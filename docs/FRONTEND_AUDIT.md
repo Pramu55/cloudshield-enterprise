@@ -110,6 +110,29 @@ Governed execution evidence is not currently consumed by a frontend call site, s
 
 Remaining unvalidated successful responses include auth/me and profile, invitations, notifications, search, connector status, inventory plan/sync/detail, account detail/validation, teams/members, inventory/resources and resource detail, findings, governance plans/approvals/activity, compliance, cost, recommendations, graph, scans, reports, platform settings, alert detail, and monitoring mutation responses. Routes retain current behavior until migrated; schema validation remains optional to avoid broad breakage in this milestone.
 
+### Permission and production guard update
+
+Frontend action availability now uses four distinct presentation layers: `PERMISSION` for an authenticated operator's explicit backend-reported capability, `POLICY` for lifecycle/approval/maker-checker/payload-binding/outcome/reconciliation prerequisites, `ENVIRONMENT` for production restrictions, and `RUNTIME_MODE` for deployment-wide execution disablement. These layers are not interchangeable. Production policy is not fixed by changing role or runtime mode, and runtime disablement is not presented as a production restriction.
+
+`apps/frontend/lib/action-capability.ts` is a pure, fail-closed presentation mapper. Missing permission capability data and unknown blocked reasons become `NOT_CONFIGURED`, never allowed. `APPROVED` alone is not executable. `OUTCOME_UNKNOWN`, `MANUAL_REVIEW_REQUIRED`, and pending reconciliation suppress retry/replay presentation and retain fixed safe guidance. Raw backend errors and arbitrary blocked-reason text are never rendered; only recognized states map to fixed frontend copy.
+
+| Surface | Endpoint/authority | Guard presentation |
+|---|---|---|
+| AWS accounts | account environment; connector execution eligibility; future explicit `capabilities` map | Privileged controls require an explicit capability boolean. Production records show that mutation is unavailable while read-only assessment/inventory remain visible. Disabled connector execution is a deployment restriction, not a permission failure. |
+| Governance plans | `/api/v1/remediation/plans`; approval/lifecycle/execution mode/outcome/reconciliation fields | Queue-execution presentation remains disabled until all authoritative prerequisites and permission capability are present. Unknown/manual-review/reconciliation states expose guidance without retry or replay. |
+| Approval requests | `/api/v1/governance/approvals`; requester, status, payload binding, expiry | Maker-checker, expired approval, missing payload binding, completed decision, and missing permission remain distinct. |
+| Automation | `/api/v1/automation/latest` safety flags | Safety flags prove that no mutation occurred, but do not report deployment capability. Mutation automation therefore fails closed as unavailable while advisory run history remains readable. |
+
+Governance list projections retain only fields required for restriction presentation. Requested/normalized payloads, provider evidence and request IDs, execution evidence, raw manual-review reasons, and raw blocked-reason strings do not enter React state.
+
+Frontend guards are UX explanations only. Backend `requirePermission` checks, lifecycle transitions, payload binding, maker-checker enforcement, environment policy, and execution-mode gates remain authoritative. Hidden or disabled controls are not security boundaries; direct endpoint calls must still be rejected by the backend.
+
+Backend contract gap: `/api/v1/auth/me` currently returns `role: "OWNER"` unconditionally while authorization uses membership-derived `auth.role`, and it exposes no authoritative capability map. The frontend therefore does not derive permission from role. Privileged controls fail closed until a future backend response supplies explicit action capabilities. Recommended next branch: `feat/frontend-authoritative-capabilities-contract`, adding a backend-computed capability field to the existing authenticated-user DTO rather than a parallel frontend policy engine.
+
+Governance remediation plans also do not expose an authoritative target account/environment field. Execution capability therefore remains fail-closed even when approval and lifecycle fields appear ready; `executionMode: "production"` is treated only as deployment mode and never as evidence that the target environment is production. A future contract should expose the target environment explicitly.
+
+Remaining unguarded actions include profile/member administration, monitoring alert mutations, report generation, scan requests outside the account workflow, settings mutations, and untyped recommendation/finding workflows. They should migrate only after authoritative capability fields and narrow response projections exist.
+
 ## Hardcoded, demo, and misleading findings
 
 | Classification | Finding |
