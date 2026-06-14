@@ -4,11 +4,17 @@ import {
   FrontendAutomationLatestSchema,
   FrontendAwsAccountListSchema,
   FrontendAwsAccountMutationSchema,
+  FrontendAwsAccountDetailSchema,
+  FrontendAwsIdentityValidationSchema,
+  FrontendComplianceEvidenceCenterSchema,
   FrontendCapabilitySessionSchema,
   FrontendCommandCenterResponseSchema,
+  FrontendGovernanceActivitySchema,
+  FrontendGovernanceApprovalsSchema,
   FrontendMonitoringHealthSchema,
   FrontendMonitoringRunsListSchema,
   FrontendSecurityAlertsListSchema
+  , FrontendRemediationPlanListSchema
 } from "../lib/response-contracts.ts";
 
 const timestamp = "2026-06-13T12:00:00.000Z";
@@ -285,6 +291,7 @@ const capabilitySession = FrontendCapabilitySessionSchema.parse({
 });
 assertUnsafeFieldsRemoved(capabilitySession, "capability session");
 assert.equal(capabilitySession.capabilities?.["accounts.manage"], false);
+assert.deepEqual(Object.keys(capabilitySession.organization).sort(), ["id", "name", "slug"]);
 assert.equal(FrontendCapabilitySessionSchema.safeParse({
   user: { id: "user-1", email: "operator@example.com", name: "Operator", role: "OWNER", organizationId: "org-1" },
   organization: { id: "org-1", name: "CloudShield", slug: "cloudshield" },
@@ -317,5 +324,224 @@ assert.equal(FrontendAwsAccountMutationSchema.safeParse({ item: { ...account, se
 assert.equal(FrontendAwsAccountMutationSchema.safeParse({ item: { ...account, createdAt: "not-a-timestamp" }, message: "Account updated." }).success, false);
 assert.equal(FrontendAwsAccountMutationSchema.safeParse({ item: { ...account, status: "UNKNOWN" }, message: "Account updated." }).success, false);
 assert.equal(FrontendAwsAccountMutationSchema.safeParse({ item: { ...account, accountId: "123" }, message: "Account updated." }).success, false);
+
+const safetyFlags = {
+  awsApiCallExecuted: false,
+  scannerRun: false,
+  mutationExecuted: false,
+  terraformApplyExecuted: false,
+  automaticRemediationExecuted: false
+};
+const activityEvent = {
+  id: "audit-1",
+  action: "governance.approval.requested",
+  targetType: "REMEDIATION_PLAN",
+  targetId: "plan-1",
+  actorUserId: "user-1",
+  metadata: { ...unsafeFields, internal: { providerError: "hidden" } },
+  createdAt: timestamp,
+  ...unsafeFields
+};
+const parsedActivity = FrontendGovernanceActivitySchema.parse({ items: [activityEvent], message: "Activity loaded.", ...safetyFlags, ...unsafeFields });
+assertUnsafeFieldsRemoved(parsedActivity, "governance activity");
+assert.equal("metadata" in parsedActivity.items[0], false);
+assert.equal(FrontendGovernanceActivitySchema.safeParse({ items: [{ ...activityEvent, id: "" }], message: "Activity loaded.", ...safetyFlags }).success, false);
+assert.equal(FrontendGovernanceActivitySchema.safeParse({ items: [{ ...activityEvent, action: "UNKNOWN\u0000ACTION" }], message: "Activity loaded.", ...safetyFlags }).success, false);
+assert.equal(FrontendGovernanceActivitySchema.safeParse({ items: [{ ...activityEvent, createdAt: "yesterday" }], message: "Activity loaded.", ...safetyFlags }).success, false);
+
+const complianceControl = {
+  id: "control-record-1",
+  organizationId: "org-1",
+  controlId: "control-1",
+  framework: "CIS_INSPIRED",
+  controlCode: "1.1",
+  controlTitle: "Inventory resources",
+  controlDescription: "Inventory resources.",
+  controlObjective: "Maintain inventory.",
+  category: "Inventory",
+  severity: "HIGH",
+  group: "Asset management",
+  title: "Inventory resources",
+  description: "Inventory resources.",
+  status: "PASS",
+  evidenceCount: 1,
+  findingCount: 0,
+  failedResources: 0,
+  ownerTeamId: null,
+  ownerTeamName: null,
+  lastScanAt: timestamp,
+  lastEvaluatedAt: timestamp,
+  sampleData: false,
+  ...unsafeFields
+};
+const complianceEvidence = {
+  id: "evidence-1",
+  organizationId: "org-1",
+  controlId: "control-1",
+  controlCode: "1.1",
+  resourceId: "resource-1",
+  resourceName: "instance-1",
+  resourceType: "EC2_INSTANCE",
+  status: "PASS",
+  evidenceType: "INVENTORY_RECORD",
+  source: "CloudShield",
+  sourceType: "DATABASE",
+  sourceId: "resource-1",
+  summary: "Resource inventory record was evaluated.",
+  evidenceJson: { ...unsafeFields, nested: { rawResponse: "hidden" } },
+  sampleData: false,
+  confidence: "HIGH",
+  notes: null,
+  collectedAt: timestamp,
+  createdAt: timestamp,
+  ...unsafeFields
+};
+const complianceResponse = {
+  summary: { totalControls: 1, pass: 1, fail: 0, warning: 0, needsReview: 0, evidenceItems: 1, linkedFindings: 0, riskAccepted: 0, lastEvaluatedAt: timestamp, futureInternalCount: 99 },
+  controls: [complianceControl],
+  evidence: [complianceEvidence],
+  sampleData: false,
+  sampleDataLabel: "Live data",
+  officialCertificationClaim: false,
+  awsApiCallExecuted: false,
+  mutationExecuted: false,
+  remediationExecuted: false,
+  generatedFromCloudShieldRecordsOnly: true,
+  message: "Evidence loaded.",
+  ...unsafeFields
+};
+const parsedCompliance = FrontendComplianceEvidenceCenterSchema.parse(complianceResponse);
+assertUnsafeFieldsRemoved(parsedCompliance, "compliance evidence center");
+assert.equal("evidenceJson" in parsedCompliance.evidence[0], false);
+assert.equal("organizationId" in parsedCompliance.evidence[0], false);
+assert.equal(parsedCompliance.controls[0].evidenceCount, 1);
+assert.equal("futureInternalCount" in parsedCompliance.summary, false);
+assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, summary: { ...complianceResponse.summary, totalControls: -1 } }).success, false);
+assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, controls: [{ ...complianceControl, evidenceCount: 1.5 }] }).success, false);
+assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, controls: [{ ...complianceControl, lastEvaluatedAt: "invalid" }] }).success, false);
+assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, controls: [{ ...complianceControl, sampleData: "false" }] }).success, false);
+assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, evidence: [{ ...complianceEvidence, status: "UNKNOWN" }] }).success, false);
+assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, evidence: [{ ...complianceEvidence, summary: "providerError: raw failure" }] }).success, false);
+
+const parsedAccountDetail = FrontendAwsAccountDetailSchema.parse({ item: { ...account, ...unsafeFields }, ...unsafeFields });
+assertUnsafeFieldsRemoved(parsedAccountDetail, "AWS account detail");
+assert.equal(parsedAccountDetail.item.accountId, account.accountId);
+
+const plan = {
+  id: "plan-1",
+  organizationId: "org-1",
+  findingId: "finding-1",
+  resourceId: "resource-1",
+  title: "Apply governance tags",
+  summary: "Apply approved governance tags.",
+  riskLevel: "MEDIUM",
+  actionType: "TAGGING_GOVERNANCE",
+  implementationMode: "MANUAL",
+  recommendedSteps: ["Review the proposed tags."],
+  rollbackPlan: ["Remove the applied tags."],
+  approvalChecklist: ["Verify the target resource."],
+  riskImpactSummary: null,
+  awsCliReview: null,
+  terraformPatch: null,
+  approvalStatus: "APPROVED",
+  executionStatus: "READY_FOR_EXECUTION",
+  executionMode: "staging",
+  lifecycleState: "APPROVED",
+  approvalExpiresAt: "2027-06-13T12:00:00.000Z",
+  mutationOutcome: "OUTCOME_UNKNOWN",
+  reconciliationStatus: "PENDING",
+  reconciliationRequired: true,
+  operatorGuidance: "Review read-only reconciliation evidence.",
+  createdById: "user-1",
+  createdByEmail: "operator@example.com",
+  approvedById: "user-2",
+  approvedByEmail: "approver@example.com",
+  findingTitle: "Missing governance tags",
+  findingSeverity: "MEDIUM",
+  resourceName: "instance-1",
+  resourceType: "EC2_INSTANCE",
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  executionEvidence: { ...unsafeFields },
+  ...unsafeFields
+};
+const planResponse = { items: [plan], message: "Plans loaded.", ...safetyFlags, ...unsafeFields };
+const parsedPlans = FrontendRemediationPlanListSchema.parse(planResponse);
+assert.equal(parsedPlans.items[0].mutationOutcome, "OUTCOME_UNKNOWN");
+assert.equal("allowed" in parsedPlans.items[0], false);
+assert.equal("executable" in parsedPlans.items[0], false);
+assert.equal(parsedPlans.items[0].approvalStatus, "APPROVED");
+assertUnsafeFieldsRemoved(parsedPlans, "remediation plan list");
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, id: "" }] }).success, false);
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, approvalStatus: "UNKNOWN" }] }).success, false);
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, executionStatus: "UNKNOWN" }] }).success, false);
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, lifecycleState: "UNKNOWN" }] }).success, false);
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, mutationOutcome: "UNKNOWN" }] }).success, false);
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, reconciliationStatus: "UNKNOWN" }] }).success, false);
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, approvalExpiresAt: "tomorrow" }] }).success, false);
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, updatedAt: "tomorrow" }] }).success, false);
+assert.equal(FrontendRemediationPlanListSchema.safeParse({ ...planResponse, items: [{ ...plan, operatorGuidance: "providerError: raw failure" }] }).success, false);
+const manualReviewPlans = FrontendRemediationPlanListSchema.parse({ ...planResponse, items: [{ ...plan, mutationOutcome: "MANUAL_REVIEW_REQUIRED", reconciliationStatus: "MANUAL_REVIEW_REQUIRED" }] });
+assert.equal(manualReviewPlans.items[0].mutationOutcome, "MANUAL_REVIEW_REQUIRED");
+
+const approval = {
+  id: "approval-1",
+  organizationId: "org-1",
+  remediationPlanId: "plan-1",
+  remediationPlanTitle: "Apply governance tags",
+  requestedById: "user-1",
+  requestedByEmail: "operator@example.com",
+  approvedById: "user-2",
+  approvedByEmail: "approver@example.com",
+  status: "APPROVED",
+  decisionReason: "Reviewed.",
+  expectedImpact: "Tags will be applied.",
+  confirmationToken: null,
+  payloadIntegrityBound: true,
+  expiresAt: "2027-06-13T12:00:00.000Z",
+  createdAt: timestamp,
+  decidedAt: timestamp,
+  evidenceSnapshot: { ...unsafeFields },
+  ...unsafeFields
+};
+const approvalResponse = { items: [approval], message: "Approvals loaded.", ...safetyFlags, ...unsafeFields };
+const parsedApprovals = FrontendGovernanceApprovalsSchema.parse(approvalResponse);
+assert.equal(parsedApprovals.items[0].status, "APPROVED");
+assert.equal(parsedApprovals.items[0].payloadIntegrityBound, true);
+assert.equal("executable" in parsedApprovals.items[0], false);
+assert.equal("executionAuthority" in parsedApprovals.items[0], false);
+assertUnsafeFieldsRemoved(parsedApprovals, "governance approvals");
+assert.equal(FrontendGovernanceApprovalsSchema.safeParse({ ...approvalResponse, items: [{ ...approval, id: "" }] }).success, false);
+assert.equal(FrontendGovernanceApprovalsSchema.safeParse({ ...approvalResponse, items: [{ ...approval, remediationPlanId: "" }] }).success, false);
+assert.equal(FrontendGovernanceApprovalsSchema.safeParse({ ...approvalResponse, items: [{ ...approval, requestedById: "" }] }).success, false);
+assert.equal(FrontendGovernanceApprovalsSchema.safeParse({ ...approvalResponse, items: [{ ...approval, status: "UNKNOWN" }] }).success, false);
+assert.equal(FrontendGovernanceApprovalsSchema.safeParse({ ...approvalResponse, items: [{ ...approval, expiresAt: "tomorrow" }] }).success, false);
+assert.equal(FrontendGovernanceApprovalsSchema.safeParse({ ...approvalResponse, items: [{ ...approval, createdAt: "tomorrow" }] }).success, false);
+assert.equal(FrontendGovernanceApprovalsSchema.safeParse({ ...approvalResponse, items: [{ ...approval, payloadIntegrityBound: "true" }] }).success, false);
+
+const identityValidation = {
+  status: "VALIDATION_SUCCEEDED",
+  message: "AWS identity matched the registered account.",
+  accountIdMatched: true,
+  registeredAccountId: "123456789012",
+  validatedAccountId: "123456789012",
+  principalArnMasked: "arn:aws:iam::1234********:role/CloudShield",
+  awsApiCallExecuted: true,
+  allowedAwsCall: "sts:GetCallerIdentity",
+  mutationExecuted: false,
+  terraformApplyExecuted: false,
+  automaticRemediationExecuted: false,
+  scannerRun: false,
+  credentialStorageMode: "environment-only",
+  ...unsafeFields
+};
+const parsedIdentity = FrontendAwsIdentityValidationSchema.parse(identityValidation);
+assert.equal(parsedIdentity.principalArnMasked, identityValidation.principalArnMasked);
+assert.equal(parsedIdentity.message, identityValidation.message);
+assertUnsafeFieldsRemoved(parsedIdentity, "AWS identity validation");
+assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidation, status: "UNKNOWN" }).success, false);
+assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidation, validatedAccountId: "123" }).success, false);
+assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidation, mutationExecuted: "false" }).success, false);
+assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidation, message: "SecretAccessKey leaked" }).success, false);
 
 console.log("Frontend response-contract assertions passed.");

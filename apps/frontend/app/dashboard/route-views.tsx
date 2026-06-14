@@ -32,11 +32,15 @@ import {
   FrontendCapabilitySessionSchema,
   FrontendCommandCenterResponseSchema,
   FrontendGovernanceApprovalsSchema,
+  FrontendGovernanceActivitySchema,
+  FrontendComplianceEvidenceCenterSchema,
   FrontendMonitoringHealthSchema,
   FrontendRemediationPlanListSchema,
   type FrontendAutomationLatest,
   type FrontendCapabilitySession,
   type FrontendGovernanceApprovals,
+  type FrontendGovernanceActivity,
+  type FrontendComplianceEvidenceCenter,
   type FrontendRemediationPlanList,
   type FrontendMonitoringHealth
 } from "../../lib/response-contracts";
@@ -107,7 +111,13 @@ function text(value: any, fallback = "None") {
   return String(value);
 }
 
-function sourceFor(item: AnyRecord, parent?: AnyRecord) {
+type SourceDescriptor = {
+  dataSource?: string | null;
+  source?: string | null;
+  sampleData?: boolean;
+};
+
+function sourceFor(item: SourceDescriptor, parent?: SourceDescriptor | null) {
   return item.dataSource ?? item.source ?? parent?.dataSource ?? parent?.source ?? null;
 }
 
@@ -415,7 +425,7 @@ export function InventoryView() {
             <span key="account" className="font-mono text-xs">{text(resource.awsAccountId)}</span>,
             text(resource.region),
             <StatusBadge key="status" status={resource.status} />,
-            <SourceBadge key="source" source={sourceFor(resource as any, data as any)} />
+            <SourceBadge key="source" source={sourceFor(resource, data)} />
           ])}
         />
       </Section>
@@ -525,7 +535,7 @@ function GovernancePlanAction({ capability, guidance }: { capability: ReturnType
 export function GovernanceView() {
   const plans = useCloudShieldData<FrontendRemediationPlanList | null>("/api/v1/remediation/plans", null, { schema: FrontendRemediationPlanListSchema });
   const approvals = useCloudShieldData<FrontendGovernanceApprovals | null>("/api/v1/governance/approvals", null, { schema: FrontendGovernanceApprovalsSchema });
-  const activity = useCloudShieldData<AnyRecord>("/api/v1/governance/activity", { events: [] });
+  const activity = useCloudShieldData<FrontendGovernanceActivity | null>("/api/v1/governance/activity", null, { schema: FrontendGovernanceActivitySchema });
   const session = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
   const planRows = plans.data?.items ?? [];
   const approvalRows = approvals.data?.items ?? [];
@@ -585,11 +595,10 @@ export function GovernanceView() {
         </Section>
         <Section title="Governance activity">
           <Timeline
-            events={pickArray(activity.data, ["events", "activity", "items"]).slice(0, 8).map((event: AnyRecord) => ({
-              title: text(event.action ?? event.title ?? event.type, "Governance event"),
-              description: text(event.description ?? event.summary, ""),
-              time: event.createdAt ?? event.timestamp,
-              status: event.status
+            events={(activity.data?.items ?? []).slice(0, 8).map((event) => ({
+              title: event.action,
+              description: event.targetType,
+              time: event.createdAt
             }))}
           />
         </Section>
@@ -631,30 +640,8 @@ export function AutomationView() {
 }
 
 export function ComplianceView() {
-  const { data, error, isRefreshing } = useCloudShieldData<ComplianceEvidenceCenterResponse>("/api/v1/compliance/evidence-center", {
-    controls: [],
-    evidence: [],
-    summary: {
-      totalControls: 0,
-      pass: 0,
-      fail: 0,
-      warning: 0,
-      needsReview: 0,
-      evidenceItems: 0,
-      linkedFindings: 0,
-      riskAccepted: 0,
-      lastEvaluatedAt: null
-    },
-    sampleData: false,
-    sampleDataLabel: "",
-    officialCertificationClaim: false,
-    awsApiCallExecuted: false,
-    mutationExecuted: false,
-    remediationExecuted: false,
-    generatedFromCloudShieldRecordsOnly: true,
-    message: ""
-  });
-  const controls = data?.controls || [];
+  const { data, error, isRefreshing } = useCloudShieldData<FrontendComplianceEvidenceCenter | null>("/api/v1/compliance/evidence-center", null, { schema: FrontendComplianceEvidenceCenterSchema });
+  const controls = data?.controls ?? [];
 
   return (
     <>
@@ -662,18 +649,18 @@ export function ComplianceView() {
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
       <StatGroup>
         <MetricTile label="Controls" value={controls.length} />
-        <MetricTile label="Passing" value={controls.filter((control: ComplianceControlDto) => String(control.status).toUpperCase().includes("PASS")).length} tone="success" />
-        <MetricTile label="Needs review" value={controls.filter((control: ComplianceControlDto) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
+        <MetricTile label="Passing" value={controls.filter((control) => String(control.status).toUpperCase().includes("PASS")).length} tone="success" />
+        <MetricTile label="Needs review" value={controls.filter((control) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
       </StatGroup>
       <Section title="Control evidence">
         <DataTable
           columns={["Control", "Framework", "Status", "Evidence", "Source"]}
-          rows={controls.map((control: ComplianceControlDto) => [
+          rows={controls.map((control) => [
             text(control.title ?? control.controlId, "Control"),
             text(control.framework),
             <StatusBadge key="status" status={control.status} />,
             text(control.evidenceCount),
-            <SourceBadge key="source" source={sourceFor(control as any, data as any)} />
+            <SourceBadge key="source" source={sourceFor(control, data)} />
           ])}
         />
       </Section>
