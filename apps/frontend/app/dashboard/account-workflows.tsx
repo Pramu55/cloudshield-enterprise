@@ -33,9 +33,12 @@ import type {
 import { fetchCloudShieldClient, RefreshBadge, useCloudShieldData } from "../../lib/client-api";
 import {
   FrontendAwsAccountListSchema,
+  FrontendAwsAccountDetailSchema,
+  FrontendAwsIdentityValidationSchema,
   FrontendAwsAccountMutationSchema,
   FrontendCapabilitySessionSchema,
   type FrontendCapabilitySession
+  , type FrontendAwsIdentityValidation
 } from "../../lib/response-contracts";
 import {
   permissionCapability,
@@ -190,8 +193,8 @@ export function AccountsWorkspace() {
     setFeedback({ tone: "info", title: "Validating registry", message: "Validating registry..." });
     setActiveAction({ key: "registry", accountRecordId: account.id, label: "Validating registry..." });
     try {
-      const result = await fetchCloudShieldClient<AwsAccountMutationResponse & { code?: string }>(`/api/v1/aws/accounts/${account.id}/validate`, { method: "POST" });
-      setFeedback({ tone: result.item.connectionStatus === "VALIDATION_NOT_IMPLEMENTED" ? "warning" : "success", title: result.code ?? "Registry validation complete", message: result.message });
+      const result = await fetchCloudShieldClient<AwsAccountMutationResponse>(`/api/v1/aws/accounts/${account.id}/validate`, { method: "POST", schema: FrontendAwsAccountMutationSchema });
+      setFeedback({ tone: result.item.connectionStatus === "VALIDATION_NOT_IMPLEMENTED" ? "warning" : "success", title: "Registry validation complete", message: result.message });
       refresh();
     } catch (error) {
       setFeedback({ tone: "danger", title: "Registry validation failed", message: errorMessage(error) });
@@ -205,7 +208,7 @@ export function AccountsWorkspace() {
     setFeedback({ tone: "info", title: "Validating AWS identity", message: "Validating AWS identity..." });
     setActiveAction({ key: "identity", accountRecordId: account.id, label: "Validating AWS identity..." });
     try {
-      const result = await fetchCloudShieldClient<AwsIdentityValidationResponse>(`/api/v1/aws/accounts/${account.id}/validate-identity`, { method: "POST" });
+      const result = await fetchCloudShieldClient<FrontendAwsIdentityValidation>(`/api/v1/aws/accounts/${account.id}/validate-identity`, { method: "POST", schema: FrontendAwsIdentityValidationSchema });
       setFeedback({
         tone: identityTone(result.status),
         title: `STS identity validation: ${result.status}`,
@@ -350,11 +353,11 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
   const [activeAction, setActiveAction] = useState<ActionState>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  const accountState = useCloudShieldData<{ item?: AwsAccountDto }>(accountDetailPath(accountId, refreshNonce), {});
+  const accountState = useCloudShieldData<{ item: AwsAccountDto } | null>(accountDetailPath(accountId, refreshNonce), null, { schema: FrontendAwsAccountDetailSchema });
   const connectorState = useCloudShieldData<AwsConnectorStatusResponse>("/api/v1/aws/connector/status", defaultConnectorStatus);
   const inventoryPlanState = useCloudShieldData<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan", defaultInventoryPlan);
   const currentUserState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
-  const account = accountState.data.item;
+  const account = accountState.data?.item;
   const manageCapability = permissionCapability(authoritativePermission(currentUserState.data, "accounts.manage"));
   const scanCapability = permissionCapability(authoritativePermission(currentUserState.data, "inventory.scan.request"));
 
@@ -367,13 +370,14 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
     label: string,
     path: string,
     method: "POST" | "PATCH",
-    complete: (result: TResponse) => Feedback
+    complete: (result: TResponse) => Feedback,
+    schema?: { safeParse(value: unknown): { success: true; data: TResponse } | { success: false } }
   ) {
     if (!account || activeAction) return;
     setFeedback({ tone: "info", title: label, message: label });
     setActiveAction({ key, accountRecordId: account.id, label });
     try {
-      const result = await fetchCloudShieldClient<TResponse>(path, { method });
+      const result = await fetchCloudShieldClient<TResponse>(path, { method, schema });
       setFeedback(complete(result));
       refresh();
     } catch (error) {
@@ -425,7 +429,7 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
                 connector={connectorState.data}
                 inventoryPlan={inventoryPlanState.data}
                 onEdit={undefined}
-                onRegistry={() => runMutation<AwsAccountMutationResponse & { code?: string }>("registry", "Validating registry...", `/api/v1/aws/accounts/${account.id}/validate`, "POST", (result) => ({ tone: result.item.connectionStatus === "VALIDATION_NOT_IMPLEMENTED" ? "warning" : "success", title: result.code ?? "Registry validation complete", message: result.message }))}
+                onRegistry={() => runMutation<AwsAccountMutationResponse>("registry", "Validating registry...", `/api/v1/aws/accounts/${account.id}/validate`, "POST", (result) => ({ tone: result.item.connectionStatus === "VALIDATION_NOT_IMPLEMENTED" ? "warning" : "success", title: "Registry validation complete", message: result.message }), FrontendAwsAccountMutationSchema)}
                 onIdentity={() => setConfirm({ action: "identity", account })}
                 onSync={() => setConfirm({ action: "sync", account })}
                 onArchive={() => setConfirm({ action: "archive", account })}
@@ -472,13 +476,13 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
             const { action } = confirm;
             setConfirm(null);
             if (action === "identity") {
-              void runMutation<AwsIdentityValidationResponse>("identity", "Validating AWS identity...", `/api/v1/aws/accounts/${account.id}/validate-identity`, "POST", (result) => ({ tone: identityTone(result.status), title: `STS identity validation: ${result.status}`, message: identityMessage(result) }));
+              void runMutation<FrontendAwsIdentityValidation>("identity", "Validating AWS identity...", `/api/v1/aws/accounts/${account.id}/validate-identity`, "POST", (result) => ({ tone: identityTone(result.status), title: `STS identity validation: ${result.status}`, message: identityMessage(result) }), FrontendAwsIdentityValidationSchema);
             }
             if (action === "sync") {
               void runMutation<InventorySyncResponse>("sync", "Starting read-only sync...", `/api/v1/aws/accounts/${account.id}/inventory/sync`, "POST", (result) => ({ tone: result.status === "BLOCKED_DISABLED" ? "warning" : "success", title: `Inventory sync: ${result.status}`, message: result.message }));
             }
             if (action === "archive") {
-              void runMutation<AwsAccountMutationResponse>("archive", "Archiving registry record...", `/api/v1/aws/accounts/${account.id}/archive`, "PATCH", (result) => ({ tone: "success", title: "Registry record archived", message: result.message }));
+              void runMutation<AwsAccountMutationResponse>("archive", "Archiving registry record...", `/api/v1/aws/accounts/${account.id}/archive`, "PATCH", (result) => ({ tone: "success", title: "Registry record archived", message: result.message }), FrontendAwsAccountMutationSchema);
             }
           }}
         />
@@ -724,14 +728,14 @@ function fromAccount(account: AwsAccountDto): AccountFormState {
   };
 }
 
-function identityTone(status: AwsIdentityValidationResponse["status"]): Feedback["tone"] {
+function identityTone(status: FrontendAwsIdentityValidation["status"]): Feedback["tone"] {
   if (status === "VALIDATION_SUCCEEDED" || status === "CONNECTED") return "success";
   if (status === "BLOCKED_DISABLED" || status === "NOT_CONFIGURED" || status === "READY_FOR_VALIDATION") return "warning";
   if (status === "AUTH_FAILED" || status === "UNREACHABLE" || status === "VALIDATION_FAILED" || status === "PERMISSION_DENIED" || status === "ACCESS_DENIED") return "danger";
   return "info";
 }
 
-function identityMessage(result: AwsIdentityValidationResponse) {
+function identityMessage(result: FrontendAwsIdentityValidation) {
   const parts = [result.message];
   if (result.status === "BLOCKED_DISABLED") parts.push("Connector mode is disabled, so no STS call was executed.");
   if (result.status === "AUTH_FAILED") parts.push("Authentication failed while validating the STS identity.");

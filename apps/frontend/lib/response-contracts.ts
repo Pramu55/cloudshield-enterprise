@@ -4,11 +4,14 @@ import {
   AutomationSafetyFlagsSchema,
   AwsAccountListResponseSchema,
   AwsAccountMutationResponseSchema,
+  AwsIdentityValidationResponseSchema,
   AwsConnectionStatusSchema,
   AwsStsValidationResponseSchema,
   CommandCenterResponseSchema,
+  ComplianceEvidenceCenterResponseSchema,
   CurrentUserResponseSchema,
   GovernanceApprovalsResponseSchema,
+  GovernanceActivityResponseSchema,
   MonitoringHealthResponseSchema,
   MonitoringRunsListResponseSchema,
   OrganizationScopedIdSchema,
@@ -47,7 +50,11 @@ export const FrontendCapabilitySessionSchema = CurrentUserResponseSchema.extend(
     role: data.user.role,
     organizationId: data.user.organizationId
   },
-  organization: data.organization,
+  organization: {
+    id: data.organization.id,
+    name: data.organization.name,
+    slug: data.organization.slug
+  },
   capabilities: data.capabilities
 }));
 
@@ -303,8 +310,36 @@ export const FrontendAwsAccountMutationSchema = AwsAccountMutationResponseSchema
   message: data.message
 }));
 
+export const FrontendAwsAccountDetailSchema = z.object({
+  item: FrontendAwsAccountItemSchema
+}).transform((data) => ({ item: data.item }));
+
+export const FrontendAwsIdentityValidationSchema = AwsIdentityValidationResponseSchema
+  .extend({
+    message: eventMessage,
+    registeredAccountId: z.string().regex(/^\d{12}$/).nullable(),
+    validatedAccountId: z.string().regex(/^\d{12}$/).nullable(),
+    principalArnMasked: z.string().trim().min(1).max(256).nullable()
+  })
+  .transform((data) => ({
+    status: data.status,
+    message: data.message,
+    validatedAccountId: data.validatedAccountId,
+    principalArnMasked: data.principalArnMasked,
+    awsApiCallExecuted: data.awsApiCallExecuted,
+    mutationExecuted: data.mutationExecuted,
+    automaticRemediationExecuted: data.automaticRemediationExecuted,
+    terraformApplyExecuted: data.terraformApplyExecuted
+  }));
+
 const safeOperatorGuidance = eventMessage;
-const FrontendRemediationPlanItemSchema = RemediationPlanDtoSchema.extend({ operatorGuidance: safeOperatorGuidance });
+const FrontendRemediationPlanItemSchema = RemediationPlanDtoSchema.extend({
+  id: identifierValue,
+  approvalExpiresAt: isoTimestamp.nullable(),
+  operatorGuidance: safeOperatorGuidance,
+  createdById: identifierValue,
+  updatedAt: isoTimestamp
+});
 
 export const FrontendRemediationPlanListSchema = RemediationPlanListResponseSchema.extend({
   items: FrontendRemediationPlanItemSchema.array()
@@ -331,7 +366,17 @@ export const FrontendRemediationPlanListSchema = RemediationPlanListResponseSche
   automaticRemediationExecuted: data.automaticRemediationExecuted
 }));
 
-export const FrontendGovernanceApprovalsSchema = GovernanceApprovalsResponseSchema.transform((data) => ({
+const FrontendGovernanceApprovalItemSchema = GovernanceApprovalsResponseSchema.shape.items.element.extend({
+  id: identifierValue,
+  remediationPlanId: identifierValue,
+  requestedById: identifierValue,
+  expiresAt: isoTimestamp.nullable(),
+  createdAt: isoTimestamp
+});
+
+export const FrontendGovernanceApprovalsSchema = GovernanceApprovalsResponseSchema.extend({
+  items: FrontendGovernanceApprovalItemSchema.array()
+}).transform((data) => ({
   items: data.items.map((approval) => ({
     id: approval.id,
     remediationPlanId: approval.remediationPlanId,
@@ -349,6 +394,112 @@ export const FrontendGovernanceApprovalsSchema = GovernanceApprovalsResponseSche
   automaticRemediationExecuted: data.automaticRemediationExecuted
 }));
 
+const FrontendGovernanceActivityItemSchema = GovernanceActivityResponseSchema.shape.items.element
+  .extend({
+    id: identifierValue,
+    targetId: identifierValue.nullable(),
+    actorUserId: identifierValue.nullable(),
+    action: eventDescriptor,
+    targetType: eventDescriptor,
+    createdAt: isoTimestamp
+  })
+  .transform((event) => ({
+    id: event.id,
+    action: event.action,
+    targetType: event.targetType,
+    targetId: event.targetId,
+    actorUserId: event.actorUserId,
+    createdAt: event.createdAt
+  }));
+
+export const FrontendGovernanceActivitySchema = GovernanceActivityResponseSchema.extend({
+  items: FrontendGovernanceActivityItemSchema.array()
+}).transform((data) => ({
+  items: data.items,
+  awsApiCallExecuted: data.awsApiCallExecuted,
+  scannerRun: data.scannerRun,
+  mutationExecuted: data.mutationExecuted,
+  terraformApplyExecuted: data.terraformApplyExecuted,
+  automaticRemediationExecuted: data.automaticRemediationExecuted
+}));
+
+const FrontendComplianceControlSchema = ComplianceEvidenceCenterResponseSchema.shape.controls.element
+  .refine((control) => [control.evidenceCount, control.findingCount, control.failedResources].every(isNonNegativeInteger)
+    && [control.lastScanAt, control.lastEvaluatedAt].every(isIsoOrNull), { message: "Frontend compliance control contract failed." })
+  .transform((control) => ({
+    id: control.id,
+    controlId: control.controlId,
+    framework: control.framework,
+    controlCode: control.controlCode,
+    title: control.title,
+    status: control.status,
+    severity: control.severity,
+    evidenceCount: control.evidenceCount,
+    findingCount: control.findingCount,
+    failedResources: control.failedResources,
+    ownerTeamId: control.ownerTeamId,
+    ownerTeamName: control.ownerTeamName,
+    lastScanAt: control.lastScanAt,
+    lastEvaluatedAt: control.lastEvaluatedAt,
+    sampleData: control.sampleData
+  }));
+
+const FrontendComplianceEvidenceSchema = ComplianceEvidenceCenterResponseSchema.shape.evidence.element
+  .extend({ summary: eventMessage, collectedAt: isoTimestamp, createdAt: isoTimestamp })
+  .transform((evidence) => ({
+    id: evidence.id,
+    controlId: evidence.controlId,
+    controlCode: evidence.controlCode,
+    resourceId: evidence.resourceId,
+    resourceName: evidence.resourceName,
+    resourceType: evidence.resourceType,
+    status: evidence.status,
+    evidenceType: evidence.evidenceType,
+    source: evidence.source,
+    sourceType: evidence.sourceType,
+    sourceId: evidence.sourceId,
+    summary: evidence.summary,
+    sampleData: evidence.sampleData,
+    confidence: evidence.confidence,
+    collectedAt: evidence.collectedAt,
+    createdAt: evidence.createdAt
+  }));
+
+export const FrontendComplianceEvidenceCenterSchema = ComplianceEvidenceCenterResponseSchema.extend({
+  controls: FrontendComplianceControlSchema.array(),
+  evidence: FrontendComplianceEvidenceSchema.array()
+}).refine((data) => [
+  data.summary.totalControls,
+  data.summary.pass,
+  data.summary.fail,
+  data.summary.warning,
+  data.summary.needsReview,
+  data.summary.evidenceItems,
+  data.summary.linkedFindings,
+  data.summary.riskAccepted
+].every(isNonNegativeInteger) && isIsoOrNull(data.summary.lastEvaluatedAt), { message: "Frontend compliance summary contract failed." }).transform((data) => ({
+  summary: {
+    totalControls: data.summary.totalControls,
+    pass: data.summary.pass,
+    fail: data.summary.fail,
+    warning: data.summary.warning,
+    needsReview: data.summary.needsReview,
+    evidenceItems: data.summary.evidenceItems,
+    linkedFindings: data.summary.linkedFindings,
+    riskAccepted: data.summary.riskAccepted,
+    lastEvaluatedAt: data.summary.lastEvaluatedAt
+  },
+  controls: data.controls,
+  evidence: data.evidence,
+  sampleData: data.sampleData,
+  sampleDataLabel: data.sampleDataLabel,
+  officialCertificationClaim: data.officialCertificationClaim,
+  awsApiCallExecuted: data.awsApiCallExecuted,
+  mutationExecuted: data.mutationExecuted,
+  remediationExecuted: data.remediationExecuted,
+  generatedFromCloudShieldRecordsOnly: data.generatedFromCloudShieldRecordsOnly
+}));
+
 export type FrontendCommandCenterResponse = ReturnType<typeof FrontendCommandCenterResponseSchema.parse>;
 export type FrontendMonitoringHealth = ReturnType<typeof FrontendMonitoringHealthSchema.parse>;
 export type FrontendSecurityAlertsList = ReturnType<typeof FrontendSecurityAlertsListSchema.parse>;
@@ -356,4 +507,7 @@ export type FrontendMonitoringRunsList = ReturnType<typeof FrontendMonitoringRun
 export type FrontendAutomationLatest = ReturnType<typeof FrontendAutomationLatestSchema.parse>;
 export type FrontendRemediationPlanList = ReturnType<typeof FrontendRemediationPlanListSchema.parse>;
 export type FrontendGovernanceApprovals = ReturnType<typeof FrontendGovernanceApprovalsSchema.parse>;
+export type FrontendGovernanceActivity = ReturnType<typeof FrontendGovernanceActivitySchema.parse>;
+export type FrontendComplianceEvidenceCenter = ReturnType<typeof FrontendComplianceEvidenceCenterSchema.parse>;
+export type FrontendAwsIdentityValidation = ReturnType<typeof FrontendAwsIdentityValidationSchema.parse>;
 export type FrontendCapabilitySession = ReturnType<typeof FrontendCapabilitySessionSchema.parse>;

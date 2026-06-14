@@ -108,7 +108,7 @@ All authoritative schemas above are ordinary Zod objects: they strip unknown obj
 
 Governed execution evidence is not currently consumed by a frontend call site, so no speculative request was added. The authoritative `GovernedExecutionEvidenceResponseSchema`, `MutationOutcomeSchema`, and `MutationReconciliationStatusSchema` were inspected and asserted: `OUTCOME_UNKNOWN` and `MANUAL_REVIEW_REQUIRED` remain exact, unknown outcomes/states fail, approval is not execution success, evidence is not inferred, and `providerRequestId` is never promoted to correlation ID. Existing governed evidence records contain provider-shaped record fields, so a future consuming UI must add a narrow redacted projection before placing evidence in React state.
 
-Remaining unvalidated successful responses include auth/me and profile, invitations, notifications, search, connector status, inventory plan/sync/detail, account detail/validation, teams/members, inventory/resources and resource detail, findings, governance plans/approvals/activity, compliance, cost, recommendations, graph, scans, reports, platform settings, alert detail, and monitoring mutation responses. Routes retain current behavior until migrated; schema validation remains optional to avoid broad breakage in this milestone.
+At the time of the original audit, the unvalidated-response inventory was broader. After the current high-risk validation milestone, successful responses that remain unvalidated include profile, invitations, notifications, search, connector status, inventory plan and inventory sync, teams/members, inventory resources and resource detail, findings, cost, recommendations, graph, scan list/detail, reports, platform settings, monitoring alert detail, and monitoring mutation responses. These routes retain their current behavior until a matching authoritative contract and narrow frontend projection are integrated. The inventory-sync contract mismatch and all intentionally deferred routes are documented in the current milestone section below.
 
 ### Permission and production guard update
 
@@ -200,3 +200,31 @@ Backend dependencies for those branches: documented error envelope and correlati
 ## P0 readiness blockers
 
 The selected high-value responses now have runtime contract validation and redacted monitoring list projections. The application is not production-ready until remaining route contracts, alert-detail evidence projection, privileged-action permission states, and misleading health/empty copy are fixed.
+
+## High-risk route validation milestone
+
+Milestone base: `e15b8cf feat: add frontend permission and production guards (#24)`.
+
+| Frontend consumer | Endpoint | Method | Shared contract | Runtime result |
+|---|---|---|---|---|
+| Governance view | `/api/v1/remediation/plans` | GET | `RemediationPlanListResponseSchema` | Existing explicit plan projection; guarded-action authority fields retained, raw payload/evidence omitted |
+| Governance view | `/api/v1/governance/approvals` | GET | `GovernanceApprovalsResponseSchema` | Existing explicit approval projection; maker-checker identity, expiry, and payload binding retained |
+| Governance view | `/api/v1/governance/activity` | GET | `GovernanceActivityResponseSchema` | Added explicit audit projection; arbitrary metadata is discarded |
+| Compliance view | `/api/v1/compliance/evidence-center` | GET | `ComplianceEvidenceCenterResponseSchema` | Added bounded counts/timestamps and explicit control/evidence projections; `evidenceJson` is discarded |
+| AWS account detail | `/api/v1/aws/accounts/:id` | GET | Account item from `AwsAccountMutationResponseSchema` | Added item-level validation and projection |
+| AWS account registry mutation/archive | account mutation endpoints | POST/PATCH | `AwsAccountMutationResponseSchema` | Existing item projection now applied consistently to registry validation and detail actions |
+| AWS identity validation | `/api/v1/aws/accounts/:id/validate-identity` | POST | `AwsIdentityValidationResponseSchema` | Added explicit status/message/masked-identity/safety-flag projection |
+
+All migrated reads and mutations use `useCloudShieldData(..., { schema })` or `fetchCloudShieldClient(..., { schema })`. Contract failures remain `CONTRACT_INVALID`; mutation failures are not retried and do not imply success. UUID correlation-ID, 401 session expiry, 403 session preservation, CSRF fail-closed behavior, cancellation, timeout, and empty-success handling remain centralized and unchanged.
+
+The activity projection retains the authoritative event ID, action, target type/ID, actor ID, and creation timestamp. It removes metadata because the shared DTO permits arbitrary values. The compliance projection retains UI-required control/evidence identifiers, enums, source timestamps, counts, and sample flags while removing `evidenceJson`, notes, organization internals, and unknown fields. Credential-like, raw-provider, stack, authorization, and arbitrary nested fields therefore cannot enter these React states.
+
+Routes intentionally not migrated in this milestone:
+
+- Governance detail and mutation endpoints are not currently consumed by the frontend. No calls or DTO guesses were added.
+- Governed execution evidence, reconciliation list/detail, rollback, and recommendation detail do not have current frontend consumers with a complete authoritative endpoint-to-schema path. Their shared/backend contract gap must be resolved before UI integration.
+- Monitoring alert detail still uses an untyped response and renders evidence; it remains the highest-priority separate monitoring-safety migration.
+- The consumed `POST /api/v1/aws/accounts/:id/inventory/sync` route returns an orchestration envelope (`status`, `dryRun`, `items`, safety flags). `AwsInventoryStartResponseSchema` describes a different direct sync/start response and does not validate this route. No authoritative shared orchestration response schema exists, so the call remains an explicit unvalidated shared-contract gap rather than using an invented or mismatched DTO.
+- Members, teams, invitations, connector status, inventory plan, reports, recommendations list, cost, graph, scan detail, profile, search, and notifications remain outside this high-risk slice or need dedicated safe projections.
+
+Remaining risk: several shared governance schemas contain defaults and arbitrary record fields. The migrated frontend outputs do not expose those records, but future detail pages must use explicit allowlists and authoritative fingerprint/evidence contracts rather than spreading shared DTOs. Recommended next branch: `feat/frontend-monitoring-alert-detail-contract`.
