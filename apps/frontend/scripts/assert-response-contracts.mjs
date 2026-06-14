@@ -285,20 +285,45 @@ for (const [result, label] of parsedResults) {
   assertUnsafeFieldsRemoved(result, label);
 }
 
-const capabilitySession = FrontendCapabilitySessionSchema.parse({
+const completeCapabilities = {
+  "accounts.read": true,
+  "accounts.manage": false,
+  "inventory.read": true,
+  "inventory.scan.request": false,
+  "teams.read": true,
+  "teams.create": false,
+  "teams.update": false,
+  "teams.archive": false,
+  "teams.members.manage": false,
+  "members.read": true,
+  "members.invite": false,
+  "members.remove": false,
+  "members.role.update": false,
+  "recommendations.read": true,
+  "recommendations.manage": false,
+  "operations.read": true,
+  "operations.prepare": false,
+  "approvals.read": true,
+  "approvals.decide": false,
+  "audit.read": true
+};
+const capabilitySessionInput = {
   user: { id: "user-1", email: "operator@example.com", name: "Operator", role: "OWNER", organizationId: "org-1", ...unsafeFields },
   organization: { id: "org-1", name: "CloudShield", slug: "cloudshield", ...unsafeFields },
-  capabilities: { "accounts.manage": false },
-  ...unsafeFields
-});
+  capabilities: completeCapabilities
+};
+const capabilitySession = FrontendCapabilitySessionSchema.parse(capabilitySessionInput);
 assertUnsafeFieldsRemoved(capabilitySession, "capability session");
-assert.equal(capabilitySession.capabilities?.["accounts.manage"], false);
+assert.equal(capabilitySession.capabilities["accounts.manage"], false);
+assert.equal(capabilitySession.capabilities["accounts.read"], true);
 assert.deepEqual(Object.keys(capabilitySession.organization).sort(), ["id", "name", "slug"]);
-assert.equal(FrontendCapabilitySessionSchema.safeParse({
-  user: { id: "user-1", email: "operator@example.com", name: "Operator", role: "OWNER", organizationId: "org-1" },
-  organization: { id: "org-1", name: "CloudShield", slug: "cloudshield" },
-  capabilities: { "accounts.manage": "yes" }
-}).success, false);
+assert.equal(FrontendCapabilitySessionSchema.safeParse({ ...capabilitySessionInput, capabilities: undefined }).success, false);
+const { "audit.read": _omittedCapability, ...missingCapability } = completeCapabilities;
+assert.equal(FrontendCapabilitySessionSchema.safeParse({ ...capabilitySessionInput, capabilities: missingCapability }).success, false);
+assert.equal(FrontendCapabilitySessionSchema.safeParse({ ...capabilitySessionInput, capabilities: { ...completeCapabilities, "accounts.manage": "yes" } }).success, false);
+assert.equal(FrontendCapabilitySessionSchema.safeParse({ ...capabilitySessionInput, capabilities: { ...completeCapabilities, "accounts.manage": null } }).success, false);
+assert.equal(FrontendCapabilitySessionSchema.safeParse({ ...capabilitySessionInput, capabilities: { ...completeCapabilities, "arbitrary.capability": true } }).success, false);
+assert.equal(FrontendCapabilitySessionSchema.safeParse({ ...capabilitySessionInput, rawResponse: { provider: true } }).success, false);
 
 const ordinaryEvent = {
   ...automation.events[0],

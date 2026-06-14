@@ -1,3 +1,6 @@
+import type { CurrentUserCapabilityKey } from "@cloudshield/contracts";
+import type { FrontendCapabilitySession } from "./response-contracts";
+
 export type RestrictionLayer = "PERMISSION" | "POLICY" | "ENVIRONMENT" | "RUNTIME_MODE";
 
 export type BlockReason =
@@ -25,6 +28,19 @@ export type ActionCapability = {
 };
 
 export type AuthoritativePermission = "ALLOWED" | "DENIED" | "UNKNOWN";
+
+export function authoritativePermission(
+  session: FrontendCapabilitySession | null | undefined,
+  capability: CurrentUserCapabilityKey
+): AuthoritativePermission {
+  if (!session) return "UNKNOWN";
+  return session.capabilities[capability] ? "ALLOWED" : "DENIED";
+}
+
+export function capabilityPermission(capability: ActionCapability): AuthoritativePermission {
+  if (capability.allowed) return "ALLOWED";
+  return capability.blockedReason === "INSUFFICIENT_PERMISSION" ? "DENIED" : "UNKNOWN";
+}
 
 const explanations: Record<BlockReason, string> = {
   INSUFFICIENT_PERMISSION: "Your current workspace permission does not allow this action. Your session remains active.",

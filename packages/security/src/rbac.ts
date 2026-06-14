@@ -1,3 +1,5 @@
+import type { CurrentUserCapabilities } from "@cloudshield/contracts";
+
 export const ROLES = {
   OWNER: "OWNER",
   ADMIN: "ADMIN",
@@ -124,6 +126,37 @@ export function hasPermission(role: string, permission: Permission): boolean {
 
   const permissions = ROLE_PERMISSIONS[normalizedRole as Role];
   return permissions.includes(permission);
+}
+
+export function resolveCurrentUserCapabilities(role: string): CurrentUserCapabilities {
+  const normalizedRole = role.toUpperCase();
+  const recognizedRole = normalizedRole === "MEMBER" || Object.values(ROLES).includes(normalizedRole as Role);
+  if (!recognizedRole) {
+    throw new Error("Cannot resolve capabilities for an unknown role.");
+  }
+
+  return {
+    [PERMISSIONS.ACCOUNTS_READ]: hasPermission(role, PERMISSIONS.ACCOUNTS_READ),
+    [PERMISSIONS.ACCOUNTS_MANAGE]: hasPermission(role, PERMISSIONS.ACCOUNTS_MANAGE),
+    [PERMISSIONS.INVENTORY_READ]: hasPermission(role, PERMISSIONS.INVENTORY_READ),
+    [PERMISSIONS.INVENTORY_SCAN_REQUEST]: hasPermission(role, PERMISSIONS.INVENTORY_SCAN_REQUEST),
+    [PERMISSIONS.TEAMS_READ]: hasPermission(role, PERMISSIONS.TEAMS_READ),
+    [PERMISSIONS.TEAMS_CREATE]: hasPermission(role, PERMISSIONS.TEAMS_CREATE),
+    [PERMISSIONS.TEAMS_UPDATE]: hasPermission(role, PERMISSIONS.TEAMS_UPDATE),
+    [PERMISSIONS.TEAMS_ARCHIVE]: hasPermission(role, PERMISSIONS.TEAMS_ARCHIVE),
+    [PERMISSIONS.TEAMS_MEMBERS_MANAGE]: hasPermission(role, PERMISSIONS.TEAMS_MEMBERS_MANAGE),
+    [PERMISSIONS.MEMBERS_READ]: hasPermission(role, PERMISSIONS.MEMBERS_READ),
+    [PERMISSIONS.MEMBERS_INVITE]: hasPermission(role, PERMISSIONS.MEMBERS_INVITE),
+    [PERMISSIONS.MEMBERS_REMOVE]: hasPermission(role, PERMISSIONS.MEMBERS_REMOVE),
+    [PERMISSIONS.MEMBERS_ROLE_UPDATE]: hasPermission(role, PERMISSIONS.MEMBERS_ROLE_UPDATE),
+    [PERMISSIONS.RECOMMENDATIONS_READ]: hasPermission(role, PERMISSIONS.RECOMMENDATIONS_READ),
+    [PERMISSIONS.RECOMMENDATIONS_MANAGE]: hasPermission(role, PERMISSIONS.RECOMMENDATIONS_MANAGE),
+    [PERMISSIONS.OPERATIONS_READ]: hasPermission(role, PERMISSIONS.OPERATIONS_READ),
+    [PERMISSIONS.OPERATIONS_PREPARE]: hasPermission(role, PERMISSIONS.OPERATIONS_PREPARE),
+    [PERMISSIONS.APPROVALS_READ]: hasPermission(role, PERMISSIONS.APPROVALS_READ),
+    [PERMISSIONS.APPROVALS_DECIDE]: hasPermission(role, PERMISSIONS.APPROVALS_DECIDE),
+    [PERMISSIONS.AUDIT_READ]: hasPermission(role, PERMISSIONS.AUDIT_READ)
+  };
 }
 
 export class PermissionDeniedError extends Error {

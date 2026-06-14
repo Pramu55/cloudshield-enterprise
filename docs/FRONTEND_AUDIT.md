@@ -116,6 +116,10 @@ Frontend action availability now uses four distinct presentation layers: `PERMIS
 
 `apps/frontend/lib/action-capability.ts` is a pure, fail-closed presentation mapper. Missing permission capability data and unknown blocked reasons become `NOT_CONFIGURED`, never allowed. `APPROVED` alone is not executable. `OUTCOME_UNKNOWN`, `MANUAL_REVIEW_REQUIRED`, and pending reconciliation suppress retry/replay presentation and retain fixed safe guidance. Raw backend errors and arbitrary blocked-reason text are never rendered; only recognized states map to fixed frontend copy.
 
+The authoritative capability milestone adds a required, closed capability object to `CurrentUserResponseSchema`. `GET /api/v1/auth/me` now returns the user, organization, and complete backend-derived capability map as one validated session snapshot. The backend computes every boolean through `@cloudshield/security`'s existing `hasPermission` resolver; the frontend does not copy the role matrix or infer mutation authority from role labels. Explicit `false` maps to `DENIED`; only unavailable or contract-invalid session authority maps to `UNKNOWN` and remains not configured.
+
+Current high-risk consumers migrated to this authority are AWS account management and inventory scan requests, governance prepare/approval actions, and member/team invite, removal, creation, and archive controls. Backend `requirePermission` remains final. Route-registry role filtering remains a navigation convenience only and grants no request authority; direct navigation and endpoint calls still depend on authenticated backend checks.
+
 | Surface | Endpoint/authority | Guard presentation |
 |---|---|---|
 | AWS accounts | account environment; connector execution eligibility; future explicit `capabilities` map | Privileged controls require an explicit capability boolean. Production records show that mutation is unavailable while read-only assessment/inventory remain visible. Disabled connector execution is a deployment restriction, not a permission failure. |
@@ -127,11 +131,11 @@ Governance list projections retain only fields required for restriction presenta
 
 Frontend guards are UX explanations only. Backend `requirePermission` checks, lifecycle transitions, payload binding, maker-checker enforcement, environment policy, and execution-mode gates remain authoritative. Hidden or disabled controls are not security boundaries; direct endpoint calls must still be rejected by the backend.
 
-Backend contract gap: `/api/v1/auth/me` currently returns `role: "OWNER"` unconditionally while authorization uses membership-derived `auth.role`, and it exposes no authoritative capability map. The frontend therefore does not derive permission from role. Privileged controls fail closed until a future backend response supplies explicit action capabilities. Recommended next branch: `feat/frontend-authoritative-capabilities-contract`, adding a backend-computed capability field to the existing authenticated-user DTO rather than a parallel frontend policy engine.
+The earlier audit identified `/api/v1/auth/me` as a capability gap. That gap is closed for the current migrated consumers: the route now reports the membership-derived role and a complete backend-computed capability map. Remaining frontend pages must still migrate individually before the application can be described as capability-complete.
 
 Governance remediation plans also do not expose an authoritative target account/environment field. Execution capability therefore remains fail-closed even when approval and lifecycle fields appear ready; `executionMode: "production"` is treated only as deployment mode and never as evidence that the target environment is production. A future contract should expose the target environment explicitly.
 
-Remaining unguarded actions include profile/member administration, monitoring alert mutations, report generation, scan requests outside the account workflow, settings mutations, and untyped recommendation/finding workflows. They should migrate only after authoritative capability fields and narrow response projections exist.
+Remaining authority gaps include profile administration, monitoring alert mutations, report generation, scan requests outside the account workflow, settings mutations, team membership editing, member role changes, and untyped recommendation/finding workflows. They should migrate only with matching authoritative keys and narrow response projections.
 
 ## Hardcoded, demo, and misleading findings
 

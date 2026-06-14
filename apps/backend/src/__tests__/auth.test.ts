@@ -7,6 +7,7 @@ import { createHash, randomBytes } from "crypto";
 import { cloudScanQueue } from "../modules/aws-inventory/aws-inventory.queue.js";
 import { cloudAssessmentQueue } from "../modules/intelligence/assessment.queue.js";
 import { governedAwsChangeQueue } from "../modules/governance/aws-change-execution.queue.js";
+import { resolveCurrentUserCapabilities } from "@cloudshield/security";
 
 test("Authentication Endpoints", async (t) => {
   const app = await buildApp();
@@ -105,6 +106,41 @@ test("Authentication Endpoints", async (t) => {
       headers: { cookie: sessionCookie }
     });
     csrfToken = newCsrfRes.json().token;
+  });
+
+  await t.test("GET /api/v1/auth/me returns the complete authoritative owner capability map", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { cookie: sessionCookie }
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    const body = res.json();
+    const expected = resolveCurrentUserCapabilities("OWNER");
+    assert.deepStrictEqual(body.capabilities, expected);
+    assert.deepStrictEqual(Object.keys(body.capabilities).sort(), Object.keys(expected).sort());
+    assert.ok(Object.values(body.capabilities).every((value) => value === true));
+    assert.equal(body.user.role, "OWNER");
+    assert.throws(() => resolveCurrentUserCapabilities("INVALID_ROLE"));
+    for (const unsafeField of ["passwordHash", "accessToken", "refreshToken", "sessionToken", "permissions", "rolePermissions"]) {
+      assert.equal(res.body.includes(unsafeField), false);
+    }
+  });
+
+  await t.test("GET /api/v1/auth/me does not expose capabilities for a disabled user", async () => {
+    await prisma.user.update({ where: { id: registeredUserId }, data: { status: "DISABLED" } });
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/v1/auth/me",
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(res.statusCode, 401);
+      assert.equal("capabilities" in res.json(), false);
+    } finally {
+      await prisma.user.update({ where: { id: registeredUserId }, data: { status: "ACTIVE" } });
+    }
   });
 
   await t.test("POST /api/v1/auth/register blocks duplicate email", async () => {

@@ -616,10 +616,36 @@ export const LoginResponseSchema = z.object({
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
+export const CurrentUserCapabilitiesSchema = z.object({
+  "accounts.read": z.boolean(),
+  "accounts.manage": z.boolean(),
+  "inventory.read": z.boolean(),
+  "inventory.scan.request": z.boolean(),
+  "teams.read": z.boolean(),
+  "teams.create": z.boolean(),
+  "teams.update": z.boolean(),
+  "teams.archive": z.boolean(),
+  "teams.members.manage": z.boolean(),
+  "members.read": z.boolean(),
+  "members.invite": z.boolean(),
+  "members.remove": z.boolean(),
+  "members.role.update": z.boolean(),
+  "recommendations.read": z.boolean(),
+  "recommendations.manage": z.boolean(),
+  "operations.read": z.boolean(),
+  "operations.prepare": z.boolean(),
+  "approvals.read": z.boolean(),
+  "approvals.decide": z.boolean(),
+  "audit.read": z.boolean()
+}).strict();
+export type CurrentUserCapabilities = z.infer<typeof CurrentUserCapabilitiesSchema>;
+export type CurrentUserCapabilityKey = keyof CurrentUserCapabilities;
+
 export const CurrentUserResponseSchema = z.object({
   user: AuthUserSchema,
-  organization: AuthOrganizationSchema
-});
+  organization: AuthOrganizationSchema,
+  capabilities: CurrentUserCapabilitiesSchema
+}).strict();
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
 
 export const UpdateProfileRequestSchema = z.object({

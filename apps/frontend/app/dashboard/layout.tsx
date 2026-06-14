@@ -22,17 +22,13 @@ import { NotificationFeed } from "../../components/notifications/NotificationFee
 import { NAV_GROUPS } from "../../lib/route-registry";
 import type { CommandCenterResponse } from "@cloudshield/contracts";
 import { ErrorState } from "../../components/ui/error-state";
-import { FrontendCommandCenterResponseSchema } from "../../lib/response-contracts";
+import {
+  FrontendCapabilitySessionSchema,
+  FrontendCommandCenterResponseSchema,
+  type FrontendCapabilitySession
+} from "../../lib/response-contracts";
 
-type CurrentUserPayload = {
-  user?: {
-    name?: string;
-    email?: string;
-    role?: string;
-    organizationName?: string;
-  };
-};
-
+// Navigation filtering is presentation only; backend permission checks remain authoritative.
 function canSee(item: { roles?: string[] }, role?: string) {
   if (!item.roles?.length) return true;
   return item.roles.includes(String(role ?? "").toUpperCase());
@@ -46,8 +42,10 @@ function isActive(pathname: string, href: string) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const authState = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
-  const user = authState.data.user;
+  const authState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, {
+    schema: FrontendCapabilitySessionSchema
+  });
+  const user = authState.data?.user;
 
   const { data: commandCenterData } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null, { schema: FrontendCommandCenterResponseSchema });
 
@@ -103,7 +101,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.refresh();
   }
 
-  const organizationName = user?.organizationName ?? "Workspace";
+  const organizationName = authState.data?.organization.name ?? "Workspace";
   const userName = user?.name ?? user?.email ?? "Signed-in user";
   const userRole = user?.role ? user.role.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()) : "Member";
 

@@ -41,11 +41,12 @@ import {
   , type FrontendAwsIdentityValidation
 } from "../../lib/response-contracts";
 import {
+  authoritativePermission,
+  capabilityPermission,
   permissionCapability,
   resolveAccountMutationCapability,
   runtimeDisabledCapability,
-  type ActionCapability,
-  type AuthoritativePermission
+  type ActionCapability
 } from "../../lib/action-capability";
 import {
   CapabilityNotice,
@@ -121,11 +122,6 @@ const environmentOptions: AwsAccountEnvironment[] = [
   "SHARED",
   "SANDBOX"
 ];
-
-function authoritativePermission(payload: FrontendCapabilitySession | null, permission: "accounts.manage" | "inventory.scan.request"): AuthoritativePermission {
-  const reported = payload?.capabilities?.[permission];
-  return reported === true ? "ALLOWED" : reported === false ? "DENIED" : "UNKNOWN";
-}
 
 function actionId(action: ActionKey, accountRecordId?: string) {
   return `${action}:${accountRecordId ?? "new"}`;
@@ -518,7 +514,11 @@ function AccountCommandBar({
 }) {
   const identityCapability = !connector.enabled || !connector.configured ? runtimeDisabledCapability() : manageCapability;
   const syncCapability = !inventoryPlan.inventoryScanningEnabled ? runtimeDisabledCapability() : scanCapability;
-  const productionMutationCapability = resolveAccountMutationCapability({ permission: manageCapability.allowed ? "ALLOWED" : "UNKNOWN", environment: account.environment, runtimeEnabled: connector.executionEligibility.eligible });
+  const productionMutationCapability = resolveAccountMutationCapability({
+    permission: capabilityPermission(manageCapability),
+    environment: account.environment,
+    runtimeEnabled: connector.executionEligibility.eligible
+  });
   return (
     <div className="cs-account-actions gap-3">
       <Link className="cs-button-secondary" href={`/dashboard/accounts/${account.id}`}>Open</Link>
