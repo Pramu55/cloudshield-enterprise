@@ -63,11 +63,11 @@ import {
   Timeline
 } from "./shared";
 import {
+  authoritativePermission,
   permissionCapability,
   resolveApprovalCapability,
   resolvePlanExecutionCapability,
-  unknownBlockReasonCapability,
-  type AuthoritativePermission
+  unknownBlockReasonCapability
 } from "../../lib/action-capability";
 import {
   CapabilityNotice,
@@ -78,11 +78,6 @@ import {
 type AnyRecord = Record<string, any>;
 
 const emptyObject: AnyRecord = {};
-
-function reportedPermission(session: FrontendCapabilitySession | null, permission: string): AuthoritativePermission {
-  const value = session?.capabilities?.[permission];
-  return value === true ? "ALLOWED" : value === false ? "DENIED" : "UNKNOWN";
-}
 
 function pickArray(data: any, keys: string[] = []) {
   if (Array.isArray(data)) return data;
@@ -539,8 +534,8 @@ export function GovernanceView() {
   const session = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
   const planRows = plans.data?.items ?? [];
   const approvalRows = approvals.data?.items ?? [];
-  const preparePermission = reportedPermission(session.data, "operations.prepare");
-  const approvalPermission = reportedPermission(session.data, "approvals.decide");
+  const preparePermission = authoritativePermission(session.data, "operations.prepare");
+  const approvalPermission = authoritativePermission(session.data, "approvals.decide");
   const permissionNotice = permissionCapability(preparePermission);
 
   return (

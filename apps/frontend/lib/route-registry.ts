@@ -6,6 +6,7 @@ export interface RouteMetadata {
   href: string;
   icon: string;
   category: RouteCategory;
+  // Role-based visibility is UX-only and never grants endpoint authority.
   roles?: string[];
   description?: string;
   keywords: string[];

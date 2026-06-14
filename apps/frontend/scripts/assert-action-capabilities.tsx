@@ -3,6 +3,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   allowedCapability,
+  authoritativePermission,
+  capabilityPermission,
   permissionCapability,
   productionCapability,
   resolveAccountMutationCapability,
@@ -38,6 +40,15 @@ assert.equal(permission.restrictionLayer, "PERMISSION");
 assert.match(permissionMarkup, /aria-describedby=/);
 assert.match(permissionMarkup, /current workspace permission/);
 assert.doesNotMatch(permissionMarkup, /session expired/i);
+assert.equal(authoritativePermission(null, "accounts.manage"), "UNKNOWN");
+assert.equal(authoritativePermission({ capabilities: { "accounts.manage": false } } as never, "accounts.manage"), "DENIED");
+assert.equal(authoritativePermission({ capabilities: { "accounts.manage": true } } as never, "accounts.manage"), "ALLOWED");
+assert.equal(capabilityPermission(permissionCapability("DENIED")), "DENIED");
+assert.equal(resolveAccountMutationCapability({ permission: capabilityPermission(permissionCapability("DENIED")), environment: "STAGING", runtimeEnabled: true }).blockedReason, "INSUFFICIENT_PERMISSION");
+if (false) {
+  // @ts-expect-error capability keys are closed by the shared contract
+  authoritativePermission(null, "unknown.capability");
+}
 
 const approvalRequired = resolvePlanExecutionCapability({
   ...executablePlan,

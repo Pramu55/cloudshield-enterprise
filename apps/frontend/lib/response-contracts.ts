@@ -52,9 +52,7 @@ const eventMessage = z.string()
   .refine((value) => !controlCharacters.test(value), "Event messages cannot contain control characters.")
   .refine((value) => !providerErrorContent.test(value), "Event messages cannot contain provider error details.");
 
-export const FrontendCapabilitySessionSchema = CurrentUserResponseSchema.extend({
-  capabilities: z.record(z.string().min(1).max(120), z.boolean()).optional()
-}).transform((data) => ({
+export const FrontendCapabilitySessionSchema = CurrentUserResponseSchema.transform((data) => ({
   user: {
     id: data.user.id,
     name: data.user.name,
@@ -67,7 +65,28 @@ export const FrontendCapabilitySessionSchema = CurrentUserResponseSchema.extend(
     name: data.organization.name,
     slug: data.organization.slug
   },
-  capabilities: data.capabilities
+  capabilities: {
+    "accounts.read": data.capabilities["accounts.read"],
+    "accounts.manage": data.capabilities["accounts.manage"],
+    "inventory.read": data.capabilities["inventory.read"],
+    "inventory.scan.request": data.capabilities["inventory.scan.request"],
+    "teams.read": data.capabilities["teams.read"],
+    "teams.create": data.capabilities["teams.create"],
+    "teams.update": data.capabilities["teams.update"],
+    "teams.archive": data.capabilities["teams.archive"],
+    "teams.members.manage": data.capabilities["teams.members.manage"],
+    "members.read": data.capabilities["members.read"],
+    "members.invite": data.capabilities["members.invite"],
+    "members.remove": data.capabilities["members.remove"],
+    "members.role.update": data.capabilities["members.role.update"],
+    "recommendations.read": data.capabilities["recommendations.read"],
+    "recommendations.manage": data.capabilities["recommendations.manage"],
+    "operations.read": data.capabilities["operations.read"],
+    "operations.prepare": data.capabilities["operations.prepare"],
+    "approvals.read": data.capabilities["approvals.read"],
+    "approvals.decide": data.capabilities["approvals.decide"],
+    "audit.read": data.capabilities["audit.read"]
+  }
 }));
 
 function isNonNegativeInteger(value: number): boolean {

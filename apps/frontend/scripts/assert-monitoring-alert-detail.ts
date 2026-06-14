@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { ApiRequestError } from "../lib/api-error";
 import { clearCsrfToken, fetchCloudShieldClient } from "../lib/client-api";
-import { FrontendSecurityAlertDetailSchema, resolveFrontendAlertRouteId } from "../lib/response-contracts";
+import {
+  FrontendCapabilitySessionSchema,
+  FrontendSecurityAlertDetailSchema,
+  resolveFrontendAlertRouteId
+} from "../lib/response-contracts";
 
 const originalFetch = globalThis.fetch;
 const timestamp = "2026-06-14T12:00:00.000Z";
@@ -104,6 +108,12 @@ async function main() {
     assert.equal(resolveFrontendAlertRouteId("alert-1"), "alert-1");
     await requestResolvedAlertId("alert-1");
     assert.equal(validProviderCalls, 1);
+
+    globalThis.fetch = async () => json({
+      user: { id: "user-1", email: "operator@example.com", name: "Operator", role: "OWNER", organizationId: "org-1" },
+      organization: { id: "org-1", name: "CloudShield", slug: "cloudshield" }
+    });
+    await expectKind(() => fetchCloudShieldClient("/api/v1/auth/me", { schema: FrontendCapabilitySessionSchema }), "CONTRACT_INVALID");
 
     await assertMutationRequiresValidatedConfirmation("acknowledge");
     await assertMutationRequiresValidatedConfirmation("resolve");

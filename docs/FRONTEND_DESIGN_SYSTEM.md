@@ -117,6 +117,10 @@ Read retry is explicit and keyboard accessible, and is offered only for network,
 
 `ActionCapability` separates four restriction layers: permission, policy, environment, and runtime mode. Capability data defaults closed. A missing or unknown value never enables an action, and a role label alone is not permission authority. Backend authorization remains final for every request.
 
+Authenticated capability authority comes from the required closed map in `CurrentUserResponseSchema`. `/api/v1/auth/me` supplies an atomic user, organization, and capability snapshot computed by the backend's existing permission resolver. Frontend projections explicitly retain only the known capability keys. A reported `true` maps to `ALLOWED`, a reported `false` maps to `DENIED`, and missing or invalid session authority maps to `UNKNOWN`/not configured. Frontend code must never reconstruct the backend role-to-permission matrix.
+
+Role labels may still drive display badges and route visibility. That filtering is UX-only: it is not authorization, must not enable mutations, and must not be described as a security boundary. Each migrated mutation control consumes its exact capability key through `GuardedAction`, while backend `requirePermission` checks remain authoritative.
+
 `GuardedAction` renders an enabled button only for `allowed: true`. Disabled controls use `aria-disabled`, native `disabled`, and a unique visible `aria-describedby` explanation; restriction reasons are never tooltip-only. Environment-restricted mutation actions render a note instead of an executable button. `CapabilityNotice` uses `role="note"`, fixed safe copy, and existing semantic styling. Multiple actions use React `useId`, so description IDs remain unique.
 
 - Permission: keep the session active, explain that the current workspace capability does not allow the action, and never present session expiry.
