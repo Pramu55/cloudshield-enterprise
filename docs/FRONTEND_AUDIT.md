@@ -108,7 +108,7 @@ All authoritative schemas above are ordinary Zod objects: they strip unknown obj
 
 Governed execution evidence is not currently consumed by a frontend call site, so no speculative request was added. The authoritative `GovernedExecutionEvidenceResponseSchema`, `MutationOutcomeSchema`, and `MutationReconciliationStatusSchema` were inspected and asserted: `OUTCOME_UNKNOWN` and `MANUAL_REVIEW_REQUIRED` remain exact, unknown outcomes/states fail, approval is not execution success, evidence is not inferred, and `providerRequestId` is never promoted to correlation ID. Existing governed evidence records contain provider-shaped record fields, so a future consuming UI must add a narrow redacted projection before placing evidence in React state.
 
-At the time of the original audit, the unvalidated-response inventory was broader. After the current high-risk validation milestone, successful responses that remain unvalidated include profile, invitations, notifications, search, connector status, inventory plan and inventory sync, teams/members, inventory resources and resource detail, findings, cost, recommendations, graph, scan list/detail, reports, platform settings, monitoring alert detail, and monitoring mutation responses. These routes retain their current behavior until a matching authoritative contract and narrow frontend projection are integrated. The inventory-sync contract mismatch and all intentionally deferred routes are documented in the current milestone section below.
+At the time of the original audit, the unvalidated-response inventory was broader. After the high-risk route and monitoring alert-detail milestones, successful responses that remain unvalidated include profile, invitations, notifications, search, connector status, inventory plan and inventory sync, teams/members, inventory resources and resource detail, findings, cost, recommendations, graph, scan list/detail, reports, platform settings, monitoring evaluate, and monitoring acknowledge/resolve mutation responses. These routes retain their current behavior until a matching authoritative contract and narrow frontend projection are integrated. The inventory-sync and monitoring-mutation contract gaps are documented in the current milestone sections below.
 
 ### Permission and production guard update
 
@@ -223,8 +223,27 @@ Routes intentionally not migrated in this milestone:
 
 - Governance detail and mutation endpoints are not currently consumed by the frontend. No calls or DTO guesses were added.
 - Governed execution evidence, reconciliation list/detail, rollback, and recommendation detail do not have current frontend consumers with a complete authoritative endpoint-to-schema path. Their shared/backend contract gap must be resolved before UI integration.
-- Monitoring alert detail still uses an untyped response and renders evidence; it remains the highest-priority separate monitoring-safety migration.
+- At this earlier milestone boundary, monitoring alert detail was intentionally deferred. It is now validated and redacted by the monitoring alert-detail contract milestone documented below.
 - The consumed `POST /api/v1/aws/accounts/:id/inventory/sync` route returns an orchestration envelope (`status`, `dryRun`, `items`, safety flags). `AwsInventoryStartResponseSchema` describes a different direct sync/start response and does not validate this route. No authoritative shared orchestration response schema exists, so the call remains an explicit unvalidated shared-contract gap rather than using an invented or mismatched DTO.
 - Members, teams, invitations, connector status, inventory plan, reports, recommendations list, cost, graph, scan detail, profile, search, and notifications remain outside this high-risk slice or need dedicated safe projections.
 
 Remaining risk: several shared governance schemas contain defaults and arbitrary record fields. The migrated frontend outputs do not expose those records, but future detail pages must use explicit allowlists and authoritative fingerprint/evidence contracts rather than spreading shared DTOs. Recommended next branch: `feat/frontend-monitoring-alert-detail-contract`.
+
+## Monitoring alert-detail contract milestone
+
+The monitoring detail trust boundary is now: HTTP body parsed as unknown, `SecurityAlertDtoSchema` validation, frontend-only identifier/text/timestamp/count/lifecycle refinements, explicit field projection, then React state. A successful status alone cannot produce a rendered alert.
+
+| Frontend consumer | Endpoint | Method | Shared contract | Runtime handling |
+|---|---|---|---|---|
+| Alert detail | `/api/v1/security-monitoring/alerts/:id` | GET | `SecurityAlertDtoSchema` | `FrontendSecurityAlertDetailSchema`; explicit projection and safe read retry |
+| Alert detail/list acknowledgement | `/api/v1/security-monitoring/alerts/:id/acknowledge` | PATCH | No shared response schema | No optimistic state; one mutation request followed by validated detail/list refresh |
+| Alert detail/list resolution | `/api/v1/security-monitoring/alerts/:id/resolve` | PATCH | No shared response schema | No optimistic state; one mutation request followed by validated detail/list refresh |
+| Embedded alert evidence | Detail response `mappedEvidence` | embedded | Arbitrary record array only | Entire field removed; only validated `evidenceCount` is retained |
+
+The safe alert projection retains IDs and references, bounded title/description, strict severity/status/category enums, source references, authoritative timestamps, and a finite non-negative integer evidence count. `OPEN` and `ACKNOWLEDGED` reject a non-null `resolvedAt`; `RESOLVED` requires a valid `resolvedAt`. Unknown lifecycle values fail the whole response as `CONTRACT_INVALID`.
+
+The shared contract does not define a typed evidence item, evidence history endpoint response, acknowledge response, or resolve response. The frontend therefore does not guess those DTOs. Provider-shaped `mappedEvidence` never enters state, mutation responses do not create success UI, and lifecycle completion is shown only after a validated detail refresh confirms the expected state. A malformed confirmation read is `CONTRACT_INVALID`; mutations are never retried.
+
+The route now distinguishes announced loading, safe contract/network/permission errors, truthful 404 presentation, and a valid zero-evidence state that makes no security claim. Correlation IDs remain UUID-validated by the centralized error model. The alert list empty state was also corrected so an empty list does not claim the environment is secure.
+
+Remaining monitoring gaps: shared schemas are still required for acknowledge/resolve responses and safe evidence summaries/history. Monitoring evaluate and list-page mutation responses remain unvalidated, and monitoring run detail remains outside this slice. Recommended next branch: `feat/frontend-monitoring-mutation-contracts`.

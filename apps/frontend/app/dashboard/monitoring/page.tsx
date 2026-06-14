@@ -180,7 +180,7 @@ export default function SecurityMonitoringPage() {
           ) : alerts.length === 0 ? (
             <div className="p-8 text-center text-slate-500 flex flex-col items-center">
               <CheckCircle className="w-10 h-10 text-emerald-400 mb-3" />
-              <p>No active alerts. Your environment is secure.</p>
+              <p>No alerts were returned for the current monitoring view. This does not establish that the environment is secure.</p>
             </div>
           ) : (
             alerts.map((alert) => (
