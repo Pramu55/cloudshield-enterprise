@@ -17,6 +17,7 @@ import {
   OrganizationScopedIdSchema,
   RemediationPlanDtoSchema,
   RemediationPlanListResponseSchema,
+  SecurityAlertDtoSchema,
   SecurityAlertsListResponseSchema
 } from "@cloudshield/contracts";
 import { z } from "zod";
@@ -26,6 +27,17 @@ const identifierValue = OrganizationScopedIdSchema.shape.id;
 const emptyObject = AutomationSafetyFlagsSchema.pick({});
 const controlCharacters = /[\u0000-\u001f\u007f]/;
 const providerErrorContent = /\b(?:AccessKeyId|SecretAccessKey|SessionToken|rawResponse|rawError|providerError|stack|credentials|authorization)\b|(?:^|\s)at\s+\S+\s+\([^)]+:\d+:\d+\)/i;
+
+export const FrontendAlertIdentifierSchema = identifierValue
+  .max(200)
+  .refine((value) => value === value.trim(), "Alert identifiers cannot contain surrounding whitespace.")
+  .refine((value) => !controlCharacters.test(value) && !/[\\/?#]/.test(value), "Alert identifier format is invalid.");
+
+export function resolveFrontendAlertRouteId(value: string | string[] | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const parsed = FrontendAlertIdentifierSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 const eventDescriptor = z.string()
   .trim()
@@ -180,6 +192,68 @@ export const FrontendSecurityAlertsListSchema = SecurityAlertsListResponseSchema
     createdAt: item.createdAt,
     updatedAt: item.updatedAt
   }))
+}));
+
+const alertTitle = z.string()
+  .trim()
+  .min(1)
+  .max(200)
+  .refine((value) => !controlCharacters.test(value), "Alert titles cannot contain control characters.")
+  .refine((value) => !providerErrorContent.test(value), "Alert titles cannot contain provider error details.");
+
+const alertDescription = z.string()
+  .trim()
+  .min(1)
+  .max(2000)
+  .refine((value) => !controlCharacters.test(value), "Alert descriptions cannot contain control characters.")
+  .refine((value) => !providerErrorContent.test(value), "Alert descriptions cannot contain provider error details.");
+
+export const FrontendSecurityAlertDetailSchema = SecurityAlertDtoSchema.extend({
+  id: FrontendAlertIdentifierSchema,
+  organizationId: identifierValue,
+  awsAccountId: identifierValue.nullable(),
+  cloudResourceId: identifierValue.nullable(),
+  securityFindingId: identifierValue.nullable(),
+  monitorId: identifierValue.nullable(),
+  dedupeKey: eventDescriptor,
+  title: alertTitle,
+  description: alertDescription,
+  firstObservedAt: isoTimestamp,
+  lastObservedAt: isoTimestamp,
+  resolvedAt: isoTimestamp.nullable(),
+  evidenceCount: z.number().finite().int().nonnegative(),
+  sourceType: eventDescriptor.nullable(),
+  sourceId: identifierValue.nullable(),
+  createdAt: isoTimestamp,
+  updatedAt: isoTimestamp
+}).superRefine((alert, context) => {
+  if (alert.status === "RESOLVED" && alert.resolvedAt === null) {
+    context.addIssue({ code: "custom", path: ["resolvedAt"], message: "Resolved alerts require a resolved timestamp." });
+  }
+  if (alert.status !== "RESOLVED" && alert.resolvedAt !== null) {
+    context.addIssue({ code: "custom", path: ["resolvedAt"], message: "Unresolved alerts cannot include a resolved timestamp." });
+  }
+}).transform((alert) => ({
+  id: alert.id,
+  organizationId: alert.organizationId,
+  awsAccountId: alert.awsAccountId,
+  cloudResourceId: alert.cloudResourceId,
+  securityFindingId: alert.securityFindingId,
+  monitorId: alert.monitorId,
+  dedupeKey: alert.dedupeKey,
+  title: alert.title,
+  description: alert.description,
+  severity: alert.severity,
+  status: alert.status,
+  category: alert.category,
+  firstObservedAt: alert.firstObservedAt,
+  lastObservedAt: alert.lastObservedAt,
+  resolvedAt: alert.resolvedAt,
+  evidenceCount: alert.evidenceCount,
+  sourceType: alert.sourceType,
+  sourceId: alert.sourceId,
+  createdAt: alert.createdAt,
+  updatedAt: alert.updatedAt
 }));
 
 export const FrontendMonitoringRunsListSchema = MonitoringRunsListResponseSchema.refine((data) => {
@@ -503,6 +577,7 @@ export const FrontendComplianceEvidenceCenterSchema = ComplianceEvidenceCenterRe
 export type FrontendCommandCenterResponse = ReturnType<typeof FrontendCommandCenterResponseSchema.parse>;
 export type FrontendMonitoringHealth = ReturnType<typeof FrontendMonitoringHealthSchema.parse>;
 export type FrontendSecurityAlertsList = ReturnType<typeof FrontendSecurityAlertsListSchema.parse>;
+export type FrontendSecurityAlertDetail = ReturnType<typeof FrontendSecurityAlertDetailSchema.parse>;
 export type FrontendMonitoringRunsList = ReturnType<typeof FrontendMonitoringRunsListSchema.parse>;
 export type FrontendAutomationLatest = ReturnType<typeof FrontendAutomationLatestSchema.parse>;
 export type FrontendRemediationPlanList = ReturnType<typeof FrontendRemediationPlanListSchema.parse>;

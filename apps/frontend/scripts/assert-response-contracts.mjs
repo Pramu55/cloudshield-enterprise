@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   FrontendAutomationLatestSchema,
+  FrontendAlertIdentifierSchema,
   FrontendAwsAccountListSchema,
   FrontendAwsAccountMutationSchema,
   FrontendAwsAccountDetailSchema,
@@ -13,6 +14,7 @@ import {
   FrontendGovernanceApprovalsSchema,
   FrontendMonitoringHealthSchema,
   FrontendMonitoringRunsListSchema,
+  FrontendSecurityAlertDetailSchema,
   FrontendSecurityAlertsListSchema
   , FrontendRemediationPlanListSchema
 } from "../lib/response-contracts.ts";
@@ -543,5 +545,49 @@ assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidati
 assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidation, validatedAccountId: "123" }).success, false);
 assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidation, mutationExecuted: "false" }).success, false);
 assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidation, message: "SecretAccessKey leaked" }).success, false);
+
+const alertDetail = {
+  ...alert,
+  mappedEvidence: [{
+    id: "evidence-1",
+    summary: "Provider evidence",
+    capturedAt: timestamp,
+    metadata: { ...unsafeFields },
+    ...unsafeFields
+  }],
+  ...unsafeFields
+};
+const parsedAlertDetail = FrontendSecurityAlertDetailSchema.parse(alertDetail);
+assert.equal(FrontendAlertIdentifierSchema.safeParse("alert-1").success, true);
+assert.equal(FrontendAlertIdentifierSchema.safeParse(undefined).success, false);
+assert.equal(FrontendAlertIdentifierSchema.safeParse("").success, false);
+assert.equal(FrontendAlertIdentifierSchema.safeParse(" alert-1 ").success, false);
+assert.equal(FrontendAlertIdentifierSchema.safeParse("alert/1").success, false);
+assert.equal(parsedAlertDetail.id, alert.id);
+assert.equal(parsedAlertDetail.title, alert.title);
+assert.equal(parsedAlertDetail.status, "OPEN");
+assert.equal(parsedAlertDetail.evidenceCount, 0);
+assert.equal("mappedEvidence" in parsedAlertDetail, false);
+assert.equal("evidenceJson" in parsedAlertDetail, false);
+assert.equal("metadata" in parsedAlertDetail, false);
+assertUnsafeFieldsRemoved(parsedAlertDetail, "security alert detail");
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, id: undefined }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, id: "" }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, severity: "UNKNOWN" }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, status: "UNKNOWN" }).success, false);
+for (const field of ["firstObservedAt", "lastObservedAt", "createdAt", "updatedAt"]) {
+  assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, [field]: "not-a-timestamp" }).success, false);
+}
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, evidenceCount: -1 }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, evidenceCount: 1.5 }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, title: "SecretAccessKey exposed" }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, description: "providerError: raw failure" }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, description: "bad\u0000description" }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, status: "OPEN", resolvedAt: timestamp }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, status: "ACKNOWLEDGED", resolvedAt: timestamp }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, status: "RESOLVED", resolvedAt: null }).success, false);
+const resolvedAlert = FrontendSecurityAlertDetailSchema.parse({ ...alertDetail, status: "RESOLVED", resolvedAt: timestamp });
+assert.equal(resolvedAlert.status, "RESOLVED");
+assert.equal(resolvedAlert.resolvedAt, timestamp);
 
 console.log("Frontend response-contract assertions passed.");
