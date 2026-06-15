@@ -28,10 +28,11 @@ const alert = {
   firstObservedAt: timestamp,
   lastObservedAt: timestamp,
   resolvedAt: null,
-  evidenceCount: 0,
-  mappedEvidence: [],
-  sourceType: null,
-  sourceId: null,
+  evidenceSummary: {
+    recordedCount: 0,
+    sourceType: null,
+    sourceId: null
+  },
   createdAt: timestamp,
   updatedAt: timestamp
 };

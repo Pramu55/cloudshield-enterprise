@@ -210,13 +210,13 @@ const alert = {
   firstObservedAt: timestamp,
   lastObservedAt: timestamp,
   resolvedAt: null,
-  evidenceCount: 0,
-  mappedEvidence: [{ ...unsafeFields }],
-  sourceType: null,
-  sourceId: null,
+  evidenceSummary: {
+    recordedCount: 0,
+    sourceType: null,
+    sourceId: null
+  },
   createdAt: timestamp,
-  updatedAt: timestamp,
-  ...unsafeFields
+  updatedAt: timestamp
 };
 
 const run = {
@@ -307,7 +307,7 @@ const account = {
 const parsedResults = [
   [FrontendCommandCenterResponseSchema.parse(commandCenter), "command center"],
   [FrontendMonitoringHealthSchema.parse(health), "monitoring health"],
-  [FrontendSecurityAlertsListSchema.parse({ items: [alert], total: 1, page: 1, pageSize: 25, ...unsafeFields }), "security alerts"],
+  [FrontendSecurityAlertsListSchema.parse({ items: [alert], total: 1, page: 1, pageSize: 25 }), "security alerts"],
   [FrontendAutomationLatestSchema.parse(automation), "automation latest"],
   [FrontendAwsAccountListSchema.parse({ sampleData: false, sampleDataLabel: "Live data", items: [account], ...unsafeFields }), "AWS account list"],
   [FrontendAwsAccountMutationSchema.parse({ item: account, message: "Account updated.", ...unsafeFields }), "AWS account mutation"]
@@ -629,15 +629,7 @@ assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidati
 assert.equal(FrontendAwsIdentityValidationSchema.safeParse({ ...identityValidation, message: "SecretAccessKey leaked" }).success, false);
 
 const alertDetail = {
-  ...alert,
-  mappedEvidence: [{
-    id: "evidence-1",
-    summary: "Provider evidence",
-    capturedAt: timestamp,
-    metadata: { ...unsafeFields },
-    ...unsafeFields
-  }],
-  ...unsafeFields
+  ...alert
 };
 const parsedAlertDetail = FrontendSecurityAlertDetailSchema.parse(alertDetail);
 assert.equal(FrontendAlertIdentifierSchema.safeParse("alert-1").success, true);
@@ -648,20 +640,23 @@ assert.equal(FrontendAlertIdentifierSchema.safeParse("alert/1").success, false);
 assert.equal(parsedAlertDetail.id, alert.id);
 assert.equal(parsedAlertDetail.title, alert.title);
 assert.equal(parsedAlertDetail.status, "OPEN");
-assert.equal(parsedAlertDetail.evidenceCount, 0);
+assert.equal(parsedAlertDetail.evidenceSummary.recordedCount, 0);
+assert.equal("evidenceCount" in parsedAlertDetail, false);
 assert.equal("mappedEvidence" in parsedAlertDetail, false);
 assert.equal("evidenceJson" in parsedAlertDetail, false);
 assert.equal("metadata" in parsedAlertDetail, false);
-assertUnsafeFieldsRemoved(parsedAlertDetail, "security alert detail");
 assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, id: undefined }).success, false);
 assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, id: "" }).success, false);
 assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, severity: "UNKNOWN" }).success, false);
-assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, status: "UNKNOWN" }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, status: "OPEN", resolvedAt: timestamp }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, status: "RESOLVED", resolvedAt: null }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, ...unsafeFields }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, mappedEvidence: [] }).success, false);
 for (const field of ["firstObservedAt", "lastObservedAt", "createdAt", "updatedAt"]) {
   assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, [field]: "not-a-timestamp" }).success, false);
 }
-assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, evidenceCount: -1 }).success, false);
-assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, evidenceCount: 1.5 }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, evidenceSummary: { ...alertDetail.evidenceSummary, recordedCount: -1 } }).success, false);
+assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, evidenceSummary: { ...alertDetail.evidenceSummary, recordedCount: 1.5 } }).success, false);
 assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, title: "SecretAccessKey exposed" }).success, false);
 assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, description: "providerError: raw failure" }).success, false);
 assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, description: "bad\u0000description" }).success, false);

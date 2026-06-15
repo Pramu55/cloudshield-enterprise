@@ -175,7 +175,7 @@ export default function SecurityAlertDetailsPage() {
           <section className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden" aria-labelledby="evidence-heading">
             <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center gap-2"><Search className="w-4 h-4 text-slate-500" aria-hidden="true" /><h2 id="evidence-heading" className="font-semibold text-slate-900">Evidence summary</h2></div>
             <div className="p-5">
-              {alert.evidenceCount === 0
+              {alert.evidenceSummary.recordedCount === 0
                 ? (
                     <EmptyState
                       title="No evidence records"
@@ -184,7 +184,7 @@ export default function SecurityAlertDetailsPage() {
                   )
                 : (
                     <p className="text-sm text-slate-600">
-                      {alert.evidenceCount} evidence record{alert.evidenceCount === 1 ? "" : "s"} reported. Evidence details are withheld because the shared contract does not provide a safe evidence-item schema.
+                      {alert.evidenceSummary.recordedCount} evidence record{alert.evidenceSummary.recordedCount === 1 ? "" : "s"} reported. Evidence details are withheld because the shared contract does not provide a safe evidence-item schema.
                     </p>
                   )}
             </div>
@@ -198,7 +198,7 @@ export default function SecurityAlertDetailsPage() {
               <div><dt className="font-semibold text-slate-500">Deduplication key</dt><dd><ResourceId value={alert.dedupeKey} /></dd></div>
               {alert.cloudResourceId ? <div><dt className="font-semibold text-slate-500">Resource</dt><dd><ResourceId value={alert.cloudResourceId} /></dd></div> : null}
               {alert.securityFindingId ? <div><dt className="font-semibold text-slate-500">Finding</dt><dd><ResourceId value={alert.securityFindingId} /></dd></div> : null}
-              {alert.sourceType ? <div><dt className="font-semibold text-slate-500">Source</dt><dd>{alert.sourceType}{alert.sourceId ? <>: <ResourceId value={alert.sourceId} /></> : null}</dd></div> : null}
+              {alert.evidenceSummary.sourceType ? <div><dt className="font-semibold text-slate-500">Source</dt><dd>{alert.evidenceSummary.sourceType}{alert.evidenceSummary.sourceId ? <>: <ResourceId value={alert.evidenceSummary.sourceId} /></> : null}</dd></div> : null}
             </dl>
           </section>
         </div>
