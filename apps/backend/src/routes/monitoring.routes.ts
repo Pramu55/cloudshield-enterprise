@@ -4,17 +4,14 @@ import { prisma } from "@cloudshield/database";
 import { BackendMonitoringHealthService } from "../modules/security-monitoring/backend-monitoring-health.service.js";
 import { securityMonitoringQueue } from "../modules/security-monitoring/monitoring.queue.js";
 import { z } from "zod";
+import {
+  AcknowledgeAlertRequestSchema,
+  ResolveAlertRequestSchema,
+  SecurityAlertLifecycleMutationResponseSchema
+} from "@cloudshield/contracts";
 
 const EvaluateSchema = z.object({
   trigger: z.string().optional()
-});
-
-const LifecycleAcknowledgeSchema = z.object({
-  note: z.string().max(1024).optional()
-});
-
-const LifecycleResolveSchema = z.object({
-  reason: z.string().min(1, "Reason is required for manual resolution").max(1024)
 });
 
 const ParamsSchema = z.object({
@@ -120,7 +117,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
   }, async (request: any, reply) => {
     const auth = getAuthContext(request);
     const { id } = ParamsSchema.parse(request.params);
-    const { note } = LifecycleAcknowledgeSchema.parse(request.body || {});
+    const { note } = AcknowledgeAlertRequestSchema.parse(request.body || {});
 
     const result = await prisma.securityAlert.updateMany({
       where: { id, organizationId: auth.organizationId },
@@ -140,7 +137,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       }
     });
 
-    return { status: "ok" };
+    return SecurityAlertLifecycleMutationResponseSchema.parse({ status: "ok" });
   });
 
   app.patch("/api/v1/security-monitoring/alerts/:id/resolve", {
@@ -148,7 +145,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
   }, async (request: any, reply) => {
     const auth = getAuthContext(request);
     const { id } = ParamsSchema.parse(request.params);
-    const { reason } = LifecycleResolveSchema.parse(request.body || {});
+    const { reason } = ResolveAlertRequestSchema.parse(request.body || {});
 
     const result = await prisma.securityAlert.updateMany({
       where: { id, organizationId: auth.organizationId },
@@ -168,6 +165,6 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       }
     });
 
-    return { status: "ok" };
+    return SecurityAlertLifecycleMutationResponseSchema.parse({ status: "ok" });
   });
 }

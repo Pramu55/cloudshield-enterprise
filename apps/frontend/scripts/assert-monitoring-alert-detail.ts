@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { SecurityAlertLifecycleMutationResponseSchema } from "@cloudshield/contracts";
 import { ApiRequestError } from "../lib/api-error";
 import { clearCsrfToken, fetchCloudShieldClient } from "../lib/client-api";
 import {
@@ -60,20 +62,49 @@ async function assertMutationRequiresValidatedConfirmation(action: "acknowledge"
     }
     if (url.endsWith(`/${action}`)) {
       mutationCalls += 1;
-      return json({ status: "ok", rawResponse: { provider: true } });
+      return json({ status: "ok" });
     }
     detailCalls += 1;
-    return json({ ...alert, status: "UNKNOWN" });
+    return json(action === "acknowledge"
+      ? { ...alert, status: "ACKNOWLEDGED" }
+      : { ...alert, status: "RESOLVED", resolvedAt: timestamp });
   };
 
-  await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/alert-1/${action}`, {
+  const acceptance = await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/alert-1/${action}`, {
     method: "PATCH",
-    body: action === "acknowledge" ? { note: "Reviewing" } : { reason: "Resolved by operator" }
+    body: action === "acknowledge" ? { note: "Reviewing" } : { reason: "Resolved by operator" },
+    schema: SecurityAlertLifecycleMutationResponseSchema
   });
-  await expectKind(() => fetchCloudShieldClient("/api/v1/security-monitoring/alerts/alert-1", { schema: FrontendSecurityAlertDetailSchema }), "CONTRACT_INVALID");
+  assert.deepEqual(acceptance, { status: "ok" });
+  const confirmed = await fetchCloudShieldClient("/api/v1/security-monitoring/alerts/alert-1", { schema: FrontendSecurityAlertDetailSchema });
+  assert.equal(confirmed.status, action === "acknowledge" ? "ACKNOWLEDGED" : "RESOLVED");
+  if (action === "resolve") assert.equal(confirmed.resolvedAt, timestamp);
   assert.equal(csrfCalls, 1);
   assert.equal(mutationCalls, 1, `${action} mutation must execute exactly once`);
   assert.equal(detailCalls, 1, `${action} confirmation read must execute exactly once`);
+}
+
+async function assertMalformedMutationSkipsConfirmation(action: "acknowledge" | "resolve") {
+  clearCsrfToken();
+  let mutationCalls = 0;
+  let detailCalls = 0;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/v1/auth/csrf")) return json({ token: "monitoring-csrf-token" });
+    if (url.endsWith(`/${action}`)) {
+      mutationCalls += 1;
+      return json({ status: "ok", rawResponse: { provider: true } });
+    }
+    detailCalls += 1;
+    return json(alert);
+  };
+  await expectKind(() => fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/alert-1/${action}`, {
+    method: "PATCH",
+    body: action === "acknowledge" ? { note: "Reviewing" } : { reason: "Resolved by operator" },
+    schema: SecurityAlertLifecycleMutationResponseSchema
+  }), "CONTRACT_INVALID");
+  assert.equal(mutationCalls, 1);
+  assert.equal(detailCalls, 0, `${action} confirmation must not run after malformed mutation response`);
 }
 
 async function main() {
@@ -117,6 +148,30 @@ async function main() {
 
     await assertMutationRequiresValidatedConfirmation("acknowledge");
     await assertMutationRequiresValidatedConfirmation("resolve");
+    await assertMalformedMutationSkipsConfirmation("acknowledge");
+    await assertMalformedMutationSkipsConfirmation("resolve");
+
+    assert.deepEqual(SecurityAlertLifecycleMutationResponseSchema.parse({ status: "ok" }), { status: "ok" });
+    for (const invalid of [
+      {},
+      { status: "unknown" },
+      { status: "ok", extra: true },
+      { status: "ok", alertStatus: "ACKNOWLEDGED" },
+      { status: "ok", rawError: "provider failed" },
+      { status: "ok", AccessKeyId: "AKIA0000000000000000" }
+    ]) {
+      assert.equal(SecurityAlertLifecycleMutationResponseSchema.safeParse(invalid).success, false);
+    }
+
+    clearCsrfToken();
+    globalThis.fetch = async (input) => String(input).endsWith("/api/v1/auth/csrf")
+      ? json({ token: "monitoring-csrf-token" })
+      : new Response("", { status: 200 });
+    assert.equal(await fetchCloudShieldClient("/api/v1/security-monitoring/alerts/alert-1/acknowledge", {
+      method: "PATCH",
+      body: { note: "Reviewing" },
+      schema: SecurityAlertLifecycleMutationResponseSchema
+    }), undefined);
 
     clearCsrfToken();
     let calls = 0;
@@ -136,6 +191,28 @@ async function main() {
     globalThis.fetch = async () => new Response(null, { status: 205 });
     assert.equal(await fetchCloudShieldClient("/reset-content"), undefined);
 
+    const detailSource = await readFile(new URL("../app/dashboard/monitoring/alerts/[id]/page.tsx", import.meta.url), "utf8");
+    const listSource = await readFile(new URL("../app/dashboard/monitoring/page.tsx", import.meta.url), "utf8");
+    for (const source of [detailSource, listSource]) {
+      assert.equal((source.match(/SecurityAlertLifecycleMutationResponseSchema/g) ?? []).length >= 3, true);
+      assert.equal(source.includes("console.error"), false);
+      assert.equal(source.includes("alert("), false);
+      assert.equal(/\bretry\s*:/i.test(source), false);
+    }
+    assert.equal(/setAlert\([^)]*status/i.test(detailSource), false);
+    assert.equal(/setAlerts\([^)]*status/i.test(listSource), false);
+    assert.equal(detailSource.includes("if (!acceptance) throw new ApiRequestError(contractInvalidError())"), true);
+    assert.equal(listSource.includes("if (!acceptance) throw lifecycleMutationContractError()"), true);
+    assert.equal(/const loadData = async \(\): Promise<boolean> =>/.test(listSource), true);
+    assert.equal(/return true;\s*\} catch/.test(listSource), true);
+    assert.equal(/return false;\s*\} finally/.test(listSource), true);
+    assert.equal(/const confirmed = await loadData\(\);/.test(listSource), true);
+    assert.equal(/if \(\!confirmed\) \{\s*throw lifecycleMutationContractError\(\);\s*\}/.test(listSource), true);
+    assert.equal(listSource.indexOf("if (!acceptance)") < listSource.indexOf("const confirmed = await loadData()"), true);
+    assert.equal(/finally\s*\{[^}]*loadData/.test(listSource), false);
+    assert.equal(listSource.includes("setAlerts(a.items)"), true);
+    assert.equal(listSource.includes("setAlerts(a.items || [])"), false);
+    assert.equal(/setAlerts\([^)]*status/.test(listSource), false);
     globalThis.fetch = async () => json({ message: "forbidden" }, 403);
     await assert.rejects(() => fetchCloudShieldClient("/forbidden"), (error: unknown) => error instanceof ApiRequestError && error.apiError.kind === "FORBIDDEN" && !error.apiError.sessionExpired);
 

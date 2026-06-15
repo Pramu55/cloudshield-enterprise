@@ -6,7 +6,11 @@ import { RefreshCcw, ShieldAlert, CheckCircle, Activity, AlertTriangle, List, Hi
 import Link from "next/link";
 import { ErrorState } from "../../../components/ui/error-state";
 import { LoadingState } from "../../../components/ui/loading-state";
-import { toApiError, type ApiError } from "../../../lib/api-error";
+import { API_ERROR_MESSAGES, ApiRequestError, toApiError, type ApiError } from "../../../lib/api-error";
+import {
+  SecurityAlertLifecycleMutationResponseSchema,
+  type SecurityAlertLifecycleMutationResponse
+} from "@cloudshield/contracts";
 import {
   FrontendMonitoringHealthSchema,
   FrontendMonitoringRunsListSchema,
@@ -15,6 +19,15 @@ import {
   type FrontendMonitoringRunsList,
   type FrontendSecurityAlertsList
 } from "../../../lib/response-contracts";
+
+function lifecycleMutationContractError() {
+  return new ApiRequestError({
+    kind: "CONTRACT_INVALID",
+    safeMessage: API_ERROR_MESSAGES.CONTRACT_INVALID,
+    retryableRead: false,
+    sessionExpired: false
+  });
+}
 
 export default function SecurityMonitoringPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "alerts" | "runs">("overview");
@@ -25,7 +38,7 @@ export default function SecurityMonitoringPage() {
   const [readError, setReadError] = useState<ApiError | null>(null);
   const [actionError, setActionError] = useState<ApiError | null>(null);
 
-  const loadData = async () => {
+  const loadData = async (): Promise<boolean> => {
     setLoading(true);
     setReadError(null);
     try {
@@ -34,14 +47,16 @@ export default function SecurityMonitoringPage() {
         setHealth(h);
       } else if (activeTab === "alerts") {
         const a = await fetchCloudShieldClient<FrontendSecurityAlertsList>("/api/v1/security-monitoring/alerts", { schema: FrontendSecurityAlertsListSchema });
-        setAlerts(a.items || []);
+        setAlerts(a.items);
       } else if (activeTab === "runs") {
         const r = await fetchCloudShieldClient<FrontendMonitoringRunsList>("/api/v1/security-monitoring/runs", { schema: FrontendMonitoringRunsListSchema });
-        setRuns(r.items || []);
+        setRuns(r.items);
       }
+      return true;
     } catch (error) {
       const normalized = toApiError(error);
       if (normalized.kind !== "CANCELLED") setReadError(normalized);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -64,8 +79,16 @@ export default function SecurityMonitoringPage() {
   const handleAcknowledge = async (id: string) => {
     setActionError(null);
     try {
-      await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/${id}/acknowledge`, { method: "PATCH", body: { note: "Acknowledged via UI" } });
-      await loadData();
+      const acceptance = await fetchCloudShieldClient<SecurityAlertLifecycleMutationResponse>(`/api/v1/security-monitoring/alerts/${id}/acknowledge`, {
+        method: "PATCH",
+        body: { note: "Acknowledged via UI" },
+        schema: SecurityAlertLifecycleMutationResponseSchema
+      });
+      if (!acceptance) throw lifecycleMutationContractError();
+      const confirmed = await loadData();
+      if (!confirmed) {
+        throw lifecycleMutationContractError();
+      }
     } catch (error) {
       setActionError(toApiError(error));
     }
@@ -74,8 +97,16 @@ export default function SecurityMonitoringPage() {
   const handleResolve = async (id: string) => {
     setActionError(null);
     try {
-      await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/${id}/resolve`, { method: "PATCH", body: { reason: "Resolved via UI" } });
-      await loadData();
+      const acceptance = await fetchCloudShieldClient<SecurityAlertLifecycleMutationResponse>(`/api/v1/security-monitoring/alerts/${id}/resolve`, {
+        method: "PATCH",
+        body: { reason: "Resolved via UI" },
+        schema: SecurityAlertLifecycleMutationResponseSchema
+      });
+      if (!acceptance) throw lifecycleMutationContractError();
+      const confirmed = await loadData();
+      if (!confirmed) {
+        throw lifecycleMutationContractError();
+      }
     } catch (error) {
       setActionError(toApiError(error));
     }

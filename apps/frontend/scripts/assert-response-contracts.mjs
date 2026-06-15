@@ -20,8 +20,20 @@ import {
   FrontendInventorySyncResponseSchema,
   createFrontendInventoryAccountSyncResponseSchema
 } from "../lib/response-contracts.ts";
+import { SecurityAlertLifecycleMutationResponseSchema } from "@cloudshield/contracts";
 
 const timestamp = "2026-06-13T12:00:00.000Z";
+assert.deepEqual(SecurityAlertLifecycleMutationResponseSchema.parse({ status: "ok" }), { status: "ok" });
+for (const invalidMutationResponse of [
+  {},
+  { status: "unknown" },
+  { status: "ok", statusValue: "ACKNOWLEDGED" },
+  { status: "ok", alert: { status: "ACKNOWLEDGED" } },
+  { status: "ok", rawResponse: { provider: true } },
+  { status: "ok", SecretAccessKey: "secret" }
+]) {
+  assert.equal(SecurityAlertLifecycleMutationResponseSchema.safeParse(invalidMutationResponse).success, false);
+}
 const unsafeFields = {
   AccessKeyId: "AKIA0000000000000000",
   SecretAccessKey: "secret",
