@@ -9,7 +9,9 @@ import { LoadingState } from "../../../components/ui/loading-state";
 import { API_ERROR_MESSAGES, ApiRequestError, toApiError, type ApiError } from "../../../lib/api-error";
 import {
   SecurityAlertLifecycleMutationResponseSchema,
-  type SecurityAlertLifecycleMutationResponse
+  type SecurityAlertLifecycleMutationResponse,
+  EvaluateMonitoringResponseSchema,
+  type EvaluateMonitoringResponse
 } from "@cloudshield/contracts";
 import {
   FrontendMonitoringHealthSchema,
@@ -20,7 +22,7 @@ import {
   type FrontendSecurityAlertsList
 } from "../../../lib/response-contracts";
 
-function lifecycleMutationContractError() {
+function monitoringActionContractError() {
   return new ApiRequestError({
     kind: "CONTRACT_INVALID",
     safeMessage: API_ERROR_MESSAGES.CONTRACT_INVALID,
@@ -69,8 +71,16 @@ export default function SecurityMonitoringPage() {
   const handleEvaluate = async () => {
     setActionError(null);
     try {
-      await fetchCloudShieldClient("/api/v1/security-monitoring/evaluate", { method: "POST", body: { trigger: "MANUAL" } });
-      await loadData();
+      const acceptance = await fetchCloudShieldClient<EvaluateMonitoringResponse>("/api/v1/security-monitoring/evaluate", {
+        method: "POST",
+        body: { trigger: "MANUAL" },
+        schema: EvaluateMonitoringResponseSchema
+      });
+      if (!acceptance) throw monitoringActionContractError();
+      const confirmed = await loadData();
+      if (!confirmed) {
+        throw monitoringActionContractError();
+      }
     } catch (error) {
       setActionError(toApiError(error));
     }
@@ -84,10 +94,10 @@ export default function SecurityMonitoringPage() {
         body: { note: "Acknowledged via UI" },
         schema: SecurityAlertLifecycleMutationResponseSchema
       });
-      if (!acceptance) throw lifecycleMutationContractError();
+      if (!acceptance) throw monitoringActionContractError();
       const confirmed = await loadData();
       if (!confirmed) {
-        throw lifecycleMutationContractError();
+        throw monitoringActionContractError();
       }
     } catch (error) {
       setActionError(toApiError(error));
@@ -102,10 +112,10 @@ export default function SecurityMonitoringPage() {
         body: { reason: "Resolved via UI" },
         schema: SecurityAlertLifecycleMutationResponseSchema
       });
-      if (!acceptance) throw lifecycleMutationContractError();
+      if (!acceptance) throw monitoringActionContractError();
       const confirmed = await loadData();
       if (!confirmed) {
-        throw lifecycleMutationContractError();
+        throw monitoringActionContractError();
       }
     } catch (error) {
       setActionError(toApiError(error));

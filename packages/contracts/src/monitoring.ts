@@ -206,8 +206,14 @@ export type MonitoringOverviewResponse = z.infer<typeof MonitoringOverviewRespon
 
 export const EvaluateMonitoringRequestSchema = z.object({
   trigger: z.string().optional()
-});
+}).strict();
 export type EvaluateMonitoringRequest = z.infer<typeof EvaluateMonitoringRequestSchema>;
+
+export const EvaluateMonitoringResponseSchema = z.object({
+  status: z.literal("QUEUED"),
+  message: z.literal("Security monitoring evaluation queued successfully.")
+}).strict();
+export type EvaluateMonitoringResponse = z.infer<typeof EvaluateMonitoringResponseSchema>;
 
 export const AcknowledgeAlertRequestSchema = z.object({
   note: z.string().max(1000).optional()

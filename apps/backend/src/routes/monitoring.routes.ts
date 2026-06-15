@@ -7,12 +7,10 @@ import { z } from "zod";
 import {
   AcknowledgeAlertRequestSchema,
   ResolveAlertRequestSchema,
-  SecurityAlertLifecycleMutationResponseSchema
+  SecurityAlertLifecycleMutationResponseSchema,
+  EvaluateMonitoringRequestSchema,
+  EvaluateMonitoringResponseSchema
 } from "@cloudshield/contracts";
-
-const EvaluateSchema = z.object({
-  trigger: z.string().optional()
-});
 
 const ParamsSchema = z.object({
   id: z.string()
@@ -98,7 +96,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
   app.post("/api/v1/security-monitoring/evaluate", { preHandler: requireAuth }, async (request: any) => {
     const auth = getAuthContext(request);
-    const payload = EvaluateSchema.parse(request.body || {});
+    const payload = EvaluateMonitoringRequestSchema.parse(request.body || {});
     const trigger = payload.trigger || "API_REQUEST";
 
     await securityMonitoringQueue.add("evaluate-security-monitoring", {
@@ -106,10 +104,10 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       trigger
     });
 
-    return {
+    return EvaluateMonitoringResponseSchema.parse({
       status: "QUEUED",
       message: "Security monitoring evaluation queued successfully."
-    };
+    });
   });
 
   app.patch("/api/v1/security-monitoring/alerts/:id/acknowledge", {
