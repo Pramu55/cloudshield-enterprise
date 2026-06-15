@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 
 import {
   FrontendAutomationLatestSchema,
@@ -15,8 +15,10 @@ import {
   FrontendMonitoringHealthSchema,
   FrontendMonitoringRunsListSchema,
   FrontendSecurityAlertDetailSchema,
-  FrontendSecurityAlertsListSchema
-  , FrontendRemediationPlanListSchema
+  FrontendSecurityAlertsListSchema,
+  FrontendRemediationPlanListSchema,
+  FrontendInventorySyncResponseSchema,
+  createFrontendInventoryAccountSyncResponseSchema
 } from "../lib/response-contracts.ts";
 
 const timestamp = "2026-06-13T12:00:00.000Z";
@@ -614,5 +616,112 @@ assert.equal(FrontendSecurityAlertDetailSchema.safeParse({ ...alertDetail, statu
 const resolvedAlert = FrontendSecurityAlertDetailSchema.parse({ ...alertDetail, status: "RESOLVED", resolvedAt: timestamp });
 assert.equal(resolvedAlert.status, "RESOLVED");
 assert.equal(resolvedAlert.resolvedAt, timestamp);
+
+const orchestrationResponse = {
+  status: "QUEUED",
+  dryRun: false,
+  items: [
+    {
+      status: "QUEUED",
+      scanRunId: "scan-run-1",
+      queueJobId: "job-1",
+      dedupeKey: "key1",
+      account: {
+        id: "00000000-0000-0000-0000-000000000000",
+        name: "Acct",
+        accountId: "123456789012",
+        environment: "PRODUCTION",
+        connectionStatus: "CONNECTED_DEMO_ONLY",
+        status: "CONNECTED"
+      },
+      requestedRegions: ["us-east-1"]
+    }
+  ],
+  awsApiCallExecuted: false,
+  scannerRun: false,
+  mutationExecuted: false,
+  terraformApplyExecuted: false,
+  automaticRemediationExecuted: false
+};
+
+const parsedOrchestration = FrontendInventorySyncResponseSchema.parse(orchestrationResponse);
+assert.equal(parsedOrchestration.status, "QUEUED");
+assert.equal(parsedOrchestration.items[0].status, "QUEUED");
+assertUnsafeFieldsRemoved(parsedOrchestration, "inventory sync response");
+assertUnsafeFieldsRemoved(parsedOrchestration.items[0], "inventory sync response item");
+assert.equal(createFrontendInventoryAccountSyncResponseSchema(orchestrationResponse.items[0].account.id).safeParse(orchestrationResponse).success, true);
+
+const conflictResponse = {
+  ...orchestrationResponse,
+  status: "CONFLICT",
+  items: [{
+    status: "CONFLICT",
+    existingScanRunId: "00000000-0000-0000-0000-000000000000",
+    message: "Conflict test",
+    account: orchestrationResponse.items[0].account,
+    dedupeKey: "key1"
+  }]
+};
+const parsedConflict = FrontendInventorySyncResponseSchema.parse(conflictResponse);
+assert.equal(parsedConflict.status, "CONFLICT");
+assertUnsafeFieldsRemoved(parsedConflict.items[0], "conflict response item");
+
+const duplicateActiveResponse = {
+  ...orchestrationResponse,
+  status: "PLANNED",
+  items: [{
+    status: "DUPLICATE_ACTIVE",
+    scanRunId: "scan-run-1",
+    message: "An active scan already covers this account and region set.",
+    account: orchestrationResponse.items[0].account,
+    dedupeKey: "key1"
+  }]
+};
+assert.equal(FrontendInventorySyncResponseSchema.parse(duplicateActiveResponse).items[0].status, "DUPLICATE_ACTIVE");
+
+const blockedItem = {
+  status: "BLOCKED",
+  scanRunId: "scan-run-2",
+  requestedRegions: ["us-east-1"],
+  blockedReason: "AWS connector mode is not enabled for read-only validation.",
+  account: orchestrationResponse.items[0].account,
+  dedupeKey: "key2"
+};
+assert.equal(FrontendInventorySyncResponseSchema.parse({ ...orchestrationResponse, status: "PLANNED", items: [blockedItem] }).items[0].status, "BLOCKED");
+const { scanRunId: _persistedScanRunId, ...dryRunBlockedItem } = blockedItem;
+assert.equal(FrontendInventorySyncResponseSchema.parse({ ...orchestrationResponse, status: "PLANNED", dryRun: true, items: [dryRunBlockedItem] }).items[0].status, "BLOCKED");
+assert.equal(FrontendInventorySyncResponseSchema.parse({ ...orchestrationResponse, status: "PLANNED", dryRun: true, items: [{ status: "READY_TO_QUEUE", requestedRegions: ["us-east-1"], account: orchestrationResponse.items[0].account, dedupeKey: "key3" }] }).items[0].status, "READY_TO_QUEUE");
+
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, status: "FAILED" }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], status: "UNKNOWN" }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], scanRunId: undefined }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], requestedRegions: undefined }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...conflictResponse, items: [{ ...conflictResponse.items[0], dedupeKey: undefined }] }).success, false);
+const longDedupeKey = `org:${"a".repeat(180)}:account:scanner:${Array.from({ length: 30 }, (_, index) => `us-east-${(index % 9) + 1}`).join(",")}`;
+assert.equal(longDedupeKey.length > 160, true);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], dedupeKey: longDedupeKey }] }).success, true);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], dedupeKey: "x".repeat(1025) }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], dedupeKey: "key\u0000value" }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], dedupeKey: undefined }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...duplicateActiveResponse, items: [{ ...duplicateActiveResponse.items[0], dedupeKey: undefined }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, status: "PLANNED", items: [{ ...blockedItem, dedupeKey: undefined }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, status: "PLANNED", dryRun: true, items: [{ status: "READY_TO_QUEUE", requestedRegions: ["us-east-1"], account: orchestrationResponse.items[0].account }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], account: { ...orchestrationResponse.items[0].account, status: "UNKNOWN" } }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], account: { ...orchestrationResponse.items[0].account, environment: "UNKNOWN" } }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], queueJobId: "../job" }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], scanRunId: "../scan" }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, status: "PLANNED", items: [{ ...blockedItem, blockedReason: "" }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, status: "PLANNED", items: [{ ...blockedItem, blockedReason: "x".repeat(501) }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], requestedRegions: ["not-a-region"] }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], requestedRegions: Array.from({ length: 31 }, (_, index) => `us-east-${index + 1}`) }] }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, extra: true }).success, false);
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, items: [{ ...orchestrationResponse.items[0], extra: true }] }).success, false);
+for (const field of Object.keys(unsafeFields)) {
+  assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, [field]: unsafeFields[field] }).success, false);
+}
+assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationResponse, mutationExecuted: true }).success, false);
+assert.equal(createFrontendInventoryAccountSyncResponseSchema(orchestrationResponse.items[0].account.id).safeParse({ ...orchestrationResponse, items: [orchestrationResponse.items[0], orchestrationResponse.items[0]] }).success, false);
+assert.equal(createFrontendInventoryAccountSyncResponseSchema("different-account").safeParse(orchestrationResponse).success, false);
+assert.equal(createFrontendInventoryAccountSyncResponseSchema(orchestrationResponse.items[0].account.id).safeParse({ ...orchestrationResponse, dryRun: true }).success, false);
 
 console.log("Frontend response-contract assertions passed.");

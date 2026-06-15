@@ -1,4 +1,4 @@
-﻿# CloudShield Frontend Production Audit
+# CloudShield Frontend Production Audit
 
 Milestone: `CLOUDSHIELD_FRONTEND_AUDIT_AND_DESIGN_SYSTEM`
 Audited base: `2a81529 feat: add authoritative EC2 fingerprint capture (#20)`
@@ -108,7 +108,7 @@ All authoritative schemas above are ordinary Zod objects: they strip unknown obj
 
 Governed execution evidence is not currently consumed by a frontend call site, so no speculative request was added. The authoritative `GovernedExecutionEvidenceResponseSchema`, `MutationOutcomeSchema`, and `MutationReconciliationStatusSchema` were inspected and asserted: `OUTCOME_UNKNOWN` and `MANUAL_REVIEW_REQUIRED` remain exact, unknown outcomes/states fail, approval is not execution success, evidence is not inferred, and `providerRequestId` is never promoted to correlation ID. Existing governed evidence records contain provider-shaped record fields, so a future consuming UI must add a narrow redacted projection before placing evidence in React state.
 
-At the time of the original audit, the unvalidated-response inventory was broader. After the high-risk route and monitoring alert-detail milestones, successful responses that remain unvalidated include profile, invitations, notifications, search, connector status, inventory plan and inventory sync, teams/members, inventory resources and resource detail, findings, cost, recommendations, graph, scan list/detail, reports, platform settings, monitoring evaluate, and monitoring acknowledge/resolve mutation responses. These routes retain their current behavior until a matching authoritative contract and narrow frontend projection are integrated. The inventory-sync and monitoring-mutation contract gaps are documented in the current milestone sections below.
+At the time of the original audit, the unvalidated-response inventory was broader. After the high-risk route, monitoring alert-detail, and inventory orchestration milestones, successful responses that remain unvalidated include profile, invitations, notifications, search, connector status, inventory plan, teams/members, inventory resources and resource detail, findings, cost, recommendations, graph, scan list/detail, reports, platform settings, monitoring evaluate, and monitoring acknowledge/resolve mutation responses. These routes retain their current behavior until a matching authoritative contract and narrow frontend projection are integrated. The remaining monitoring-mutation and inventory list/detail gaps are documented in the current milestone sections below.
 
 ### Permission and production guard update
 
@@ -227,9 +227,12 @@ Routes intentionally not migrated in this milestone:
 
 - Governance detail and mutation endpoints are not currently consumed by the frontend. No calls or DTO guesses were added.
 - Governed execution evidence, reconciliation list/detail, rollback, and recommendation detail do not have current frontend consumers with a complete authoritative endpoint-to-schema path. Their shared/backend contract gap must be resolved before UI integration.
-- At this earlier milestone boundary, monitoring alert detail was intentionally deferred. It is now validated and redacted by the monitoring alert-detail contract milestone documented below.
-- The consumed `POST /api/v1/aws/accounts/:id/inventory/sync` route returns an orchestration envelope (`status`, `dryRun`, `items`, safety flags). `AwsInventoryStartResponseSchema` describes a different direct sync/start response and does not validate this route. No authoritative shared orchestration response schema exists, so the call remains an explicit unvalidated shared-contract gap rather than using an invented or mismatched DTO.
 - Members, teams, invitations, connector status, inventory plan, reports, recommendations list, cost, graph, scan detail, profile, search, and notifications remain outside this high-risk slice or need dedicated safe projections.
+
+**Inventory Sync Contract Update:**
+The `POST /api/v1/aws/accounts/:id/inventory/sync` and `POST /api/v1/inventory/scans` routes now use dedicated authoritative orchestration contracts. `AwsInventoryStartResponseSchema` remains specific to the older `/inventory/start` endpoint. Orchestration outcomes are separate from scan lifecycle: `QUEUED` means the queue accepted the request, not that scanning completed. `DUPLICATE_ACTIVE` is an item-level planned outcome and differs from an idempotency `CONFLICT`; a top-level `PLANNED` response may therefore contain blocked or duplicate-active items.
+
+The account frontend validates the normal orchestration envelope, requires a non-dry-run response with exactly one item for the requested account record, and explicitly projects only workflow fields. A malformed HTTP 200 or 202 response becomes `CONTRACT_INVALID`. Queue-add failure normally atomically transitions the run to a safe persisted `FAILED` state and records `inventory.scan.queue_failed`; no AWS call occurred. If both queue insertion and that failure-transition transaction fail, the initially created `QUEUED` row may remain. The API still returns only fixed safe copy, exposes and logs neither raw failure, and active-run deduplication prevents a second enqueue. This residual state is not fully reconciled in this milestone. If queue acceptance succeeds but confirmation persistence fails, the run also remains `QUEUED` because execution may already happen. This milestone does not close the remaining inventory list/detail response-contract gaps and does not claim full inventory frontend completion.
 
 Remaining risk: several shared governance schemas contain defaults and arbitrary record fields. The migrated frontend outputs do not expose those records, but future detail pages must use explicit allowlists and authoritative fingerprint/evidence contracts rather than spreading shared DTOs. Recommended next branch: `feat/frontend-monitoring-alert-detail-contract`.
 
