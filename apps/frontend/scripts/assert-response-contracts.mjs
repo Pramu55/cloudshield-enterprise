@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 
 import {
   FrontendAutomationLatestSchema,
@@ -20,7 +20,7 @@ import {
   FrontendInventorySyncResponseSchema,
   createFrontendInventoryAccountSyncResponseSchema
 } from "../lib/response-contracts.ts";
-import { SecurityAlertLifecycleMutationResponseSchema } from "@cloudshield/contracts";
+import { SecurityAlertLifecycleMutationResponseSchema, EvaluateMonitoringResponseSchema } from "@cloudshield/contracts";
 
 const timestamp = "2026-06-13T12:00:00.000Z";
 assert.deepEqual(SecurityAlertLifecycleMutationResponseSchema.parse({ status: "ok" }), { status: "ok" });
@@ -34,6 +34,26 @@ for (const invalidMutationResponse of [
 ]) {
   assert.equal(SecurityAlertLifecycleMutationResponseSchema.safeParse(invalidMutationResponse).success, false);
 }
+
+const evaluateSuccess = {
+  status: "QUEUED",
+  message: "Security monitoring evaluation queued successfully."
+};
+
+assert.deepEqual(EvaluateMonitoringResponseSchema.parse(evaluateSuccess), evaluateSuccess);
+assert.equal(EvaluateMonitoringResponseSchema.safeParse({}).success, false);
+assert.equal(EvaluateMonitoringResponseSchema.safeParse({ ...evaluateSuccess, status: "ok" }).success, false);
+assert.equal(EvaluateMonitoringResponseSchema.safeParse({ ...evaluateSuccess, status: "COMPLETED" }).success, false);
+assert.equal(EvaluateMonitoringResponseSchema.safeParse({ ...evaluateSuccess, unknown: "field" }).success, false);
+assert.equal(EvaluateMonitoringResponseSchema.safeParse({ ...evaluateSuccess, message: "evaluation completed" }).success, false);
+
+for (const field of [
+  "runId", "queueJobId", "alertsCreated", "mutationExecuted",
+  "rawResponse", "providerError", "stack", "AccessKeyId", "SecretAccessKey", "SessionToken"
+]) {
+  assert.equal(EvaluateMonitoringResponseSchema.safeParse({ ...evaluateSuccess, [field]: "unsafe" }).success, false);
+}
+
 const unsafeFields = {
   AccessKeyId: "AKIA0000000000000000",
   SecretAccessKey: "secret",

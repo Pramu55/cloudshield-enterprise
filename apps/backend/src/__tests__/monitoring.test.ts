@@ -4,7 +4,7 @@ import { buildApp } from "../app.js";
 import { prisma } from "@cloudshield/database";
 import { randomUUID } from "node:crypto";
 import { securityMonitoringQueue } from "../modules/security-monitoring/monitoring.queue.js";
-import { SecurityAlertLifecycleMutationResponseSchema } from "@cloudshield/contracts";
+import { SecurityAlertLifecycleMutationResponseSchema, EvaluateMonitoringResponseSchema } from "@cloudshield/contracts";
 
 test("Security Monitoring API Endpoints", async (t) => {
   const app = await buildApp();
@@ -151,16 +151,69 @@ test("Security Monitoring API Endpoints", async (t) => {
     assert.strictEqual(detail.json().id, runId);
   });
 
-  await t.test("evaluate returns 202 and enqueues job", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/api/v1/security-monitoring/evaluate",
-      headers: { cookie: sessionCookie },
-      payload: {}
+  await t.test("evaluate endpoint", async (st) => {
+    let queueCalls: any[] = [];
+    const originalAdd = securityMonitoringQueue.add;
+    securityMonitoringQueue.add = async (...args: any[]) => {
+      queueCalls.push(args);
+      return {} as any;
+    };
+
+    st.after(() => {
+      securityMonitoringQueue.add = originalAdd;
     });
-    // the route returns 200 actually, based on the route code `return { status: "QUEUED" }`
-    assert.strictEqual(res.statusCode, 200);
-    assert.strictEqual(res.json().status, "QUEUED");
+
+    await st.test("accepts evaluate and enqueues job", async () => {
+      queueCalls = [];
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate",
+        headers: { cookie: sessionCookie },
+        payload: { trigger: "MANUAL" }
+      });
+      assert.strictEqual(res.statusCode, 200);
+      assert.deepStrictEqual(res.json(), {
+        status: "QUEUED",
+        message: "Security monitoring evaluation queued successfully."
+      });
+      assert.deepStrictEqual(EvaluateMonitoringResponseSchema.parse(res.json()), {
+        status: "QUEUED",
+        message: "Security monitoring evaluation queued successfully."
+      });
+      assert.strictEqual("runId" in res.json(), false);
+      assert.strictEqual("queueJobId" in res.json(), false);
+      assert.strictEqual("alertsCreated" in res.json(), false);
+      assert.strictEqual("mutationExecuted" in res.json(), false);
+      assert.strictEqual(queueCalls.length, 1);
+      assert.strictEqual(queueCalls[0][0], "evaluate-security-monitoring");
+      assert.strictEqual(queueCalls[0][1].organizationId, orgId);
+      assert.strictEqual(queueCalls[0][1].trigger, "MANUAL");
+    });
+
+    await st.test("defaults omitted trigger to API_REQUEST", async () => {
+      queueCalls = [];
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate",
+        headers: { cookie: sessionCookie },
+        payload: {}
+      });
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(queueCalls.length, 1);
+      assert.strictEqual(queueCalls[0][1].trigger, "API_REQUEST");
+    });
+
+    await st.test("rejects unknown fields in strict request schema", async () => {
+      queueCalls = [];
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate",
+        headers: { cookie: sessionCookie },
+        payload: { trigger: "MANUAL", extraField: "should_fail" }
+      });
+      assert.strictEqual(res.statusCode, 400);
+      assert.strictEqual(queueCalls.length, 0);
+    });
   });
 
   await t.test("acknowledge lifecycle", async () => {
