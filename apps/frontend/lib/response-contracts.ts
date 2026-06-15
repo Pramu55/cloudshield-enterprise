@@ -1,4 +1,4 @@
-﻿import {
+import {
   AutomationAssessmentModeSchema,
   AutomationAssessmentStatusSchema,
   AutomationSafetyFlagsSchema,
@@ -13,6 +13,7 @@
   GovernanceApprovalsResponseSchema,
   GovernanceActivityResponseSchema,
   MonitoringHealthResponseSchema,
+  MonitoringRunDtoSchema,
   MonitoringRunsListResponseSchema,
   OrganizationScopedIdSchema,
   RemediationPlanDtoSchema,
@@ -276,33 +277,39 @@ export const FrontendSecurityAlertDetailSchema = SecurityAlertDtoSchema.extend({
   updatedAt: alert.updatedAt
 }));
 
-export const FrontendMonitoringRunsListSchema = MonitoringRunsListResponseSchema.refine((data) => {
-  return [data.total, data.page, data.pageSize, ...data.items.flatMap((item) => [item.evaluatedCount, item.alertsCreated, item.alertsUpdated, item.alertsResolved])].every(isNonNegativeInteger)
-    && data.items.every((item) => [item.startedAt, item.completedAt].every(isIsoOrNull));
+export const FrontendMonitoringRunSchema = MonitoringRunDtoSchema.refine((data) => {
+  return [data.evaluatedCount, data.alertsCreated, data.alertsUpdated, data.alertsResolved].every(isNonNegativeInteger)
+    && isIsoOrNull(data.startedAt) && isIsoOrNull(data.completedAt);
 }, { message: "Frontend monitoring run safety contract failed." }).transform((data) => ({
+  id: data.id,
+  awsAccountId: data.awsAccountId,
+  status: data.status,
+  trigger: data.trigger,
+  awsApiCallExecuted: data.awsApiCallExecuted,
+  scannerRun: data.scannerRun,
+  mutationExecuted: data.mutationExecuted,
+  terraformApplyExecuted: data.terraformApplyExecuted,
+  automaticRemediationExecuted: data.automaticRemediationExecuted,
+  remediationExecuted: data.remediationExecuted,
+  evaluatedCount: data.evaluatedCount,
+  alertsCreated: data.alertsCreated,
+  alertsUpdated: data.alertsUpdated,
+  alertsResolved: data.alertsResolved,
+  errorCode: data.errorCode,
+  errorSummary: data.errorSummary,
+  startedAt: data.startedAt,
+  completedAt: data.completedAt
+}));
+
+export const FrontendMonitoringRunsListSchema = MonitoringRunsListResponseSchema.extend({
+  items: FrontendMonitoringRunSchema.array()
+}).refine((data) => {
+  return [data.total, data.page, data.pageSize].every(isNonNegativeInteger);
+}, { message: "Frontend monitoring runs list safety contract failed." }).transform((data) => ({
   total: data.total,
   page: data.page,
   pageSize: data.pageSize,
-  items: data.items.map((item) => ({
-    id: item.id,
-    organizationId: item.organizationId,
-    awsAccountId: item.awsAccountId,
-    status: item.status,
-    trigger: item.trigger,
-    awsApiCallExecuted: item.awsApiCallExecuted,
-    scannerRun: item.scannerRun,
-    mutationExecuted: item.mutationExecuted,
-    terraformApplyExecuted: item.terraformApplyExecuted,
-    automaticRemediationExecuted: item.automaticRemediationExecuted,
-    remediationExecuted: item.remediationExecuted,
-    evaluatedCount: item.evaluatedCount,
-    alertsCreated: item.alertsCreated,
-    alertsUpdated: item.alertsUpdated,
-    alertsResolved: item.alertsResolved,
-    errorCode: item.errorCode,
-    startedAt: item.startedAt,
-    completedAt: item.completedAt
-  }))
+  items: data.items
 }));
 
 const AutomationAssessmentSchema = emptyObject.extend({
@@ -667,6 +674,7 @@ export type FrontendCommandCenterResponse = ReturnType<typeof FrontendCommandCen
 export type FrontendMonitoringHealth = ReturnType<typeof FrontendMonitoringHealthSchema.parse>;
 export type FrontendSecurityAlertsList = ReturnType<typeof FrontendSecurityAlertsListSchema.parse>;
 export type FrontendSecurityAlertDetail = ReturnType<typeof FrontendSecurityAlertDetailSchema.parse>;
+export type FrontendMonitoringRun = ReturnType<typeof FrontendMonitoringRunSchema.parse>;
 export type FrontendMonitoringRunsList = ReturnType<typeof FrontendMonitoringRunsListSchema.parse>;
 export type FrontendAutomationLatest = ReturnType<typeof FrontendAutomationLatestSchema.parse>;
 export type FrontendRemediationPlanList = ReturnType<typeof FrontendRemediationPlanListSchema.parse>;

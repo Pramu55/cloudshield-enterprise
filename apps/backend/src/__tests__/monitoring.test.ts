@@ -4,7 +4,12 @@ import { buildApp } from "../app.js";
 import { prisma } from "@cloudshield/database";
 import { randomUUID } from "node:crypto";
 import { securityMonitoringQueue } from "../modules/security-monitoring/monitoring.queue.js";
-import { SecurityAlertLifecycleMutationResponseSchema, EvaluateMonitoringResponseSchema } from "@cloudshield/contracts";
+import {
+  SecurityAlertLifecycleMutationResponseSchema,
+  EvaluateMonitoringResponseSchema,
+  MonitoringRunDtoSchema,
+  MonitoringRunsListResponseSchema
+} from "@cloudshield/contracts";
 
 test("Security Monitoring API Endpoints", async (t) => {
   const app = await buildApp();
@@ -124,15 +129,66 @@ test("Security Monitoring API Endpoints", async (t) => {
   });
 
   let runId = "";
-  await t.test("runs list and detail", async () => {
+  await t.test("runs list and detail strict projection", async () => {
     const run = await prisma.monitoringRun.create({
       data: {
         id: randomUUID(),
         organizationId: orgId,
-        trigger: "API_REQUEST"
+        trigger: "API_REQUEST",
+        status: "COMPLETED",
+        evaluatedCount: 10,
+        alertsCreated: 1,
+        alertsUpdated: 2,
+        alertsResolved: 3,
+        errorCode: "PARTIAL_FAILURE",
+        errorSummary: {
+          message: "Some errors occurred",
+          category: "INTERNAL",
+          retryable: true,
+          rawError: { stack: "Error: some stack" },
+          rawResponse: "HTTP 500",
+          providerError: "AWS Request ID 123",
+          stack: "Error: trace",
+          AccessKeyId: "AKIAIOSFODNN7EXAMPLE",
+          SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          SessionToken: "token"
+        },
+        completedAt: new Date()
       }
     });
     runId = run.id;
+
+    // Additional runs to test QUEUED, RUNNING, FAILED invariants
+    const queuedRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "QUEUED", completedAt: null }
+    });
+    const runningRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "RUNNING", completedAt: null }
+    });
+    const failedRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "FAILED", completedAt: new Date(), errorSummary: "invalid string" }
+    });
+    const blankMessageRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "FAILED", completedAt: new Date(), errorSummary: { message: "   ", category: "VALID", retryable: true } }
+    });
+    const overlongMessageRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "FAILED", completedAt: new Date(), errorSummary: { message: "A".repeat(501), category: "VALID", retryable: true } }
+    });
+    const blankCategoryRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "FAILED", completedAt: new Date(), errorSummary: { message: "Valid", category: "   ", retryable: true } }
+    });
+    const overlongCategoryRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "FAILED", completedAt: new Date(), errorSummary: { message: "Valid", category: "A".repeat(101), retryable: true } }
+    });
+    const nonBooleanRetryableRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "FAILED", completedAt: new Date(), errorSummary: { message: "Valid", category: "VALID", retryable: "true" } }
+    });
+    const arraySummaryRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "FAILED", completedAt: new Date(), errorSummary: ["message"] }
+    });
+    const nestedObjectSummaryRun = await prisma.monitoringRun.create({
+      data: { id: randomUUID(), organizationId: orgId, trigger: "SCHEDULED", status: "FAILED", completedAt: new Date(), errorSummary: { message: { nested: "valid" }, category: "VALID" } }
+    });
 
     const list = await app.inject({
       method: "GET",
@@ -140,7 +196,47 @@ test("Security Monitoring API Endpoints", async (t) => {
       headers: { cookie: sessionCookie }
     });
     assert.strictEqual(list.statusCode, 200);
-    assert.strictEqual(list.json().items.length, 1);
+    const listBody = list.json();
+    assert.deepStrictEqual(MonitoringRunsListResponseSchema.parse(listBody), listBody);
+
+    assert.strictEqual(listBody.items.length, 11);
+    assert.strictEqual(listBody.page, 1);
+    assert.strictEqual(listBody.pageSize, 50);
+
+    const completedDto = listBody.items.find((i: any) => i.id === runId);
+    assert.ok(completedDto);
+    assert.strictEqual(completedDto.status, "COMPLETED");
+    assert.strictEqual(typeof completedDto.startedAt, "string");
+    assert.strictEqual(typeof completedDto.completedAt, "string");
+    assert.strictEqual(completedDto.evaluatedCount, 10);
+    assert.deepStrictEqual(completedDto.errorSummary, { message: "Some errors occurred", category: "INTERNAL", retryable: true });
+    assert.strictEqual("rawError" in completedDto.errorSummary, false);
+    assert.strictEqual("AccessKeyId" in completedDto.errorSummary, false);
+    assert.strictEqual("stack" in completedDto.errorSummary, false);
+
+    const failedDto = listBody.items.find((i: any) => i.id === failedRun.id);
+    assert.deepStrictEqual(failedDto.errorSummary, {});
+
+    const blankMsgDto = listBody.items.find((i: any) => i.id === blankMessageRun.id);
+    assert.deepStrictEqual(blankMsgDto.errorSummary, { category: "VALID", retryable: true });
+
+    const overlongMsgDto = listBody.items.find((i: any) => i.id === overlongMessageRun.id);
+    assert.deepStrictEqual(overlongMsgDto.errorSummary, { category: "VALID", retryable: true });
+
+    const blankCatDto = listBody.items.find((i: any) => i.id === blankCategoryRun.id);
+    assert.deepStrictEqual(blankCatDto.errorSummary, { message: "Valid", retryable: true });
+
+    const overlongCatDto = listBody.items.find((i: any) => i.id === overlongCategoryRun.id);
+    assert.deepStrictEqual(overlongCatDto.errorSummary, { message: "Valid", retryable: true });
+
+    const nonBoolDto = listBody.items.find((i: any) => i.id === nonBooleanRetryableRun.id);
+    assert.deepStrictEqual(nonBoolDto.errorSummary, { message: "Valid", category: "VALID" });
+
+    const arrayDto = listBody.items.find((i: any) => i.id === arraySummaryRun.id);
+    assert.deepStrictEqual(arrayDto.errorSummary, {});
+
+    const nestedObjDto = listBody.items.find((i: any) => i.id === nestedObjectSummaryRun.id);
+    assert.deepStrictEqual(nestedObjDto.errorSummary, { category: "VALID" });
 
     const detail = await app.inject({
       method: "GET",
@@ -148,7 +244,19 @@ test("Security Monitoring API Endpoints", async (t) => {
       headers: { cookie: sessionCookie }
     });
     assert.strictEqual(detail.statusCode, 200);
-    assert.strictEqual(detail.json().id, runId);
+    const detailBody = detail.json();
+    assert.deepStrictEqual(MonitoringRunDtoSchema.parse(detailBody), detailBody);
+    assert.strictEqual(detailBody.id, runId);
+    assert.deepStrictEqual(detailBody, completedDto);
+
+    // Explicit tenant isolation missing 404
+    const missing = await app.inject({
+      method: "GET",
+      url: `/api/v1/security-monitoring/runs/${randomUUID()}`,
+      headers: { cookie: sessionCookie }
+    });
+    assert.strictEqual(missing.statusCode, 404);
+    assert.deepStrictEqual(missing.json(), { error: "not_found", message: "Monitoring run not found." });
   });
 
   await t.test("evaluate endpoint", async (st) => {
@@ -363,6 +471,7 @@ test("Security Monitoring API Endpoints", async (t) => {
       headers: { cookie: sessionCookie }
     });
     assert.strictEqual(res.statusCode, 404);
+    assert.deepStrictEqual(res.json(), { error: "not_found", message: "Monitoring run not found." });
   });
 
 });

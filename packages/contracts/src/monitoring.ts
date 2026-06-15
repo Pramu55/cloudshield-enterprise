@@ -110,26 +110,51 @@ export const SecurityAlertDtoSchema = z.object({
 });
 export type SecurityAlertDto = z.infer<typeof SecurityAlertDtoSchema>;
 
+export const MonitoringRunErrorSummarySchema = z.object({
+  message: z.string().min(1).max(500).optional(),
+  category: z.string().min(1).max(100).optional(),
+  retryable: z.boolean().optional()
+}).strict();
+export type MonitoringRunErrorSummary = z.infer<typeof MonitoringRunErrorSummarySchema>;
+
 export const MonitoringRunDtoSchema = z.object({
-  id: z.string(),
-  organizationId: z.string(),
-  awsAccountId: z.string().nullable(),
+  id: z.string().min(1),
+  organizationId: z.string().min(1),
+  awsAccountId: z.string().min(1).nullable(),
   status: MonitoringRunStatusSchema,
-  trigger: z.string(),
+  trigger: z.string().min(1).max(255).regex(/^[^\x00-\x1F]*$/),
   awsApiCallExecuted: z.boolean(),
   scannerRun: z.boolean(),
   mutationExecuted: z.boolean(),
   terraformApplyExecuted: z.boolean(),
   automaticRemediationExecuted: z.boolean(),
   remediationExecuted: z.boolean(),
-  evaluatedCount: z.number(),
-  alertsCreated: z.number(),
-  alertsUpdated: z.number(),
-  alertsResolved: z.number(),
-  errorCode: z.string().nullable(),
-  errorSummary: z.record(z.string(), z.any()),
-  startedAt: z.string(),
-  completedAt: z.string().nullable()
+  evaluatedCount: z.number().int().nonnegative(),
+  alertsCreated: z.number().int().nonnegative(),
+  alertsUpdated: z.number().int().nonnegative(),
+  alertsResolved: z.number().int().nonnegative(),
+  errorCode: z.string().min(1).max(255).nullable(),
+  errorSummary: MonitoringRunErrorSummarySchema,
+  startedAt: z.string().datetime(),
+  completedAt: z.string().datetime().nullable()
+}).strict().superRefine((data, ctx) => {
+  if (data.status === "QUEUED" || data.status === "RUNNING") {
+    if (data.completedAt !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "completedAt must be null when status is QUEUED or RUNNING",
+        path: ["completedAt"]
+      });
+    }
+  } else if (data.status === "COMPLETED" || data.status === "FAILED") {
+    if (data.completedAt === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "completedAt must not be null when status is COMPLETED or FAILED",
+        path: ["completedAt"]
+      });
+    }
+  }
 });
 export type MonitoringRunDto = z.infer<typeof MonitoringRunDtoSchema>;
 
