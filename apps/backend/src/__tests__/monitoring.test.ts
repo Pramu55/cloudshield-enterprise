@@ -8,7 +8,8 @@ import {
   SecurityAlertLifecycleMutationResponseSchema,
   EvaluateMonitoringResponseSchema,
   MonitoringRunDtoSchema,
-  MonitoringRunsListResponseSchema
+  MonitoringRunsListResponseSchema,
+  SecurityAlertsListResponseSchema
 } from "@cloudshield/contracts";
 
 test("Security Monitoring API Endpoints", async (t) => {
@@ -126,6 +127,114 @@ test("Security Monitoring API Endpoints", async (t) => {
     });
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(res.json().id, alertId);
+  });
+
+  await t.test("invalid source mapping", async () => {
+    const invalidSourceAlerts = [
+      {
+        type: "blank-type",
+        sourceType: "  ",
+        sourceId: "valid-id",
+        expectedSourceType: null,
+        expectedSourceId: "valid-id"
+      },
+      {
+        type: "long-type",
+        sourceType: "x".repeat(101),
+        sourceId: "valid-id",
+        expectedSourceType: null,
+        expectedSourceId: "valid-id"
+      },
+      {
+        type: "ctrl-type",
+        sourceType: "type\u0001",
+        sourceId: "valid-id",
+        expectedSourceType: null,
+        expectedSourceId: "valid-id"
+      },
+      {
+        type: "blank-id",
+        sourceType: "VALID_TYPE",
+        sourceId: "  ",
+        expectedSourceType: "VALID_TYPE",
+        expectedSourceId: null
+      },
+      {
+        type: "long-id",
+        sourceType: "VALID_TYPE",
+        sourceId: "x".repeat(256),
+        expectedSourceType: "VALID_TYPE",
+        expectedSourceId: null
+      },
+      {
+        type: "ctrl-id",
+        sourceType: "VALID_TYPE",
+        sourceId: "id\u0001",
+        expectedSourceType: "VALID_TYPE",
+        expectedSourceId: null
+      }
+    ];
+
+    for (const fixture of invalidSourceAlerts) {
+      const invalidAlert = await prisma.securityAlert.create({
+        data: {
+          id: randomUUID(),
+          organizationId: orgId,
+          dedupeKey: `invalid-source-${fixture.type}-${Date.now()}`,
+          title: `Invalid Source Alert ${fixture.type}`,
+          description: "Testing source field projection",
+          severity: "LOW",
+          category: "COMPLIANCE",
+          status: "OPEN",
+          evidenceCount: 1,
+          mappedEvidence: [],
+          sourceType: fixture.sourceType,
+          sourceId: fixture.sourceId
+        }
+      });
+
+      const detailRes = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${invalidAlert.id}`,
+        headers: { cookie: sessionCookie }
+      });
+
+      assert.strictEqual(detailRes.statusCode, 200);
+      const detailData = detailRes.json();
+      assert.ok(detailData.evidenceSummary, "data.evidenceSummary must exist");
+      assert.strictEqual(detailData.evidenceSummary.sourceType, fixture.expectedSourceType);
+      assert.strictEqual(detailData.evidenceSummary.sourceId, fixture.expectedSourceId);
+
+      const listRes = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts`,
+        headers: { cookie: sessionCookie }
+      });
+
+      assert.strictEqual(listRes.statusCode, 200);
+      const listData = SecurityAlertsListResponseSchema.parse(listRes.json());
+
+      const listItem = listData.items.find(
+        (item) => item.id === invalidAlert.id
+      );
+      assert.ok(listItem, "listItem must exist in the alerts list");
+      assert.ok(listItem.evidenceSummary, "listItem.evidenceSummary must exist");
+      assert.strictEqual(listItem.evidenceSummary.sourceType, fixture.expectedSourceType);
+      assert.strictEqual(listItem.evidenceSummary.sourceId, fixture.expectedSourceId);
+
+      const detailStr = JSON.stringify(detailData);
+      const listStr = JSON.stringify(listData);
+
+      if (fixture.sourceType.trim() !== "" && fixture.sourceType !== fixture.expectedSourceType) {
+        assert.ok(!detailStr.includes(fixture.sourceType), "Detail response must not contain invalid raw sourceType");
+        assert.ok(!listStr.includes(fixture.sourceType), "List response must not contain invalid raw sourceType");
+      }
+
+      if (fixture.sourceId.trim() !== "" && fixture.sourceId !== fixture.expectedSourceId) {
+        assert.ok(!detailStr.includes(fixture.sourceId), "Detail response must not contain invalid raw sourceId");
+        assert.ok(!listStr.includes(fixture.sourceId), "List response must not contain invalid raw sourceId");
+      }
+    }
   });
 
   let runId = "";

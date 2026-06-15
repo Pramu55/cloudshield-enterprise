@@ -266,4 +266,26 @@ The monitoring runs list and detail endpoints now share the strict `MonitoringRu
 
 On the frontend, `FrontendMonitoringRunSchema` ensures that `organizationId` is removed and drops nested unsafe fields present in `errorSummary`. The schema also validates cross-field dependencies, verifying that `completedAt` is null for `QUEUED` and `RUNNING` statuses and non-null for `COMPLETED` and `FAILED` statuses. Counters are bounded to finite non-negative integers.
 
-Remaining monitoring gaps: safe evidence summary/history contracts, and explicit permission/capability authority for monitoring mutations remain outside this slice. The monitoring platform is still not complete.
+
+## Monitoring evidence response-contract milestone
+
+The security-monitoring alert list and detail endpoints now share one explicit safe backend projection validated by `SecurityAlertDtoSchema`. Arbitrary persisted `mappedEvidence` does not cross the HTTP boundary. The old top-level HTTP response fields `evidenceCount`, `sourceType`, and `sourceId` are replaced by the strict `MonitoringAlertEvidenceSummarySchema`.
+
+The safe summary contains only:
+
+- `recordedCount`
+- `sourceType`
+- `sourceId`
+
+`evidenceSummary.recordedCount` is persisted metadata only. It does not prove completeness, freshness, authenticity, independent verification, or environmental safety.
+
+`sourceType` and `sourceId` are independently sanitized bounded scalar values. An invalid persisted value becomes `null` without discarding a valid companion field.
+
+The frontend validates the strict shared DTO before removing `organizationId` during its explicit projection. Evidence persistence and worker behavior remain unchanged. Missing and cross-tenant alert-detail responses remain indistinguishable.
+
+No dedicated evidence-history endpoint exists. No evidence-history endpoint or evidence-history UI was added.
+
+Remaining monitoring gaps:
+
+- Authoritative evidence-history storage and API design.
+- Explicit permission and capability authority for monitoring mutations.

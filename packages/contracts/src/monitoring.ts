@@ -85,28 +85,62 @@ export const SecurityMonitorDtoSchema = z.object({
 });
 export type SecurityMonitorDto = z.infer<typeof SecurityMonitorDtoSchema>;
 
-export const SecurityAlertDtoSchema = z.object({
-  id: z.string(),
-  organizationId: z.string(),
-  awsAccountId: z.string().nullable(),
-  cloudResourceId: z.string().nullable(),
-  securityFindingId: z.string().nullable(),
-  monitorId: z.string().nullable(),
-  dedupeKey: z.string(),
-  title: z.string(),
-  description: z.string(),
+export const MonitoringAlertEvidenceSummarySchema = z.object({
+  recordedCount: z.number().int().nonnegative(),
+  sourceType: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[^\u0000-\u001F\u007F]*$/)
+    .nullable(),
+  sourceId: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[^\u0000-\u001F\u007F]*$/)
+    .nullable()
+}).strict();
+
+/** Base strict ZodObject for SecurityAlertDto, before lifecycle refinement. */
+export const SecurityAlertDtoBaseSchema = z.object({
+  id: z.string().min(1),
+  organizationId: z.string().min(1),
+  awsAccountId: z.string().min(1).nullable(),
+  cloudResourceId: z.string().min(1).nullable(),
+  securityFindingId: z.string().min(1).nullable(),
+  monitorId: z.string().min(1).nullable(),
+  dedupeKey: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
   severity: MonitoringFindingSeveritySchema,
   status: SecurityAlertStatusSchema,
   category: SecurityMonitorCategorySchema,
-  firstObservedAt: z.string(),
-  lastObservedAt: z.string(),
-  resolvedAt: z.string().nullable(),
-  evidenceCount: z.number(),
-  mappedEvidence: z.array(z.record(z.string(), z.any())),
-  sourceType: z.string().nullable(),
-  sourceId: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string()
+  firstObservedAt: z.string().datetime(),
+  lastObservedAt: z.string().datetime(),
+  resolvedAt: z.string().datetime().nullable(),
+  evidenceSummary: MonitoringAlertEvidenceSummarySchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}).strict();
+
+export const SecurityAlertDtoSchema = SecurityAlertDtoBaseSchema.superRefine((data, ctx) => {
+  if (data.status === "OPEN" || data.status === "ACKNOWLEDGED") {
+    if (data.resolvedAt !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "resolvedAt must be null when status is OPEN or ACKNOWLEDGED",
+        path: ["resolvedAt"]
+      });
+    }
+  } else if (data.status === "RESOLVED") {
+    if (data.resolvedAt === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "resolvedAt must not be null when status is RESOLVED",
+        path: ["resolvedAt"]
+      });
+    }
+  }
 });
 export type SecurityAlertDto = z.infer<typeof SecurityAlertDtoSchema>;
 

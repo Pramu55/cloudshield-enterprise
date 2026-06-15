@@ -11,7 +11,9 @@ import {
   EvaluateMonitoringRequestSchema,
   EvaluateMonitoringResponseSchema,
   MonitoringRunDtoSchema,
-  MonitoringRunsListResponseSchema
+  MonitoringRunsListResponseSchema,
+  SecurityAlertDtoSchema,
+  SecurityAlertsListResponseSchema
 } from "@cloudshield/contracts";
 
 const ParamsSchema = z.object({
@@ -39,6 +41,79 @@ type MonitoringRunRecord = {
   startedAt: Date;
   completedAt: Date | null;
 };
+
+type SecurityAlertRecord = {
+  id: string;
+  organizationId: string;
+  awsAccountId: string | null;
+  cloudResourceId: string | null;
+  securityFindingId: string | null;
+  monitorId: string | null;
+  dedupeKey: string;
+  title: string;
+  description: string;
+  severity: string;
+  status: string;
+  category: string;
+  firstObservedAt: Date;
+  lastObservedAt: Date;
+  resolvedAt: Date | null;
+  evidenceCount: number;
+  sourceType: string | null;
+  sourceId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
+
+function projectOptionalSourceValue(
+  value: unknown,
+  maximumLength: number
+): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (
+    trimmed.length === 0 ||
+    trimmed.length > maximumLength ||
+    CONTROL_CHARACTER_PATTERN.test(trimmed)
+  ) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+function projectSecurityAlert(item: SecurityAlertRecord) {
+  return SecurityAlertDtoSchema.parse({
+    id: item.id,
+    organizationId: item.organizationId,
+    awsAccountId: item.awsAccountId,
+    cloudResourceId: item.cloudResourceId,
+    securityFindingId: item.securityFindingId,
+    monitorId: item.monitorId,
+    dedupeKey: item.dedupeKey,
+    title: item.title,
+    description: item.description,
+    severity: item.severity,
+    status: item.status,
+    category: item.category,
+    firstObservedAt: item.firstObservedAt.toISOString(),
+    lastObservedAt: item.lastObservedAt.toISOString(),
+    resolvedAt: item.resolvedAt ? item.resolvedAt.toISOString() : null,
+    evidenceSummary: {
+      recordedCount: item.evidenceCount,
+      sourceType: projectOptionalSourceValue(item.sourceType, 100),
+      sourceId: projectOptionalSourceValue(item.sourceId, 255)
+    },
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString()
+  });
+}
 
 function projectMonitoringRun(item: MonitoringRunRecord) {
   const safeSummary: Record<string, unknown> = {};
@@ -125,7 +200,12 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       orderBy: { lastObservedAt: 'desc' }
     });
 
-    return { items, total: items.length, page: 1, pageSize: 100 };
+    return SecurityAlertsListResponseSchema.parse({
+      items: items.map(projectSecurityAlert),
+      total: items.length,
+      page: 1,
+      pageSize: 100
+    });
   });
 
   app.get("/api/v1/security-monitoring/alerts/:id", { preHandler: requireAuth }, async (request: any, reply) => {
@@ -134,8 +214,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const item = await prisma.securityAlert.findUnique({
       where: { id, organizationId: auth.organizationId }
     });
-    if (!item) return reply.status(404).send({ error: "not_found", message: "Alert not found" });
-    return item;
+    if (!item) return reply.status(404).send({ error: "not_found", message: "Monitoring alert not found." });
+    return projectSecurityAlert(item);
   });
 
   app.get("/api/v1/security-monitoring/runs", { preHandler: requireAuth }, async (request: any) => {

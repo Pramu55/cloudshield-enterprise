@@ -12,13 +12,14 @@ import {
   CurrentUserResponseSchema,
   GovernanceApprovalsResponseSchema,
   GovernanceActivityResponseSchema,
+  MonitoringAlertEvidenceSummarySchema,
   MonitoringHealthResponseSchema,
   MonitoringRunDtoSchema,
   MonitoringRunsListResponseSchema,
   OrganizationScopedIdSchema,
   RemediationPlanDtoSchema,
   RemediationPlanListResponseSchema,
-  SecurityAlertDtoSchema,
+  SecurityAlertDtoBaseSchema,
   SecurityAlertsListResponseSchema,
   InventoryOrchestrationResponseSchema
 } from "@cloudshield/contracts";
@@ -185,7 +186,7 @@ export const FrontendMonitoringHealthSchema = MonitoringHealthResponseSchema.ref
 }));
 
 export const FrontendSecurityAlertsListSchema = SecurityAlertsListResponseSchema.refine((data) => {
-  return [data.total, data.page, data.pageSize, ...data.items.map((item) => item.evidenceCount)].every(isNonNegativeInteger)
+  return [data.total, data.page, data.pageSize, ...data.items.map((item) => item.evidenceSummary.recordedCount)].every(isNonNegativeInteger)
     && data.items.every((item) => [item.firstObservedAt, item.lastObservedAt, item.resolvedAt, item.createdAt, item.updatedAt].every(isIsoOrNull));
 }, { message: "Frontend monitoring alert safety contract failed." }).transform((data) => ({
   total: data.total,
@@ -207,9 +208,11 @@ export const FrontendSecurityAlertsListSchema = SecurityAlertsListResponseSchema
     firstObservedAt: item.firstObservedAt,
     lastObservedAt: item.lastObservedAt,
     resolvedAt: item.resolvedAt,
-    evidenceCount: item.evidenceCount,
-    sourceType: item.sourceType,
-    sourceId: item.sourceId,
+    evidenceSummary: {
+      recordedCount: item.evidenceSummary.recordedCount,
+      sourceType: item.evidenceSummary.sourceType,
+      sourceId: item.evidenceSummary.sourceId
+    },
     createdAt: item.createdAt,
     updatedAt: item.updatedAt
   }))
@@ -229,7 +232,9 @@ const alertDescription = z.string()
   .refine((value) => !controlCharacters.test(value), "Alert descriptions cannot contain control characters.")
   .refine((value) => !providerErrorContent.test(value), "Alert descriptions cannot contain provider error details.");
 
-export const FrontendSecurityAlertDetailSchema = SecurityAlertDtoSchema.extend({
+export type MonitoringAlertEvidenceSummary = z.infer<typeof MonitoringAlertEvidenceSummarySchema>;
+
+export const FrontendSecurityAlertDetailSchema = SecurityAlertDtoBaseSchema.extend({
   id: FrontendAlertIdentifierSchema,
   organizationId: identifierValue,
   awsAccountId: identifierValue.nullable(),
@@ -239,12 +244,10 @@ export const FrontendSecurityAlertDetailSchema = SecurityAlertDtoSchema.extend({
   dedupeKey: eventDescriptor,
   title: alertTitle,
   description: alertDescription,
+  evidenceSummary: MonitoringAlertEvidenceSummarySchema,
   firstObservedAt: isoTimestamp,
   lastObservedAt: isoTimestamp,
   resolvedAt: isoTimestamp.nullable(),
-  evidenceCount: z.number().finite().int().nonnegative(),
-  sourceType: eventDescriptor.nullable(),
-  sourceId: identifierValue.nullable(),
   createdAt: isoTimestamp,
   updatedAt: isoTimestamp
 }).superRefine((alert, context) => {
@@ -270,9 +273,11 @@ export const FrontendSecurityAlertDetailSchema = SecurityAlertDtoSchema.extend({
   firstObservedAt: alert.firstObservedAt,
   lastObservedAt: alert.lastObservedAt,
   resolvedAt: alert.resolvedAt,
-  evidenceCount: alert.evidenceCount,
-  sourceType: alert.sourceType,
-  sourceId: alert.sourceId,
+  evidenceSummary: {
+    recordedCount: alert.evidenceSummary.recordedCount,
+    sourceType: alert.evidenceSummary.sourceType,
+    sourceId: alert.evidenceSummary.sourceId
+  },
   createdAt: alert.createdAt,
   updatedAt: alert.updatedAt
 }));
