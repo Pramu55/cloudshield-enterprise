@@ -9,12 +9,76 @@ import {
   ResolveAlertRequestSchema,
   SecurityAlertLifecycleMutationResponseSchema,
   EvaluateMonitoringRequestSchema,
-  EvaluateMonitoringResponseSchema
+  EvaluateMonitoringResponseSchema,
+  MonitoringRunDtoSchema,
+  MonitoringRunsListResponseSchema
 } from "@cloudshield/contracts";
 
 const ParamsSchema = z.object({
   id: z.string()
 });
+
+type MonitoringRunRecord = {
+  id: string;
+  organizationId: string;
+  awsAccountId: string | null;
+  status: string;
+  trigger: string;
+  awsApiCallExecuted: boolean;
+  scannerRun: boolean;
+  mutationExecuted: boolean;
+  terraformApplyExecuted: boolean;
+  automaticRemediationExecuted: boolean;
+  remediationExecuted: boolean;
+  evaluatedCount: number;
+  alertsCreated: number;
+  alertsUpdated: number;
+  alertsResolved: number;
+  errorCode: string | null;
+  errorSummary: unknown;
+  startedAt: Date;
+  completedAt: Date | null;
+};
+
+function projectMonitoringRun(item: MonitoringRunRecord) {
+  const safeSummary: Record<string, unknown> = {};
+
+  if (item.errorSummary && typeof item.errorSummary === 'object' && !Array.isArray(item.errorSummary)) {
+    const raw = item.errorSummary as Record<string, unknown>;
+
+    if (typeof raw.message === 'string' && raw.message.trim().length > 0 && raw.message.length <= 500) {
+      safeSummary.message = raw.message;
+    }
+    if (typeof raw.category === 'string' && raw.category.trim().length > 0 && raw.category.length <= 100) {
+      safeSummary.category = raw.category;
+    }
+    if (typeof raw.retryable === 'boolean') {
+      safeSummary.retryable = raw.retryable;
+    }
+  }
+
+  return MonitoringRunDtoSchema.parse({
+    id: item.id,
+    organizationId: item.organizationId,
+    awsAccountId: item.awsAccountId,
+    status: item.status,
+    trigger: item.trigger,
+    awsApiCallExecuted: item.awsApiCallExecuted,
+    scannerRun: item.scannerRun,
+    mutationExecuted: item.mutationExecuted,
+    terraformApplyExecuted: item.terraformApplyExecuted,
+    automaticRemediationExecuted: item.automaticRemediationExecuted,
+    remediationExecuted: item.remediationExecuted,
+    evaluatedCount: item.evaluatedCount,
+    alertsCreated: item.alertsCreated,
+    alertsUpdated: item.alertsUpdated,
+    alertsResolved: item.alertsResolved,
+    errorCode: item.errorCode,
+    errorSummary: safeSummary,
+    startedAt: item.startedAt.toISOString(),
+    completedAt: item.completedAt ? item.completedAt.toISOString() : null,
+  });
+}
 
 export async function registerMonitoringRoutes(app: FastifyInstance): Promise<void> {
   const healthService = new BackendMonitoringHealthService();
@@ -81,7 +145,13 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       orderBy: { startedAt: 'desc' },
       take: 50
     });
-    return { items, total: items.length, page: 1, pageSize: 50 };
+    const projectedItems = items.map(projectMonitoringRun);
+    return MonitoringRunsListResponseSchema.parse({
+      items: projectedItems,
+      total: projectedItems.length,
+      page: 1,
+      pageSize: 50
+    });
   });
 
   app.get("/api/v1/security-monitoring/runs/:id", { preHandler: requireAuth }, async (request: any, reply) => {
@@ -90,8 +160,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const item = await prisma.monitoringRun.findUnique({
       where: { id, organizationId: auth.organizationId }
     });
-    if (!item) return reply.status(404).send({ error: "not_found", message: "Run not found" });
-    return item;
+    if (!item) return reply.status(404).send({ error: "not_found", message: "Monitoring run not found." });
+    return projectMonitoringRun(item);
   });
 
   app.post("/api/v1/security-monitoring/evaluate", { preHandler: requireAuth }, async (request: any) => {

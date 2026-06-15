@@ -236,10 +236,9 @@ const run = {
   alertsUpdated: 0,
   alertsResolved: 0,
   errorCode: null,
-  errorSummary: { ...unsafeFields },
+  errorSummary: { message: "Test message", category: "Test Category", retryable: false },
   startedAt: timestamp,
-  completedAt: timestamp,
-  ...unsafeFields
+  completedAt: timestamp
 };
 
 const automation = {
@@ -309,7 +308,6 @@ const parsedResults = [
   [FrontendCommandCenterResponseSchema.parse(commandCenter), "command center"],
   [FrontendMonitoringHealthSchema.parse(health), "monitoring health"],
   [FrontendSecurityAlertsListSchema.parse({ items: [alert], total: 1, page: 1, pageSize: 25, ...unsafeFields }), "security alerts"],
-  [FrontendMonitoringRunsListSchema.parse({ items: [run], total: 1, page: 1, pageSize: 25, ...unsafeFields }), "monitoring runs"],
   [FrontendAutomationLatestSchema.parse(automation), "automation latest"],
   [FrontendAwsAccountListSchema.parse({ sampleData: false, sampleDataLabel: "Live data", items: [account], ...unsafeFields }), "AWS account list"],
   [FrontendAwsAccountMutationSchema.parse({ item: account, message: "Account updated.", ...unsafeFields }), "AWS account mutation"]
@@ -319,6 +317,31 @@ for (const [result, label] of parsedResults) {
   assertUnsafeFieldsRemoved(result, label);
 }
 
+const runListPayload = { items: [run], total: 1, page: 1, pageSize: 25, ...unsafeFields };
+const parsedRunsList = FrontendMonitoringRunsListSchema.parse(runListPayload);
+assertUnsafeFieldsRemoved(parsedRunsList, "monitoring runs list");
+assertUnsafeFieldsRemoved(parsedRunsList.items[0], "monitoring run item");
+assert.equal("organizationId" in parsedRunsList.items[0], false);
+assert.equal(parsedRunsList.items[0].errorCode, null);
+assert.equal(parsedRunsList.items[0].evaluatedCount, 0);
+assert.equal(Object.keys(parsedRunsList.items[0].errorSummary).length, 3);
+
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, evaluatedCount: -1 }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, evaluatedCount: 1.5 }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, id: "" }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, organizationId: "" }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, trigger: "" }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, trigger: "unsafe\u0000trigger" }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, status: "UNKNOWN_STATUS" }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, startedAt: "not-a-timestamp" }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, completedAt: "not-a-timestamp" }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, status: "QUEUED", completedAt: timestamp }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, status: "RUNNING", completedAt: timestamp }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, status: "COMPLETED", completedAt: null }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, status: "FAILED", completedAt: null }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, unknownTopLevelField: true }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, errorSummary: { message: "Test", unknownField: true } }], total: 1, page: 1, pageSize: 25 }).success, false);
+assert.equal(FrontendMonitoringRunsListSchema.safeParse({ items: [{ ...run, errorCode: "x".repeat(256) }], total: 1, page: 1, pageSize: 25 }).success, false);
 const completeCapabilities = {
   "accounts.read": true,
   "accounts.manage": false,

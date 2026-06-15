@@ -98,8 +98,9 @@ TypeScript validates frontend source code but cannot prove that a live HTTP resp
 |---|---|---|---|
 | Dashboard overview and shell summary | `/api/v1/dashboard/command-center` | `CommandCenterResponseSchema` plus `FrontendCommandCenterResponseSchema` | Source objects strip unknown keys. The frontend returns an explicit top-level projection and enforces known account connection status, ISO timestamps, finite non-negative counts/durations/ages, and no default-to-zero fallback after failure. |
 | Dashboard monitoring badge | `/api/v1/security-monitoring/health` | `MonitoringHealthResponseSchema` plus `FrontendMonitoringHealthSchema` | Source object strips unknown keys; the frontend projection retains only known health, message, timestamp, and metric fields. |
+| Monitoring runs list | `/api/v1/security-monitoring/runs` | `MonitoringRunsListResponseSchema` plus `FrontendMonitoringRunsListSchema` | Source object strips unknown keys. The frontend projection removes `organizationId`, arbitrarily nested raw errors, unknown top-level fields, and preserves a conditionally safe error summary. |
+| Monitoring run detail | `/api/v1/security-monitoring/runs/:id` | `MonitoringRunDtoSchema` plus `FrontendMonitoringRunSchema` | Uses the same strict boundary and frontend projection as the runs list. |
 | Monitoring alerts | `/api/v1/security-monitoring/alerts` | `SecurityAlertsListResponseSchema` plus frontend refinement/projection | Validates enums/counts/timestamps and removes `mappedEvidence` before data reaches React state. |
-| Monitoring runs | `/api/v1/security-monitoring/runs` | `MonitoringRunsListResponseSchema` plus frontend refinement/projection | Validates status/counts/timestamps and removes `errorSummary` before state. |
 | Automation latest | `/api/v1/automation/latest` | `FrontendAutomationLatestSchema` | No authoritative response schema exists. A narrow frontend-only projection uses authoritative ID, assessment status/mode, and safety schemas. Event type/status are bounded non-control strings; event messages are bounded and reject control, credential, provider-error, and stack-shaped content. |
 | AWS account list | `/api/v1/aws/accounts` | `AwsAccountListResponseSchema` plus `FrontendAwsAccountListSchema` | Source object strips unknown keys. A reusable projected account-item schema enforces 12-digit account ID, known status/connection enums, ISO/null timestamps, and bounded non-negative scores. |
 | AWS create/update/archive result | account mutation endpoints | `AwsAccountMutationResponseSchema` plus frontend item projection | Reuses account-item validation directly, independent of list metadata. It creates no synthetic list envelope or sample label and never infers connection success. |
@@ -254,4 +255,15 @@ Alert acknowledgement and resolution use the strict HTTP 200 `{ status: "ok" }` 
 
 The route now distinguishes announced loading, safe contract/network/permission errors, truthful 404 presentation, and a valid zero-evidence state that makes no security claim. Correlation IDs remain UUID-validated by the centralized error model. The alert list empty state was also corrected so an empty list does not claim the environment is secure.
 
-Remaining monitoring gaps: monitoring run-detail response, safe evidence summary/history contracts, and explicit permission/capability authority for monitoring mutations remain outside this slice. The monitoring platform is still not complete.
+## Monitoring run-detail contract milestone
+
+| Frontend consumer | Endpoint | Method | Shared contract | Runtime handling |
+|---|---|---|---|---|
+| Monitoring runs list | `/api/v1/security-monitoring/runs` | GET | `MonitoringRunsListResponseSchema` | `FrontendMonitoringRunsListSchema`; validates items via `FrontendMonitoringRunSchema` which drops unsafe nested fields |
+| Monitoring run detail | `/api/v1/security-monitoring/runs/:id` | GET | `MonitoringRunDtoSchema` | `FrontendMonitoringRunSchema`; explicit projection that enforces invariants and drops nested unsafe fields |
+
+The monitoring runs list and detail endpoints now share the strict `MonitoringRunDtoSchema` as their authoritative input boundary. The backend correctly implements safe projection logic, discarding unapproved top-level fields and ensuring `errorSummary` is safely mapped to `message`, `category`, and `retryable`. The backend explicitly fails closed with a 404 response indicating "Monitoring run not found." for runs belonging to other tenants.
+
+On the frontend, `FrontendMonitoringRunSchema` ensures that `organizationId` is removed and drops nested unsafe fields present in `errorSummary`. The schema also validates cross-field dependencies, verifying that `completedAt` is null for `QUEUED` and `RUNNING` statuses and non-null for `COMPLETED` and `FAILED` statuses. Counters are bounded to finite non-negative integers.
+
+Remaining monitoring gaps: safe evidence summary/history contracts, and explicit permission/capability authority for monitoring mutations remain outside this slice. The monitoring platform is still not complete.
