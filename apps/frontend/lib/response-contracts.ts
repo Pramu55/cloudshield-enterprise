@@ -1,4 +1,4 @@
-import {
+﻿import {
   AutomationAssessmentModeSchema,
   AutomationAssessmentStatusSchema,
   AutomationSafetyFlagsSchema,
@@ -18,7 +18,8 @@ import {
   RemediationPlanDtoSchema,
   RemediationPlanListResponseSchema,
   SecurityAlertDtoSchema,
-  SecurityAlertsListResponseSchema
+  SecurityAlertsListResponseSchema,
+  InventoryOrchestrationResponseSchema
 } from "@cloudshield/contracts";
 import { z } from "zod";
 
@@ -593,6 +594,75 @@ export const FrontendComplianceEvidenceCenterSchema = ComplianceEvidenceCenterRe
   generatedFromCloudShieldRecordsOnly: data.generatedFromCloudShieldRecordsOnly
 }));
 
+export const FrontendInventorySyncResponseSchema = InventoryOrchestrationResponseSchema.transform((data) => ({
+    status: data.status,
+    dryRun: data.dryRun,
+    items: data.items.map((item) => {
+      const account = {
+        id: item.account.id,
+        name: item.account.name,
+        accountId: item.account.accountId,
+        environment: item.account.environment,
+        connectionStatus: item.account.connectionStatus,
+        status: item.account.status
+      };
+      switch (item.status) {
+      case "QUEUED": return {
+        status: item.status,
+        account,
+        scanRunId: item.scanRunId,
+        queueJobId: item.queueJobId,
+        requestedRegions: item.requestedRegions,
+        dedupeKey: item.dedupeKey
+      };
+      case "DUPLICATE_ACTIVE": return {
+        status: item.status,
+        account,
+        scanRunId: item.scanRunId,
+        dedupeKey: item.dedupeKey,
+        message: item.message
+      };
+      case "CONFLICT": return {
+        status: item.status,
+        account,
+        existingScanRunId: item.existingScanRunId,
+        dedupeKey: item.dedupeKey,
+        message: item.message
+      };
+      case "BLOCKED": return {
+        status: item.status,
+        account,
+        ...( "scanRunId" in item ? { scanRunId: item.scanRunId } : {}),
+        requestedRegions: item.requestedRegions,
+        blockedReason: item.blockedReason,
+        dedupeKey: item.dedupeKey
+      };
+      case "READY_TO_QUEUE": return {
+        status: item.status,
+        account,
+        requestedRegions: item.requestedRegions,
+        dedupeKey: item.dedupeKey
+      };
+      }
+    }),
+    awsApiCallExecuted: data.awsApiCallExecuted,
+    scannerRun: data.scannerRun,
+    mutationExecuted: data.mutationExecuted,
+    terraformApplyExecuted: data.terraformApplyExecuted,
+    automaticRemediationExecuted: data.automaticRemediationExecuted
+}));
+
+export function createFrontendInventoryAccountSyncResponseSchema(accountRecordId: string) {
+  return FrontendInventorySyncResponseSchema.superRefine((data, context) => {
+    if (data.dryRun || data.items.length !== 1 || data.items[0]?.account.id !== accountRecordId) {
+      context.addIssue({
+        code: "custom",
+        message: "Account inventory sync response invariants were not satisfied."
+      });
+    }
+  });
+}
+
 export type FrontendCommandCenterResponse = ReturnType<typeof FrontendCommandCenterResponseSchema.parse>;
 export type FrontendMonitoringHealth = ReturnType<typeof FrontendMonitoringHealthSchema.parse>;
 export type FrontendSecurityAlertsList = ReturnType<typeof FrontendSecurityAlertsListSchema.parse>;
@@ -605,3 +675,4 @@ export type FrontendGovernanceActivity = ReturnType<typeof FrontendGovernanceAct
 export type FrontendComplianceEvidenceCenter = ReturnType<typeof FrontendComplianceEvidenceCenterSchema.parse>;
 export type FrontendAwsIdentityValidation = ReturnType<typeof FrontendAwsIdentityValidationSchema.parse>;
 export type FrontendCapabilitySession = ReturnType<typeof FrontendCapabilitySessionSchema.parse>;
+export type FrontendInventorySyncResponse = ReturnType<typeof FrontendInventorySyncResponseSchema.parse>;

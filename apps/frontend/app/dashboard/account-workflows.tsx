@@ -25,7 +25,6 @@ import type {
   AwsConnectorStatusResponse,
   AwsIdentityValidationResponse,
   AwsInventoryPlanResponse,
-  AwsInventoryStartResponse,
   CreateAwsAccountRequest,
   TeamDto,
   UpdateAwsAccountRequest
@@ -37,9 +36,12 @@ import {
   FrontendAwsIdentityValidationSchema,
   FrontendAwsAccountMutationSchema,
   FrontendCapabilitySessionSchema,
-  type FrontendCapabilitySession
-  , type FrontendAwsIdentityValidation
+  type FrontendCapabilitySession,
+  type FrontendAwsIdentityValidation,
+  createFrontendInventoryAccountSyncResponseSchema,
+  type FrontendInventorySyncResponse
 } from "../../lib/response-contracts";
+import { inventorySyncFeedback } from "../../lib/inventory-sync-feedback";
 import {
   authoritativePermission,
   capabilityPermission,
@@ -96,13 +98,6 @@ type AccountFormState = {
 type ConfirmState = {
   action: "identity" | "sync" | "archive";
   account: AwsAccountDto;
-};
-
-type InventorySyncResponse = AwsInventoryStartResponse | {
-  status: string;
-  message: string;
-  scanRunId?: string;
-  error?: string;
 };
 
 const emptyForm: AccountFormState = {
@@ -223,8 +218,11 @@ export function AccountsWorkspace() {
     setFeedback({ tone: "info", title: "Starting inventory sync", message: "Starting read-only sync..." });
     setActiveAction({ key: "sync", accountRecordId: account.id, label: "Starting read-only sync..." });
     try {
-      const result = await fetchCloudShieldClient<InventorySyncResponse>(`/api/v1/aws/accounts/${account.id}/inventory/sync`, { method: "POST" });
-      setFeedback({ tone: result.status === "BLOCKED_DISABLED" ? "warning" : "success", title: `Inventory sync: ${result.status}`, message: result.message });
+      const result = await fetchCloudShieldClient<FrontendInventorySyncResponse>(`/api/v1/aws/accounts/${account.id}/inventory/sync`, {
+        method: "POST",
+        schema: createFrontendInventoryAccountSyncResponseSchema(account.id)
+      });
+      setFeedback(inventorySyncFeedback(result));
       refresh();
     } catch (error) {
       setFeedback({ tone: "danger", title: "Inventory sync failed", message: errorMessage(error) });
@@ -475,7 +473,7 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
               void runMutation<FrontendAwsIdentityValidation>("identity", "Validating AWS identity...", `/api/v1/aws/accounts/${account.id}/validate-identity`, "POST", (result) => ({ tone: identityTone(result.status), title: `STS identity validation: ${result.status}`, message: identityMessage(result) }), FrontendAwsIdentityValidationSchema);
             }
             if (action === "sync") {
-              void runMutation<InventorySyncResponse>("sync", "Starting read-only sync...", `/api/v1/aws/accounts/${account.id}/inventory/sync`, "POST", (result) => ({ tone: result.status === "BLOCKED_DISABLED" ? "warning" : "success", title: `Inventory sync: ${result.status}`, message: result.message }));
+              void runMutation<FrontendInventorySyncResponse>("sync", "Starting read-only sync...", `/api/v1/aws/accounts/${account.id}/inventory/sync`, "POST", inventorySyncFeedback, createFrontendInventoryAccountSyncResponseSchema(account.id));
             }
             if (action === "archive") {
               void runMutation<AwsAccountMutationResponse>("archive", "Archiving registry record...", `/api/v1/aws/accounts/${account.id}/archive`, "PATCH", (result) => ({ tone: "success", title: "Registry record archived", message: result.message }), FrontendAwsAccountMutationSchema);

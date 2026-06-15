@@ -2074,3 +2074,139 @@ export type AwsStsValidationResponse = z.infer<typeof AwsStsValidationResponseSc
 export * from './search.js';
 export * from "./dashboard.js";
 export * from "./monitoring.js";
+const InventorySafeIdentifierSchema = z.string()
+  .trim()
+  .min(1)
+  .max(160)
+  .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Identifier contains control characters.")
+  .refine((value) => !/[\\/]/.test(value) && value !== "." && value !== "..", "Identifier cannot be path-like.");
+
+const InventoryDedupeKeySchema = z.string()
+  .trim()
+  .min(1)
+  .max(1024)
+  .refine(
+    (value) => !/[\u0000-\u001f\u007f]/.test(value),
+    "Dedupe key contains control characters."
+  );
+
+const InventorySafeTextSchema = z.string()
+  .trim()
+  .min(1)
+  .max(500)
+  .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Text contains control characters.")
+  .refine(
+    (value) => !/\b(?:AccessKeyId|SecretAccessKey|SessionToken|Authorization|credentials?|providerError|rawError|rawResponse|raw request|raw response|Redis|BullMQ)\b|(?:^|\s)at\s+\S+\s+\([^)]+:\d+:\d+\)/i.test(value),
+    "Text contains restricted internal details."
+  );
+
+const InventoryRegionSchema = z.string()
+  .trim()
+  .min(8)
+  .max(32)
+  .regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/, "Invalid AWS region.");
+
+export const InventoryAccountSummarySchema = z.object({
+  id: InventorySafeIdentifierSchema,
+  name: InventorySafeTextSchema.max(256),
+  accountId: z.string().regex(/^\d{12}$/, "AWS account ID must be exactly 12 digits."),
+  environment: AwsAccountEnvironmentSchema,
+  connectionStatus: AwsConnectionStatusSchema,
+  status: AwsAccountStatusSchema
+}).strict();
+export type InventoryAccountSummary = z.infer<typeof InventoryAccountSummarySchema>;
+
+export const InventoryQueuedItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("QUEUED"),
+  scanRunId: InventorySafeIdentifierSchema,
+  queueJobId: InventorySafeIdentifierSchema,
+  requestedRegions: z.array(InventoryRegionSchema).min(1).max(30),
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryQueuedItem = z.infer<typeof InventoryQueuedItemSchema>;
+
+export const InventoryDuplicateActiveItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("DUPLICATE_ACTIVE"),
+  scanRunId: InventorySafeIdentifierSchema,
+  dedupeKey: InventoryDedupeKeySchema,
+  message: InventorySafeTextSchema
+}).strict();
+export type InventoryDuplicateActiveItem = z.infer<typeof InventoryDuplicateActiveItemSchema>;
+
+export const InventoryConflictItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("CONFLICT"),
+  existingScanRunId: InventorySafeIdentifierSchema,
+  message: InventorySafeTextSchema,
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryConflictItem = z.infer<typeof InventoryConflictItemSchema>;
+
+export const InventoryPersistedBlockedItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("BLOCKED"),
+  scanRunId: InventorySafeIdentifierSchema,
+  requestedRegions: z.array(InventoryRegionSchema).min(1).max(30),
+  blockedReason: InventorySafeTextSchema,
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryPersistedBlockedItem = z.infer<typeof InventoryPersistedBlockedItemSchema>;
+
+export const InventoryDryRunBlockedItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("BLOCKED"),
+  requestedRegions: z.array(InventoryRegionSchema).min(1).max(30),
+  blockedReason: InventorySafeTextSchema,
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryDryRunBlockedItem = z.infer<typeof InventoryDryRunBlockedItemSchema>;
+
+export const InventoryReadyToQueueItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("READY_TO_QUEUE"),
+  requestedRegions: z.array(InventoryRegionSchema).min(1).max(30),
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryReadyToQueueItem = z.infer<typeof InventoryReadyToQueueItemSchema>;
+
+export const InventoryOrchestrationItemSchema = z.union([
+  InventoryQueuedItemSchema,
+  InventoryDuplicateActiveItemSchema,
+  InventoryConflictItemSchema,
+  InventoryPersistedBlockedItemSchema,
+  InventoryDryRunBlockedItemSchema,
+  InventoryReadyToQueueItemSchema
+]);
+export type InventoryOrchestrationItem = z.infer<typeof InventoryOrchestrationItemSchema>;
+
+export const InventoryOrchestrationResponseSchema = z.object({
+  status: z.enum(["QUEUED", "PLANNED", "CONFLICT"]),
+  dryRun: z.boolean(),
+  items: z.array(InventoryOrchestrationItemSchema).max(100),
+  awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false)
+}).strict();
+export type InventoryOrchestrationResponse = z.infer<typeof InventoryOrchestrationResponseSchema>;
+
+export const InventoryUnsupportedScannerResponseSchema = z.object({
+  status: z.literal("BLOCKED"),
+  error: z.literal("unsupported_scanner_type"),
+  message: InventorySafeTextSchema,
+  awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false)
+}).strict();
+export type InventoryUnsupportedScannerResponse = z.infer<typeof InventoryUnsupportedScannerResponseSchema>;
+
+export const InventorySyncResponseSchema = z.union([
+  InventoryOrchestrationResponseSchema,
+  InventoryUnsupportedScannerResponseSchema
+]);
+export type InventorySyncResponse = z.infer<typeof InventorySyncResponseSchema>;

@@ -1,4 +1,4 @@
-import { CLOUD_INVENTORY_SYNC_QUEUE_NAME } from "@cloudshield/contracts";
+import { CLOUD_INVENTORY_SYNC_QUEUE_NAME, InventoryOrchestrationResponseSchema, InventoryUnsupportedScannerResponseSchema } from "@cloudshield/contracts";
 import {
   prisma,
   scopeByOrganization,
@@ -50,18 +50,27 @@ type RegionFailure = {
   resourceCount?: number;
 };
 
+export class InventoryOrchestrationError extends Error {
+  readonly statusCode = 500;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "InventoryOrchestrationError";
+  }
+}
+
 export class InventoryOrchestrationService {
   constructor(private readonly env: RuntimeEnv) {}
 
   async planInventoryScan(input: PlanInventoryScanInput) {
     const scannerType = input.scannerType ?? "AWS_EC2_INVENTORY_SCAN";
-    if (!SUPPORTED_SCANNER_TYPES.includes(scannerType as any)) {
-      return {
+    if (scannerType !== SUPPORTED_SCANNER_TYPES[0]) {
+      return InventoryUnsupportedScannerResponseSchema.parse({
         status: "BLOCKED",
         error: "unsupported_scanner_type",
         message: "Only the Phase 1 EC2 read-only inventory scanner is supported in this milestone.",
         ...safetyFlags(false)
-      };
+      });
     }
 
     const accounts = await this.resolveAccounts(input);
@@ -125,13 +134,20 @@ export class InventoryOrchestrationService {
         this.getRuntimeBlockedReason();
 
       if (input.dryRun) {
-        items.push({
-          account: accountSummary(account),
-          status: blockedReason ? "BLOCKED" : "READY_TO_QUEUE",
-          requestedRegions: requestedRegions.regions,
-          blockedReason,
-          dedupeKey
-        });
+        items.push(blockedReason
+          ? {
+              account: accountSummary(account),
+              status: "BLOCKED",
+              requestedRegions: requestedRegions.regions,
+              blockedReason,
+              dedupeKey
+            }
+          : {
+              account: accountSummary(account),
+              status: "READY_TO_QUEUE",
+              requestedRegions: requestedRegions.regions,
+              dedupeKey
+            });
         continue;
       }
 
@@ -206,48 +222,97 @@ export class InventoryOrchestrationService {
         }
       });
 
-      const queueJob = await cloudScanQueue.add(
-        scannerType,
-        {
-          type: scannerType,
-          organizationId: input.organizationId,
-          awsAccountId: account.id,
-          scanRunId: scanRun.id,
-          regions: requestedRegions.regions,
+      let queueJob;
+      try {
+        queueJob = await cloudScanQueue.add(
           scannerType,
-          idempotencyKey: input.idempotencyKey ?? null
-        },
-        {
-          jobId: scanRun.id,
-          attempts: 3,
-          backoff: { type: "exponential", delay: 5000 },
-          removeOnComplete: 100,
-          removeOnFail: 250
+          {
+            type: scannerType,
+            organizationId: input.organizationId,
+            awsAccountId: account.id,
+            scanRunId: scanRun.id,
+            regions: requestedRegions.regions,
+            scannerType,
+            idempotencyKey: input.idempotencyKey ?? null
+          },
+          {
+            jobId: scanRun.id,
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5000 },
+            removeOnComplete: 100,
+            removeOnFail: 250
+          }
+        );
+      } catch {
+        try {
+          await prisma.$transaction(async (tx) => {
+            await tx.scanRun.update({
+              where: { id: scanRun.id },
+              data: {
+                status: "FAILED",
+                phase: "queue_failed",
+                completedAt: new Date(),
+                failureCount: 1,
+                failureClassification: "QUEUE_ENQUEUE_FAILED",
+                errorCode: "QUEUE_ENQUEUE_FAILED",
+                errorMessage: "Inventory scan could not be queued.",
+                queueJobId: null,
+                metadata: toJson({
+                  queueFailureCategory: "enqueue_error",
+                  awsApiCallExecuted: false,
+                  scannerRun: false,
+                  mutationExecuted: false,
+                  terraformApplyExecuted: false,
+                  automaticRemediationExecuted: false
+                })
+              }
+            });
+            await auditWithClient(tx, input.organizationId, input.userId, "inventory.scan.queue_failed", "scan_run", scanRun.id, {
+              accountId: account.id,
+              failureClassification: "QUEUE_ENQUEUE_FAILED",
+              awsApiCallExecuted: false,
+              scannerRun: false,
+              mutationExecuted: false,
+              terraformApplyExecuted: false,
+              automaticRemediationExecuted: false
+            });
+          });
+        } catch {
+          // The original QUEUED row may remain; active-run deduplication prevents a second enqueue.
         }
-      );
+        throw new InventoryOrchestrationError("Inventory scan could not be queued.");
+      }
 
-      await prisma.scanRun.update({
-        where: { id: scanRun.id },
-        data: { queueJobId: String(queueJob.id ?? scanRun.id) }
-      });
-      await audit(input.organizationId, input.userId, "inventory.scan.queued", "scan_run", scanRun.id, {
-        accountId: account.id,
-        requestedRegions: requestedRegions.regions,
-        scannerType,
-        queueJobId: queueJob.id ?? scanRun.id
-      });
+      try {
+        if (!queueJob.id) {
+          throw new InventoryOrchestrationError("Inventory scan was queued, but queue confirmation could not be fully persisted.");
+        }
+        await prisma.scanRun.update({
+          where: { id: scanRun.id },
+          data: { queueJobId: queueJob.id }
+        });
+        await audit(input.organizationId, input.userId, "inventory.scan.queued", "scan_run", scanRun.id, {
+          accountId: account.id,
+          requestedRegions: requestedRegions.regions,
+          scannerType,
+          queueJobId: queueJob.id
+        });
+      } catch {
+        // Queue acceptance may already have happened. Preserve QUEUED so active-run deduplication prevents replay.
+        throw new InventoryOrchestrationError("Inventory scan was queued, but queue confirmation could not be fully persisted.");
+      }
 
       items.push({
         account: accountSummary(account),
         status: "QUEUED",
         scanRunId: scanRun.id,
-        queueJobId: queueJob.id ?? scanRun.id,
+        queueJobId: queueJob.id,
         requestedRegions: requestedRegions.regions,
         dedupeKey
       });
     }
 
-    return {
+    return InventoryOrchestrationResponseSchema.parse({
       status: items.some((item) => item.status === "QUEUED")
         ? "QUEUED"
         : items.some((item) => item.status === "CONFLICT")
@@ -256,7 +321,7 @@ export class InventoryOrchestrationService {
       dryRun: Boolean(input.dryRun),
       items,
       ...safetyFlags(false)
-    };
+    });
   }
 
   async listScans(organizationId: string, query: { status?: string; accountId?: string; limit?: number }) {
@@ -616,15 +681,33 @@ function latestScanDto(scan: any) {
     : null;
 }
 
+const PrismaToEnvironment: Record<string, "DEVELOPMENT" | "STAGING" | "PRODUCTION" | "SECURITY" | "SHARED" | "SANDBOX"> = {
+  dev: "DEVELOPMENT",
+  staging: "STAGING",
+  prod: "PRODUCTION",
+  security: "SECURITY",
+  shared: "SHARED",
+  sandbox: "SANDBOX"
+};
+
 function accountSummary(account: any) {
+  const environment = projectInventoryEnvironment(account.environment);
   return {
     id: account.id,
     name: account.name,
     accountId: account.accountId,
-    environment: account.environment,
+    environment,
     connectionStatus: account.connectionStatus,
     status: account.status
   };
+}
+
+export function projectInventoryEnvironment(environment: string) {
+  const projected = PrismaToEnvironment[environment];
+  if (!projected) {
+    throw new InventoryOrchestrationError("AWS account environment is not supported for inventory orchestration.");
+  }
+  return projected;
 }
 
 function scopedIdempotencyKey(key: string | undefined, accountId: string) {
@@ -657,7 +740,19 @@ async function audit(
   targetId: string,
   metadata: Record<string, unknown>
 ) {
-  await prisma.auditEvent.create({
+  await auditWithClient(prisma, organizationId, actorUserId, action, targetType, targetId, metadata);
+}
+
+async function auditWithClient(
+  db: Prisma.TransactionClient | typeof prisma,
+  organizationId: string,
+  actorUserId: string,
+  action: string,
+  targetType: string,
+  targetId: string,
+  metadata: Record<string, unknown>
+) {
+  await db.auditEvent.create({
     data: {
       organizationId,
       actorUserId,
