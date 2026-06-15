@@ -4,6 +4,7 @@ import { buildApp } from "../app.js";
 import { prisma } from "@cloudshield/database";
 import { randomUUID } from "node:crypto";
 import { securityMonitoringQueue } from "../modules/security-monitoring/monitoring.queue.js";
+import { SecurityAlertLifecycleMutationResponseSchema } from "@cloudshield/contracts";
 
 test("Security Monitoring API Endpoints", async (t) => {
   const app = await buildApp();
@@ -170,6 +171,10 @@ test("Security Monitoring API Endpoints", async (t) => {
       payload: { note: "Will look into it" }
     });
     assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(res.json(), { status: "ok" });
+    assert.deepStrictEqual(SecurityAlertLifecycleMutationResponseSchema.parse(res.json()), { status: "ok" });
+    assert.strictEqual("alert" in res.json(), false);
+    assert.strictEqual("metadata" in res.json(), false);
     const alert = await prisma.securityAlert.findUnique({ where: { id: alertId } });
     assert.strictEqual(alert?.status, "ACKNOWLEDGED");
 
@@ -178,6 +183,17 @@ test("Security Monitoring API Endpoints", async (t) => {
         orderBy: { createdAt: "desc" }
     });
     assert.ok(audit);
+    assert.strictEqual(audit.targetType, "ACKNOWLEDGED");
+  });
+
+  await t.test("acknowledge rejects an overlong note", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/security-monitoring/alerts/${alertId}/acknowledge`,
+      headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+      payload: { note: "x".repeat(1001) }
+    });
+    assert.strictEqual(res.statusCode, 400);
   });
 
   await t.test("resolve requires a bounded reason", async () => {
@@ -196,8 +212,49 @@ test("Security Monitoring API Endpoints", async (t) => {
       payload: { reason: "Fixed the configuration" }
     });
     assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(res.json(), { status: "ok" });
+    assert.deepStrictEqual(SecurityAlertLifecycleMutationResponseSchema.parse(res.json()), { status: "ok" });
+    assert.strictEqual("alert" in res.json(), false);
+    assert.strictEqual("metadata" in res.json(), false);
     const alert = await prisma.securityAlert.findUnique({ where: { id: alertId } });
     assert.strictEqual(alert?.status, "RESOLVED");
+    assert.ok(alert?.resolvedAt instanceof Date);
+    assert.strictEqual(Number.isNaN(alert?.resolvedAt?.getTime()), false);
+
+    const audit = await prisma.auditEvent.findFirst({
+      where: { targetId: alertId, action: "security_alert", targetType: "RESOLVED" },
+      orderBy: { createdAt: "desc" }
+    });
+    assert.ok(audit);
+  });
+
+  await t.test("resolve rejects an overlong reason", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/security-monitoring/alerts/${alertId}/resolve`,
+      headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+      payload: { reason: "x".repeat(1001) }
+    });
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  await t.test("missing alert mutation routes return 404", async () => {
+    const missingId = randomUUID();
+    const acknowledge = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/security-monitoring/alerts/${missingId}/acknowledge`,
+      headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+      payload: { note: "Reviewing" }
+    });
+    assert.strictEqual(acknowledge.statusCode, 404);
+
+    const resolve = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/security-monitoring/alerts/${missingId}/resolve`,
+      headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+      payload: { reason: "Resolved" }
+    });
+    assert.strictEqual(resolve.statusCode, 404);
   });
 
   await t.test("tenant A cannot access tenant B alert", async () => {
@@ -217,6 +274,26 @@ test("Security Monitoring API Endpoints", async (t) => {
       headers: { cookie: sessionCookie }
     });
     assert.strictEqual(res.statusCode, 404);
+
+    const acknowledge = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/security-monitoring/alerts/${otherAlert.id}/acknowledge`,
+      headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+      payload: { note: "Cross tenant" }
+    });
+    assert.strictEqual(acknowledge.statusCode, 404);
+
+    const resolve = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/security-monitoring/alerts/${otherAlert.id}/resolve`,
+      headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+      payload: { reason: "Cross tenant" }
+    });
+    assert.strictEqual(resolve.statusCode, 404);
+
+    const unchanged = await prisma.securityAlert.findUnique({ where: { id: otherAlert.id } });
+    assert.strictEqual(unchanged?.status, "OPEN");
+    assert.strictEqual(unchanged?.resolvedAt, null);
   });
 
   await t.test("tenant A cannot access tenant B run", async () => {

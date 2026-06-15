@@ -218,3 +218,8 @@ export const ResolveAlertRequestSchema = z.object({
   reason: z.string().min(1).max(1000)
 });
 export type ResolveAlertRequest = z.infer<typeof ResolveAlertRequestSchema>;
+
+export const SecurityAlertLifecycleMutationResponseSchema = z.object({
+  status: z.literal("ok")
+}).strict();
+export type SecurityAlertLifecycleMutationResponse = z.infer<typeof SecurityAlertLifecycleMutationResponseSchema>;

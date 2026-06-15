@@ -9,8 +9,12 @@ import { ErrorState } from "../../../../../components/ui/error-state";
 import { LoadingState } from "../../../../../components/ui/loading-state";
 import { ResourceId } from "../../../../../components/ui/resource-id";
 import { StatusBadge } from "../../../../../components/ui/status-badge";
+import {
+  SecurityAlertLifecycleMutationResponseSchema,
+  type SecurityAlertLifecycleMutationResponse
+} from "@cloudshield/contracts";
 import { fetchCloudShieldClient } from "../../../../../lib/client-api";
-import { API_ERROR_MESSAGES, toApiError, type ApiError } from "../../../../../lib/api-error";
+import { API_ERROR_MESSAGES, ApiRequestError, toApiError, type ApiError } from "../../../../../lib/api-error";
 import {
   FrontendSecurityAlertDetailSchema,
   resolveFrontendAlertRouteId,
@@ -77,11 +81,12 @@ export default function SecurityAlertDetailsPage() {
     setActionError(null);
     setActionLoading("acknowledge");
     try {
-      // No shared mutation response schema exists. The validated detail refetch is authoritative.
-      await fetchCloudShieldClient<unknown>(`/api/v1/security-monitoring/alerts/${encodeURIComponent(alertId)}/acknowledge`, {
+      const acceptance = await fetchCloudShieldClient<SecurityAlertLifecycleMutationResponse>(`/api/v1/security-monitoring/alerts/${encodeURIComponent(alertId)}/acknowledge`, {
         method: "PATCH",
-        body: { note: note.trim() || "Acknowledged via UI" }
+        body: { note: note.trim() || "Acknowledged via UI" },
+        schema: SecurityAlertLifecycleMutationResponseSchema
       });
+      if (!acceptance) throw new ApiRequestError(contractInvalidError());
       const confirmed = await loadData();
       if (confirmed?.status !== "ACKNOWLEDGED") setActionError(contractInvalidError());
       else setNote("");
@@ -97,11 +102,12 @@ export default function SecurityAlertDetailsPage() {
     setActionError(null);
     setActionLoading("resolve");
     try {
-      // No shared mutation response schema exists. The validated detail refetch is authoritative.
-      await fetchCloudShieldClient<unknown>(`/api/v1/security-monitoring/alerts/${encodeURIComponent(alertId)}/resolve`, {
+      const acceptance = await fetchCloudShieldClient<SecurityAlertLifecycleMutationResponse>(`/api/v1/security-monitoring/alerts/${encodeURIComponent(alertId)}/resolve`, {
         method: "PATCH",
-        body: { reason: resolveReason.trim() || "Resolved via UI" }
+        body: { reason: resolveReason.trim() || "Resolved via UI" },
+        schema: SecurityAlertLifecycleMutationResponseSchema
       });
+      if (!acceptance) throw new ApiRequestError(contractInvalidError());
       const confirmed = await loadData();
       if (confirmed?.status !== "RESOLVED" || confirmed.resolvedAt === null) setActionError(contractInvalidError());
       else setResolveReason("");
