@@ -21,6 +21,8 @@ import {
   RemediationPlanListResponseSchema,
   SecurityAlertDtoBaseSchema,
   SecurityAlertsListResponseSchema,
+  SecurityAlertEvidenceDtoSchema,
+  SecurityAlertEvidenceListResponseSchema,
   InventoryOrchestrationResponseSchema
 } from "@cloudshield/contracts";
 import { z } from "zod";
@@ -219,6 +221,37 @@ export const FrontendSecurityAlertsListSchema = SecurityAlertsListResponseSchema
     },
     createdAt: item.createdAt,
     updatedAt: item.updatedAt
+  }))
+}));
+
+export const FrontendSecurityAlertEvidenceSchema = SecurityAlertEvidenceDtoSchema.extend({
+  id: identifierValue,
+  securityAlertId: identifierValue,
+  monitoringRunId: identifierValue.nullable(),
+  observedAt: isoTimestamp,
+  createdAt: isoTimestamp
+});
+
+export const FrontendSecurityAlertEvidenceListSchema = SecurityAlertEvidenceListResponseSchema.extend({
+  items: FrontendSecurityAlertEvidenceSchema.array()
+}).refine(data => isNonNegativeInteger(data.total), {
+  message: "Evidence total must be a non-negative integer"
+}).transform(data => ({
+  total: data.total,
+  hasMore: data.hasMore,
+  nextCursor: data.nextCursor,
+  items: data.items.map(ev => ({
+    id: ev.id,
+    securityAlertId: ev.securityAlertId,
+    monitoringRunId: ev.monitoringRunId,
+    evidenceType: ev.evidenceType,
+    sourceType: ev.sourceType,
+    sourceId: ev.sourceId,
+    title: ev.title,
+    summary: ev.summary,
+    observedAt: ev.observedAt,
+    createdAt: ev.createdAt,
+    correlationId: ev.correlationId
   }))
 }));
 
@@ -693,3 +726,5 @@ export type FrontendComplianceEvidenceCenter = ReturnType<typeof FrontendComplia
 export type FrontendAwsIdentityValidation = ReturnType<typeof FrontendAwsIdentityValidationSchema.parse>;
 export type FrontendCapabilitySession = ReturnType<typeof FrontendCapabilitySessionSchema.parse>;
 export type FrontendInventorySyncResponse = ReturnType<typeof FrontendInventorySyncResponseSchema.parse>;
+export type FrontendSecurityAlertEvidence = ReturnType<typeof FrontendSecurityAlertEvidenceSchema.parse>;
+export type FrontendSecurityAlertEvidenceList = ReturnType<typeof FrontendSecurityAlertEvidenceListSchema.parse>;

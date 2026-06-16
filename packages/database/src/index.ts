@@ -28,4 +28,4 @@ export function assertOrganizationScope(scope: OrganizationScope): void {
 export * from "./security-posture/security-rule.types.js";
 export * from "./security-posture/security-rule.catalog.js";
 export * from "./security-posture/security-rule.engine.js";
-
+export * from "./security-alert-evidence.repository.js";

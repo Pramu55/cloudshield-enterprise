@@ -288,3 +288,49 @@ export const SecurityAlertLifecycleMutationResponseSchema = z.object({
   status: z.literal("ok")
 }).strict();
 export type SecurityAlertLifecycleMutationResponse = z.infer<typeof SecurityAlertLifecycleMutationResponseSchema>;
+
+export const SecurityAlertEvidenceTypeSchema = z.enum([
+  "ACCOUNT_CONNECTIVITY",
+  "INVENTORY_FRESHNESS",
+  "SECURITY_FINDING",
+  "PUBLIC_EXPOSURE",
+  "SCAN_RUN",
+  "FINDING_INCREASE",
+  "COMPLIANCE_REGRESSION"
+]);
+export type SecurityAlertEvidenceType = z.infer<typeof SecurityAlertEvidenceTypeSchema>;
+
+export const SecurityAlertEvidenceDtoSchema = z.object({
+  id: z.string().min(1),
+  securityAlertId: z.string().min(1),
+  monitoringRunId: z.string().nullable(),
+  evidenceType: SecurityAlertEvidenceTypeSchema,
+  sourceType: z.string().min(1).max(100).regex(/^[^\u0000-\u001F\u007F]*$/),
+  sourceId: z.string().min(1).max(255).regex(/^[^\u0000-\u001F\u007F]*$/).nullable(),
+  title: z.string().min(1).max(255).regex(/^[^\u0000-\u001F\u007F]*$/),
+  summary: z.string().min(1).max(1000).regex(/^[^\u0000-\u001F\u007F]*$/),
+  observedAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
+  correlationId: z.string().uuid().nullable()
+}).strict();
+export type SecurityAlertEvidenceDto = z.infer<typeof SecurityAlertEvidenceDtoSchema>;
+
+export const SecurityAlertEvidenceCursorPayloadSchema = z.object({
+  observedAt: z.string().datetime(),
+  id: z.string().min(1).regex(/^[a-zA-Z0-9_\-]+$/)
+}).strict();
+export type SecurityAlertEvidenceCursorPayload = z.infer<typeof SecurityAlertEvidenceCursorPayloadSchema>;
+
+export const SecurityAlertEvidenceQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25)
+}).strict();
+export type SecurityAlertEvidenceQuery = z.infer<typeof SecurityAlertEvidenceQuerySchema>;
+
+export const SecurityAlertEvidenceListResponseSchema = z.object({
+  items: z.array(SecurityAlertEvidenceDtoSchema),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().nullable(),
+  hasMore: z.boolean()
+}).strict();
+export type SecurityAlertEvidenceListResponse = z.infer<typeof SecurityAlertEvidenceListResponseSchema>;
