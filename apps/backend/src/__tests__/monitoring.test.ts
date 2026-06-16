@@ -851,4 +851,484 @@ test("Security Monitoring API Endpoints", async (t) => {
       assert.strictEqual(await prisma.monitoringRun.count(), initialRunsCount);
     });
   });
+
+  await t.test("Evidence History API & Deduplication", async (ev) => {
+    // Setup a dummy alert for evidence tests
+    const alertId = `test-alert-${randomUUID()}`;
+    await prisma.securityAlert.create({
+      data: {
+        id: alertId,
+        organizationId: orgId,
+        dedupeKey: `evidence-test-${randomUUID()}`,
+        title: "Test Alert",
+        description: "Test",
+        severity: "HIGH",
+        status: "OPEN",
+        category: "SECURITY_FINDING"
+      }
+    });
+
+    const otherOrgId = `other-org-${randomUUID()}`;
+    await prisma.organization.create({ data: { id: otherOrgId, name: "Other Org", slug: `other-${randomUUID()}` } });
+    const otherAlertId = `other-alert-${randomUUID()}`;
+    await prisma.securityAlert.create({
+      data: {
+        id: otherAlertId,
+        organizationId: otherOrgId,
+        dedupeKey: `other-evidence-test-${randomUUID()}`,
+        title: "Other Alert",
+        description: "Test",
+        severity: "HIGH",
+        status: "OPEN",
+        category: "SECURITY_FINDING"
+      }
+    });
+
+    await ev.test("deterministic upserts (append-only) and replays", async () => {
+      const { appendSecurityAlertEvidence } = await import("@cloudshield/database");
+
+      const input = {
+        organizationId: orgId,
+        securityAlertId: alertId,
+        monitoringRunId: runId,
+        evidenceType: "SECURITY_FINDING",
+        sourceType: "SecurityFinding",
+        sourceId: "finding-1",
+        title: "Initial Evidence",
+        summary: "Details",
+        observedAt: new Date("2026-06-16T10:00:00.000Z"),
+        correlationId: randomUUID()
+      };
+
+      const result1 = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, input));
+      const result2 = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, input));
+
+      assert.strictEqual(result1.id, result2.id, "Upsert should return the identical record when re-run");
+
+      const count = await prisma.securityAlertEvidence.count({
+        where: { organizationId: orgId, securityAlertId: alertId }
+      });
+      assert.strictEqual(count, 1, "Duplicate evidence should not be created");
+
+      // Verify all fields are unchanged
+      const record = await prisma.securityAlertEvidence.findUnique({ where: { id: result1.id } });
+      assert.ok(record);
+      assert.strictEqual(record.createdAt.getTime(), result1.createdAt.getTime());
+      assert.strictEqual(record.observedAt.getTime(), result1.observedAt.getTime());
+      assert.strictEqual(record.title, result1.title);
+      assert.strictEqual(record.summary, result1.summary);
+      assert.strictEqual(record.sourceType, result1.sourceType);
+      assert.strictEqual(record.sourceId, result1.sourceId);
+      assert.strictEqual(record.monitoringRunId, result1.monitoringRunId);
+      assert.strictEqual(record.correlationId, result1.correlationId);
+
+      // Different run creates another record
+      const secondRun = await prisma.monitoringRun.create({
+        data: {
+          id: randomUUID(),
+          organizationId: orgId,
+          trigger: "API_REQUEST"
+        }
+      });
+      const inputDiffRun = { ...input, monitoringRunId: secondRun.id };
+      const resultDiffRun = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, inputDiffRun));
+      assert.notStrictEqual(result1.id, resultDiffRun.id);
+
+      // Different payload within same run creates another record
+      const inputDiffPayload = { ...input, summary: "Different details" };
+      const resultDiffPayload = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, inputDiffPayload));
+      assert.notStrictEqual(result1.id, resultDiffPayload.id);
+
+      // Different tenant cannot collide
+      const otherRun = await prisma.monitoringRun.create({
+        data: {
+          id: randomUUID(),
+          organizationId: otherOrgId,
+          trigger: "API_REQUEST"
+        }
+      });
+      const inputDiffTenant = {
+        ...input,
+        organizationId: otherOrgId,
+        securityAlertId: otherAlertId,
+        monitoringRunId: otherRun.id
+      };
+      const resultDiffTenant = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, inputDiffTenant));
+      assert.notStrictEqual(result1.id, resultDiffTenant.id);
+
+      // Different alert cannot collide
+      const alertId2 = `test-alert-2-${randomUUID()}`;
+      await prisma.securityAlert.create({
+        data: {
+          id: alertId2,
+          organizationId: orgId,
+          dedupeKey: `evidence-test-2-${randomUUID()}`,
+          title: "Test Alert 2",
+          description: "Test 2",
+          severity: "HIGH",
+          status: "OPEN",
+          category: "SECURITY_FINDING"
+        }
+      });
+      const inputDiffAlert = { ...input, securityAlertId: alertId2 };
+      const resultDiffAlert = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, inputDiffAlert));
+      assert.notStrictEqual(result1.id, resultDiffAlert.id);
+
+      // Non-deduplication database failures propagate (e.g. missing parent alert)
+      const inputMissingAlert = { ...input, securityAlertId: "non-existent-alert-id" };
+      await assert.rejects(
+        async () => {
+          await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, inputMissingAlert));
+        }
+      );
+
+      // Transaction rollback leaves no partial alert/evidence state
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.securityAlert.create({
+            data: {
+              id: "fail-alert-id",
+              organizationId: orgId,
+              dedupeKey: "fail-key",
+              title: "Fail Alert",
+              description: "Fail",
+              severity: "HIGH",
+              status: "OPEN",
+              category: "SECURITY_FINDING"
+            }
+          });
+          // Triggers Zod validation error to fail transaction
+          await appendSecurityAlertEvidence(tx, { ...input, securityAlertId: "" });
+        });
+      } catch (e) {
+        // expected failure
+      }
+      const partialAlert = await prisma.securityAlert.findUnique({ where: { id: "fail-alert-id" } });
+      assert.strictEqual(partialAlert, null, "Failed transaction should roll back alert creation");
+    });
+
+    await ev.test("API Endpoint Authorization & Isolation", async () => {
+      // 1. Unauthenticated request returns 401
+      const resUnauth = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence`
+      });
+      assert.strictEqual(resUnauth.statusCode, 401);
+
+      // 2. Authenticated user without monitoring.read returns 403
+      await prisma.user.update({ where: { id: userId }, data: { role: "GUEST" } });
+      await prisma.organizationMembership.updateMany({ where: { userId }, data: { role: "GUEST" } });
+      const resNoRead = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resNoRead.statusCode, 403);
+
+      // Restore role
+      await prisma.user.update({ where: { id: userId }, data: { role: "OWNER" } });
+      await prisma.organizationMembership.updateMany({ where: { userId }, data: { role: "OWNER" } });
+
+      // 3. Authorized request returns 200
+      const resAuth = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resAuth.statusCode, 200);
+
+      // 4. Missing alert returns 404
+      const resMissing = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/nonexistent/evidence`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resMissing.statusCode, 404);
+
+      // 5. Cross-tenant alert returns 404
+      const resCross = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${otherAlertId}/evidence`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCross.statusCode, 404);
+    });
+
+    await ev.test("API Endpoint Query & Cursor Validation", async () => {
+      const encode = (p: unknown) => Buffer.from(JSON.stringify(p), "utf-8").toString("base64url");
+
+      // limit = 0 rejected
+      const resL0 = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?limit=0`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resL0.statusCode, 400);
+
+      // limit = 101 rejected
+      const resL101 = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?limit=101`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resL101.statusCode, 400);
+
+      // default limit is 25
+      const { appendSecurityAlertEvidence } = await import("@cloudshield/database");
+      for (let i = 0; i < 30; i++) {
+        await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, {
+          organizationId: orgId,
+          securityAlertId: alertId,
+          monitoringRunId: runId,
+          evidenceType: "SECURITY_FINDING",
+          sourceType: "SecurityFinding",
+          sourceId: `f-${i}`,
+          title: `Ev ${i}`,
+          summary: `Details ${i}`,
+          observedAt: new Date(Date.now() - i * 1000),
+          correlationId: null
+        }));
+      }
+
+      const resDefault = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resDefault.statusCode, 200);
+      assert.strictEqual(resDefault.json().items.length, 25);
+
+      // max limit 100 succeeds
+      const resL100 = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?limit=100`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resL100.statusCode, 200);
+
+      // unknown query key rejected
+      const resUnknownQ = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?organizationId=override`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resUnknownQ.statusCode, 400);
+
+      // malformed cursor rejected
+      const resMalformedC = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=invalidbase64url!!!`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resMalformedC.statusCode, 400);
+
+      // oversized cursor rejected
+      const resOversizedC = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${"A".repeat(513)}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resOversizedC.statusCode, 400);
+
+      // invalid decoded JSON rejected
+      const resInvalidJson = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${Buffer.from("not-json").toString("base64url")}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resInvalidJson.statusCode, 400);
+
+      // cursor array rejected
+      const resCursorArray = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${encode([1, 2])}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCursorArray.statusCode, 400);
+
+      // cursor null rejected
+      const resCursorNull = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${encode(null)}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCursorNull.statusCode, 400);
+
+      // missing cursor fields rejected
+      const resCursorMissing = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${encode({ id: "1" })}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCursorMissing.statusCode, 400);
+
+      // cursor unknown fields rejected
+      const resCursorExtra = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${encode({ observedAt: "2026-06-16T12:00:00Z", id: "1", extra: "yes" })}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCursorExtra.statusCode, 400);
+
+      // invalid datetime rejected
+      const resCursorInvalidDate = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${encode({ observedAt: "not-a-date", id: "1" })}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCursorInvalidDate.statusCode, 400);
+
+      // invalid cursor ID rejected
+      const resCursorInvalidId = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${encode({ observedAt: "2026-06-16T12:00:00Z", id: "invalid id with spaces" })}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCursorInvalidId.statusCode, 400);
+
+      // tenantId query parameter rejected
+      const resTenantIdQ = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?tenantId=override`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resTenantIdQ.statusCode, 400);
+
+      // cursor carrying organizationId rejected
+      const resCursorOrg = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${encode({ observedAt: "2026-06-16T12:00:00Z", id: "1", organizationId: "override" })}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCursorOrg.statusCode, 400);
+
+      // cursor carrying tenantId rejected
+      const resCursorTenant = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?cursor=${encode({ observedAt: "2026-06-16T12:00:00Z", id: "1", tenantId: "override" })}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resCursorTenant.statusCode, 400);
+    });
+
+    await ev.test("API Endpoint Pagination, Projection & Immutability", async () => {
+      // Clear previous evidence for pagination tests
+      await prisma.securityAlertEvidence.deleteMany({ where: { securityAlertId: alertId } });
+
+      const { appendSecurityAlertEvidence } = await import("@cloudshield/database");
+      const baseTime = Date.now();
+
+      const ev1 = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, {
+        organizationId: orgId,
+        securityAlertId: alertId,
+        monitoringRunId: runId,
+        evidenceType: "SECURITY_FINDING",
+        sourceType: "SecurityFinding",
+        sourceId: "f-1",
+        title: "Ev 1",
+        summary: "Details 1",
+        observedAt: new Date(baseTime),
+        correlationId: null
+      }));
+
+      const ev2 = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, {
+        organizationId: orgId,
+        securityAlertId: alertId,
+        monitoringRunId: runId,
+        evidenceType: "SECURITY_FINDING",
+        sourceType: "SecurityFinding",
+        sourceId: "f-2",
+        title: "Ev 2",
+        summary: "Details 2",
+        observedAt: new Date(baseTime + 1000),
+        correlationId: null
+      }));
+
+      const ev3 = await prisma.$transaction(tx => appendSecurityAlertEvidence(tx, {
+        organizationId: orgId,
+        securityAlertId: alertId,
+        monitoringRunId: runId,
+        evidenceType: "SECURITY_FINDING",
+        sourceType: "SecurityFinding",
+        sourceId: "f-3",
+        title: "Ev 3",
+        summary: "Details 3",
+        observedAt: new Date(baseTime + 2000),
+        correlationId: null
+      }));
+
+      // Page 1
+      const resPage1 = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?limit=2`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resPage1.statusCode, 200);
+      const body1 = resPage1.json();
+      assert.strictEqual(body1.items.length, 2);
+      assert.strictEqual(body1.total, 3);
+      assert.strictEqual(body1.hasMore, true);
+      assert.ok(body1.nextCursor);
+      // Newest first order check: Ev 3 then Ev 2
+      assert.strictEqual(body1.items[0].title, "Ev 3");
+      assert.strictEqual(body1.items[1].title, "Ev 2");
+
+      // Projection safety verification
+      for (const item of body1.items) {
+        assert.strictEqual("organizationId" in item, false);
+        assert.strictEqual("dedupeKey" in item, false);
+        assert.strictEqual("schemaVersion" in item, false);
+        assert.strictEqual("rawProvider" in item, false);
+        assert.strictEqual("providerPayload" in item, false);
+        assert.strictEqual("credentials" in item, false);
+      }
+
+      // Page 2
+      const resPage2 = await app.inject({
+        method: "GET",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence?limit=2&cursor=${body1.nextCursor}`,
+        headers: { cookie: sessionCookie }
+      });
+      assert.strictEqual(resPage2.statusCode, 200);
+      const body2 = resPage2.json();
+      assert.strictEqual(body2.items.length, 1);
+      assert.strictEqual(body2.total, 3);
+      assert.strictEqual(body2.hasMore, false);
+      assert.strictEqual(body2.nextCursor, null);
+      assert.strictEqual(body2.items[0].title, "Ev 1");
+
+      // HTTP Immutability Check
+      const resPost = await app.inject({
+        method: "POST",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence`,
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+        payload: {}
+      });
+      assert.strictEqual(resPost.statusCode, 404);
+
+      const resPatch = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence`,
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+        payload: {}
+      });
+      assert.strictEqual(resPatch.statusCode, 404);
+
+      const resPut = await app.inject({
+        method: "PUT",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence`,
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+        payload: {}
+      });
+      assert.strictEqual(resPut.statusCode, 404);
+
+      const resDelete = await app.inject({
+        method: "DELETE",
+        url: `/api/v1/security-monitoring/alerts/${alertId}/evidence`,
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+        payload: {}
+      });
+      assert.strictEqual(resDelete.statusCode, 404);
+    });
+  });
 });

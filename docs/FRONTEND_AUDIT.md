@@ -283,7 +283,21 @@ The safe summary contains only:
 
 The frontend validates the strict shared DTO before removing `organizationId` during its explicit projection. Evidence persistence and worker behavior remain unchanged. Missing and cross-tenant alert-detail responses remain indistinguishable.
 
-No dedicated evidence-history endpoint exists. No evidence-history endpoint or evidence-history UI was added.
+## Monitoring Evidence History Storage & API Milestone
+
+The security-monitoring evidence-history storage and API are fully activated and secure.
+
+### Key Architectural Characteristics
+- **Authoritative History Activation**: Dedicated append-only `SecurityAlertEvidence` database table storing validated post-migration evidence history.
+- **Evidence-Summary Legacy Status**: The existing `evidenceSummary.recordedCount` is a transitional legacy field. Authoritative post-migration count is retrieved from `SecurityAlertEvidenceListResponse.total`.
+- **No Equality Guarantee / No Backfill / No Fallback / No Legacy Mixing**: The UI states that legacy recorded counts and authoritative history totals may differ because no historical backfill was performed, no fallback to legacy `mappedEvidence` exists, and legacy evidence is never mixed into authoritative history.
+- **Strict Evidence Creation**: The internal `InternalSecurityAlertEvidenceCreationSchema` strictly validates all incoming fields (`organizationId`, `securityAlertId`, `monitoringRunId`, `evidenceType`, `sourceType`, `sourceId`, `title`, `summary`, `observedAt`, `correlationId`) before dedupe-key calculation or DB persistence.
+- **Tenant Boundary**: Real-time interactive transactions group all alert mutations and evidence insertions. If any query fails, the entire alert state transaction rolls back. Cross-tenant alert IDs return a tenant-safe `404 Not Found` rather than exposing metadata.
+- **monitoring.read Requirement**: The API and frontend enforce a strict `monitoring.read` capability requirement. Users lacking this capability are gated on the client and blocked with a `403 Forbidden` response from the backend.
+- **Deterministic Cursor Pagination**: Fully implemented using Base64URL-encoded JSON cursor objects (`{ observedAt: string, id: string }`). Decoders strictly validate maximum length (512 characters), valid character regex, valid UTF-8, and strict Zod structure, rejecting any cursor attempting to carry tenant or authority overrides. Query parameters are strictly parsed and reject unknown properties.
+- **No Provider Payload Exposure**: Projection safety ensures internal fields (`organizationId`, `dedupeKey`, `schemaVersion`, raw provider payloads, stack traces, credentials, and tokens) are never leaked in the public response.
+- **Remaining Limitations**: There is no endpoint for mutating, editing, or deleting evidence history (the API remains strictly read-only for history).
+
 
 ## Monitoring capability authority milestone
 
@@ -295,3 +309,8 @@ The role-to-capability matrix provides explicit definitions for all active roles
 - Disabled User: No monitoring authority.
 
 Disabled user sessions are safely handled by the `requireAuth` platform authentication semantics, properly returning a 401 instead of a 403. Side-effect safety is guaranteed by strictly denying queue execution or DB mutations on 403. Unknown role handling explicitly fails closed by returning a 403 rather than escalating to `VIEWER_PERMISSIONS`.
+
+## Monitoring evidence-history known limitations
+
+- No retention or archival automation is implemented for authoritative monitoring evidence history in this milestone.
+- Frontend evidence-history behavior is verified through static source assertions because the repository does not currently have a configured React component test runner.

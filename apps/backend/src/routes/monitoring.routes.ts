@@ -1,7 +1,7 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
-import { prisma } from "@cloudshield/database";
+import { prisma, Prisma } from "@cloudshield/database";
 import { BackendMonitoringHealthService } from "../modules/security-monitoring/backend-monitoring-health.service.js";
 import { securityMonitoringQueue } from "../modules/security-monitoring/monitoring.queue.js";
 import { z } from "zod";
@@ -14,7 +14,12 @@ import {
   MonitoringRunDtoSchema,
   MonitoringRunsListResponseSchema,
   SecurityAlertDtoSchema,
-  SecurityAlertsListResponseSchema
+  SecurityAlertsListResponseSchema,
+  SecurityAlertEvidenceCursorPayloadSchema,
+  SecurityAlertEvidenceCursorPayload,
+  SecurityAlertEvidenceQuerySchema,
+  SecurityAlertEvidenceQuery,
+  SecurityAlertEvidenceListResponseSchema
 } from "@cloudshield/contracts";
 
 const ParamsSchema = z.object({
@@ -156,10 +161,49 @@ function projectMonitoringRun(item: MonitoringRunRecord) {
   });
 }
 
+function encodeEvidenceCursor(payload: SecurityAlertEvidenceCursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), "utf-8").toString("base64url");
+}
+
+function decodeEvidenceCursor(cursor: string): SecurityAlertEvidenceCursorPayload | null {
+  if (typeof cursor !== "string") return null;
+  if (cursor.length > 512) return null;
+  if (!/^[a-zA-Z0-9\-_]+$/.test(cursor)) return null;
+
+  try {
+    const rawBuffer = Buffer.from(cursor, "base64url");
+    const reEncoded = rawBuffer.toString("base64url");
+    if (reEncoded !== cursor) return null;
+
+    const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+    const jsonStr = utf8Decoder.decode(rawBuffer);
+    if (jsonStr.length > 1000) return null;
+
+    const parsed = JSON.parse(jsonStr);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+
+    const forbidden = [
+      "organizationId", "tenantId", "alertId", "role",
+      "capabilities", "capability", "authorizationState", "authorization"
+    ];
+    for (const key of forbidden) {
+      if (key in parsed) {
+        return null;
+      }
+    }
+
+    return SecurityAlertEvidenceCursorPayloadSchema.parse(parsed);
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function registerMonitoringRoutes(app: FastifyInstance): Promise<void> {
   const healthService = new BackendMonitoringHealthService();
 
-  app.get("/api/v1/security-monitoring/overview", { preHandler: requireAuth }, async (request) => {
+  app.get("/api/v1/security-monitoring/overview", { preHandler: requireAuth }, async (request: FastifyRequest) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const health = await healthService.getHealth(auth.organizationId);
@@ -176,13 +220,13 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     };
   });
 
-  app.get("/api/v1/security-monitoring/health", { preHandler: requireAuth }, async (request) => {
+  app.get("/api/v1/security-monitoring/health", { preHandler: requireAuth }, async (request: FastifyRequest) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     return await healthService.getHealth(auth.organizationId);
   });
 
-  app.get("/api/v1/security-monitoring/monitors", { preHandler: requireAuth }, async (request) => {
+  app.get("/api/v1/security-monitoring/monitors", { preHandler: requireAuth }, async (request: FastifyRequest) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const items = await prisma.securityMonitor.findMany({
@@ -191,14 +235,14 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     return { items, total: items.length };
   });
 
-  app.get("/api/v1/security-monitoring/alerts", { preHandler: requireAuth }, async (request: any) => {
+  app.get<{ Querystring: { status?: string; severity?: string } }>("/api/v1/security-monitoring/alerts", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
-    const { status, severity } = request.query as { status?: string; severity?: string };
+    const { status, severity } = request.query;
 
-    const where: any = { organizationId: auth.organizationId };
-    if (status) where.status = status;
-    if (severity) where.severity = severity;
+    const where: Prisma.SecurityAlertWhereInput = { organizationId: auth.organizationId };
+    if (status) where.status = status as Prisma.SecurityAlertWhereInput["status"];
+    if (severity) where.severity = severity as Prisma.SecurityAlertWhereInput["severity"];
 
     const items = await prisma.securityAlert.findMany({
       where,
@@ -213,7 +257,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     });
   });
 
-  app.get("/api/v1/security-monitoring/alerts/:id", { preHandler: requireAuth }, async (request: any, reply) => {
+  app.get<{ Params: { id: string } }>("/api/v1/security-monitoring/alerts/:id", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const { id } = ParamsSchema.parse(request.params);
@@ -224,7 +268,107 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     return projectSecurityAlert(item);
   });
 
-  app.get("/api/v1/security-monitoring/runs", { preHandler: requireAuth }, async (request: any) => {
+  type SecurityAlertEvidenceRoute = {
+    Params: {
+      id: string;
+    };
+    Querystring: SecurityAlertEvidenceQuery;
+  };
+
+  app.get<SecurityAlertEvidenceRoute>("/api/v1/security-monitoring/alerts/:id/evidence", { preHandler: requireAuth }, async (
+    request,
+    reply
+  ) => {
+    const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
+
+    const { id: alertId } = ParamsSchema.parse(request.params);
+    const { cursor, limit } = SecurityAlertEvidenceQuerySchema.parse(request.query || {});
+
+    // Ensure alert belongs to tenant
+    const alert = await prisma.securityAlert.findUnique({
+      where: { id: alertId, organizationId: auth.organizationId }
+    });
+    if (!alert) return reply.status(404).send({ error: "not_found", message: "Monitoring alert not found." });
+
+    const take = limit + 1;
+    let cursorObj: SecurityAlertEvidenceCursorPayload | undefined = undefined;
+
+    if (cursor) {
+      const decoded = decodeEvidenceCursor(cursor);
+      if (!decoded) {
+        return reply.status(400).send({ error: "invalid_cursor", message: "Invalid cursor provided." });
+      }
+      cursorObj = decoded;
+    }
+
+    const whereCondition: Prisma.SecurityAlertEvidenceWhereInput = {
+      organizationId: auth.organizationId,
+      securityAlertId: alertId
+    };
+
+    if (cursorObj) {
+      whereCondition.OR = [
+        { observedAt: { lt: new Date(cursorObj.observedAt) } },
+        {
+          observedAt: new Date(cursorObj.observedAt),
+          id: { lt: cursorObj.id }
+        }
+      ];
+    }
+
+    const items = await prisma.securityAlertEvidence.findMany({
+      where: whereCondition,
+      orderBy: [
+        { observedAt: "desc" },
+        { id: "desc" }
+      ],
+      take
+    });
+
+    const hasMore = items.length > limit;
+    const pageItems = hasMore ? items.slice(0, limit) : items;
+
+    let nextCursor: string | null = null;
+    if (hasMore && pageItems.length > 0) {
+      const lastItem = pageItems[pageItems.length - 1];
+      if (lastItem) {
+        nextCursor = encodeEvidenceCursor({
+          observedAt: lastItem.observedAt.toISOString(),
+          id: lastItem.id
+        });
+      }
+    }
+
+    // Fast count for this tenant+alert
+    const total = await prisma.securityAlertEvidence.count({
+      where: {
+        organizationId: auth.organizationId,
+        securityAlertId: alertId
+      }
+    });
+
+    return SecurityAlertEvidenceListResponseSchema.parse({
+      items: pageItems.map(ev => ({
+        id: ev.id,
+        securityAlertId: ev.securityAlertId,
+        monitoringRunId: ev.monitoringRunId,
+        evidenceType: ev.evidenceType,
+        sourceType: ev.sourceType,
+        sourceId: ev.sourceId,
+        title: ev.title,
+        summary: ev.summary,
+        observedAt: ev.observedAt.toISOString(),
+        createdAt: ev.createdAt.toISOString(),
+        correlationId: ev.correlationId
+      })),
+      total,
+      nextCursor,
+      hasMore
+    });
+  });
+
+  app.get("/api/v1/security-monitoring/runs", { preHandler: requireAuth }, async (request: FastifyRequest) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const items = await prisma.monitoringRun.findMany({
@@ -241,7 +385,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     });
   });
 
-  app.get("/api/v1/security-monitoring/runs/:id", { preHandler: requireAuth }, async (request: any, reply) => {
+  app.get<{ Params: { id: string } }>("/api/v1/security-monitoring/runs/:id", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const { id } = ParamsSchema.parse(request.params);
@@ -252,7 +396,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     return projectMonitoringRun(item);
   });
 
-  app.post("/api/v1/security-monitoring/evaluate", { preHandler: requireAuth }, async (request: any) => {
+  app.post("/api/v1/security-monitoring/evaluate", { preHandler: requireAuth }, async (request: FastifyRequest) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_EVALUATE);
     const payload = EvaluateMonitoringRequestSchema.parse(request.body || {});
@@ -269,9 +413,9 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     });
   });
 
-  app.patch("/api/v1/security-monitoring/alerts/:id/acknowledge", {
+  app.patch<{ Params: { id: string } }>("/api/v1/security-monitoring/alerts/:id/acknowledge", {
     preHandler: [requireAuth, app.csrfProtection]
-  }, async (request: any, reply) => {
+  }, async (request, reply) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_ALERTS_ACKNOWLEDGE);
     const { id } = ParamsSchema.parse(request.params);
@@ -298,9 +442,9 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     return SecurityAlertLifecycleMutationResponseSchema.parse({ status: "ok" });
   });
 
-  app.patch("/api/v1/security-monitoring/alerts/:id/resolve", {
+  app.patch<{ Params: { id: string } }>("/api/v1/security-monitoring/alerts/:id/resolve", {
     preHandler: [requireAuth, app.csrfProtection]
-  }, async (request: any, reply) => {
+  }, async (request, reply) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_ALERTS_RESOLVE);
     const { id } = ParamsSchema.parse(request.params);

@@ -288,6 +288,7 @@ model Organization {
   automationEvents      AutomationEvent[]
   intelligenceSummaries IntelligenceSummary[]
   savedViews            SavedView[]
+  securityAlertEvidence SecurityAlertEvidence[]
   notifications         Notification[]
   authSessions          AuthSession[]
   memberships           OrganizationMembership[]
@@ -1170,6 +1171,8 @@ model MonitoringRun {
   startedAt                    DateTime                 @default(now())
   completedAt                  DateTime?
 
+  securityAlertEvidence SecurityAlertEvidence[]
+
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, startedAt])
@@ -1208,6 +1211,8 @@ model SecurityAlert {
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
 
+  securityAlertEvidence SecurityAlertEvidence[]
+
   @@unique([organizationId, dedupeKey])
   @@index([organizationId])
   @@index([organizationId, status, severity, updatedAt])
@@ -1235,4 +1240,30 @@ model MonitoringSnapshot {
   @@index([organizationId])
   @@index([organizationId, generatedAt])
   @@index([organizationId, awsAccountId])
+}
+
+model SecurityAlertEvidence {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  securityAlertId String
+  securityAlert   SecurityAlert  @relation(fields: [securityAlertId], references: [id], onDelete: Restrict)
+  monitoringRunId String?
+  monitoringRun   MonitoringRun? @relation(fields: [monitoringRunId], references: [id], onDelete: SetNull)
+
+  evidenceType  String
+  sourceType    String
+  sourceId      String?
+  title         String
+  summary       String
+  observedAt    DateTime
+  createdAt     DateTime @default(now())
+  correlationId String?
+  dedupeKey     String
+  schemaVersion Int      @default(1)
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId, securityAlertId, observedAt(sort: Desc), id(sort: Desc)])
+  @@index([organizationId, monitoringRunId])
+  @@index([organizationId, createdAt])
 }

@@ -1,15 +1,162 @@
-import { prisma } from "@cloudshield/database";
+import { prisma, appendSecurityAlertEvidence, Prisma } from "@cloudshield/database";
 import {
   MonitoringEngine,
   MonitoringEvaluationInput,
   MonitoringSnapshotBuilder,
   SnapshotBuilderInput,
-  MONITORING_RULES
+  MONITORING_RULES,
+  EvaluatedAlert
 } from "@cloudshield/security-monitoring";
 import { createLogger } from "@cloudshield/logger";
 import { sanitizeProviderError } from "@cloudshield/utils";
+import { z } from "zod";
 
 const logger = createLogger("cloudshield-worker-monitoring-orchestrator");
+
+type EvaluatedMonitoringAlert = ReturnType<MonitoringEngine["evaluateRules"]>[number];
+
+const boundedSafeString = z.string().trim().min(1).max(255).regex(/^[^\u0000-\u001F\u007F]*$/);
+
+const AccountConnectivityEvidenceSchema = z.object({
+  currentStatus: boundedSafeString
+}).strict();
+
+const InventoryFreshnessEvidenceSchema = z.object({
+  lastScanAt: z.string().datetime()
+}).strict();
+
+const SecurityFindingEvidenceSchema = z.object({
+  ruleId: boundedSafeString
+}).strict();
+
+const ScanRunFailedEvidenceSchema = z.object({
+  scanRunId: boundedSafeString,
+  errorCode: boundedSafeString.nullable()
+}).strict();
+
+const HighSecurityFindingIncreaseEvidenceSchema = z.object({
+  previousCount: z.number().int().nonnegative(),
+  currentCount: z.number().int().nonnegative(),
+  increaseAmount: z.number().int().nonnegative(),
+  newFindingIds: z.array(boundedSafeString)
+}).strict();
+
+const ComplianceControlRegressedEvidenceSchema = z.object({
+  controlId: boundedSafeString,
+  previousStatus: boundedSafeString,
+  currentStatus: boundedSafeString
+}).strict();
+
+interface SecurityAlertEvidenceCreationInput {
+  evidenceType: "ACCOUNT_CONNECTIVITY" | "INVENTORY_FRESHNESS" | "SECURITY_FINDING" | "PUBLIC_EXPOSURE" | "SCAN_RUN" | "FINDING_INCREASE" | "COMPLIANCE_REGRESSION";
+  sourceType: string;
+  sourceId: string | null;
+  summary: string;
+}
+
+function mapAccountConnectivityEvidence(alertData: EvaluatedMonitoringAlert): SecurityAlertEvidenceCreationInput {
+  const parsed = AccountConnectivityEvidenceSchema.parse(alertData.evidence);
+  return {
+    evidenceType: "ACCOUNT_CONNECTIVITY",
+    sourceType: "AwsAccount",
+    sourceId: alertData.awsAccountId ?? null,
+    summary: `Status: ${parsed.currentStatus}`
+  };
+}
+
+function mapInventoryFreshnessEvidence(alertData: EvaluatedMonitoringAlert): SecurityAlertEvidenceCreationInput {
+  const parsed = InventoryFreshnessEvidenceSchema.parse(alertData.evidence);
+  return {
+    evidenceType: "INVENTORY_FRESHNESS",
+    sourceType: "AwsAccount",
+    sourceId: alertData.awsAccountId ?? null,
+    summary: `Last scanned: ${parsed.lastScanAt}`
+  };
+}
+
+function mapCriticalFindingEvidence(alertData: EvaluatedMonitoringAlert): SecurityAlertEvidenceCreationInput {
+  const parsed = SecurityFindingEvidenceSchema.parse(alertData.evidence);
+  return {
+    evidenceType: "SECURITY_FINDING",
+    sourceType: "SecurityFinding",
+    sourceId: alertData.securityFindingId ?? null,
+    summary: `Rule: ${parsed.ruleId}`
+  };
+}
+
+function mapPublicExposureEvidence(alertData: EvaluatedMonitoringAlert): SecurityAlertEvidenceCreationInput {
+  const parsed = SecurityFindingEvidenceSchema.parse(alertData.evidence);
+  return {
+    evidenceType: "PUBLIC_EXPOSURE",
+    sourceType: "SecurityFinding",
+    sourceId: alertData.securityFindingId ?? null,
+    summary: `Rule: ${parsed.ruleId}`
+  };
+}
+
+function mapScanRunFailedEvidence(alertData: EvaluatedMonitoringAlert): SecurityAlertEvidenceCreationInput {
+  const parsed = ScanRunFailedEvidenceSchema.parse(alertData.evidence);
+  return {
+    evidenceType: "SCAN_RUN",
+    sourceType: "ScanRun",
+    sourceId: parsed.scanRunId,
+    summary: `Error: ${parsed.errorCode ?? "UNKNOWN"}`
+  };
+}
+
+function mapHighFindingIncreaseEvidence(alertData: EvaluatedMonitoringAlert): SecurityAlertEvidenceCreationInput {
+  const parsed = HighSecurityFindingIncreaseEvidenceSchema.parse(alertData.evidence);
+  return {
+    evidenceType: "FINDING_INCREASE",
+    sourceType: "MonitoringRun",
+    sourceId: null,
+    summary: `Increase of ${parsed.increaseAmount} high findings (from ${parsed.previousCount} to ${parsed.currentCount})`
+  };
+}
+
+function mapComplianceControlRegressedEvidence(alertData: EvaluatedMonitoringAlert): SecurityAlertEvidenceCreationInput {
+  const parsed = ComplianceControlRegressedEvidenceSchema.parse(alertData.evidence);
+  return {
+    evidenceType: "COMPLIANCE_REGRESSION",
+    sourceType: "ComplianceEvidence",
+    sourceId: parsed.controlId,
+    summary: `Status regressed: ${parsed.previousStatus} -> ${parsed.currentStatus}`
+  };
+}
+
+function assertNeverEvidenceRule(ruleKey: never): never {
+  throw new Error("Invalid evaluation rule key occurred during evidence mapping.");
+}
+
+function mapEvaluatedAlertToEvidenceParams(
+  alertData: EvaluatedMonitoringAlert
+): SecurityAlertEvidenceCreationInput {
+  switch (alertData.ruleKey) {
+    case "ACCOUNT_CONNECTIVITY_DEGRADED":
+      return mapAccountConnectivityEvidence(alertData);
+
+    case "INVENTORY_FRESHNESS_STALE":
+      return mapInventoryFreshnessEvidence(alertData);
+
+    case "CRITICAL_SECURITY_FINDING":
+      return mapCriticalFindingEvidence(alertData);
+
+    case "PUBLIC_EXPOSURE_DETECTED":
+      return mapPublicExposureEvidence(alertData);
+
+    case "SCAN_RUN_FAILED":
+      return mapScanRunFailedEvidence(alertData);
+
+    case "HIGH_SECURITY_FINDING_INCREASE":
+      return mapHighFindingIncreaseEvidence(alertData);
+
+    case "COMPLIANCE_CONTROL_REGRESSED":
+      return mapComplianceControlRegressedEvidence(alertData);
+
+    default:
+      return assertNeverEvidenceRule(alertData.ruleKey);
+  }
+}
 
 export class MonitoringOrchestrator {
   private engine = new MonitoringEngine();
@@ -102,70 +249,94 @@ export class MonitoringOrchestrator {
       const currentDedupeKeys = new Set(evaluatedAlerts.map(a => a.dedupeKey));
 
       for (const alertData of evaluatedAlerts) {
-        const existingAlert = await db.securityAlert.findUnique({
-          where: {
-            organizationId_dedupeKey: {
-              organizationId,
-              dedupeKey: alertData.dedupeKey
-            }
-          }
-        });
-
-        const ruleInfo = MONITORING_RULES[alertData.ruleKey];
-        const updatedMappedEvidence = existingAlert
-          ? [...(existingAlert.mappedEvidence as any[]), alertData.evidence].slice(-10) // keep last 10
-          : [alertData.evidence];
-
-        if (!existingAlert) {
-          const newAlert = await db.securityAlert.create({
-            data: {
-              organizationId,
-              dedupeKey: alertData.dedupeKey,
-              title: alertData.title || ruleInfo.title,
-              description: alertData.description || ruleInfo.description,
-              severity: ruleInfo.severity as any,
-              category: ruleInfo.category as any,
-              awsAccountId: alertData.awsAccountId,
-              cloudResourceId: alertData.cloudResourceId,
-              securityFindingId: alertData.securityFindingId,
-              status: 'OPEN',
-              evidence: alertData.evidence,
-              evidenceCount: 1,
-              mappedEvidence: updatedMappedEvidence
+        await db.$transaction(async (tx) => {
+          const existingAlert = await tx.securityAlert.findUnique({
+            where: {
+              organizationId_dedupeKey: {
+                organizationId,
+                dedupeKey: alertData.dedupeKey
+              }
             }
           });
-          createdCount++;
 
-          await this.createAuditEvent(db, organizationId, newAlert.id, 'security_alert', 'OPEN', 'Alert opened');
+          const ruleInfo = MONITORING_RULES[alertData.ruleKey];
+          const existingMapped = Array.isArray(existingAlert?.mappedEvidence)
+            ? existingAlert.mappedEvidence
+            : [];
+          const updatedMappedEvidence = [
+            ...existingMapped,
+            alertData.evidence
+          ].slice(-10);
 
-          if (['CRITICAL', 'HIGH'].includes(ruleInfo.severity) || ruleInfo.key === 'ACCOUNT_CONNECTIVITY_DEGRADED') {
-            await this.createNotification(db, organizationId, newAlert, 'OPENED');
-          }
+          let savedAlertId = "";
 
-        } else {
-          const isResolved = existingAlert.status === 'RESOLVED';
+          if (!existingAlert) {
+            const newAlert = await tx.securityAlert.create({
+              data: {
+                organizationId,
+                dedupeKey: alertData.dedupeKey,
+                title: alertData.title || ruleInfo.title,
+                description: alertData.description || ruleInfo.description,
+                severity: ruleInfo.severity as Prisma.SecurityAlertCreateInput["severity"],
+                category: ruleInfo.category as Prisma.SecurityAlertCreateInput["category"],
+                awsAccountId: alertData.awsAccountId,
+                cloudResourceId: alertData.cloudResourceId,
+                securityFindingId: alertData.securityFindingId,
+                status: 'OPEN',
+                evidence: alertData.evidence,
+                evidenceCount: 1,
+                mappedEvidence: updatedMappedEvidence
+              }
+            });
+            savedAlertId = newAlert.id;
+            createdCount++;
 
-          await db.securityAlert.update({
-            where: { id: existingAlert.id },
-            data: {
-              status: isResolved ? 'OPEN' : existingAlert.status,
-              evidence: alertData.evidence,
-              evidenceCount: existingAlert.evidenceCount + 1,
-              mappedEvidence: updatedMappedEvidence,
-              lastObservedAt: new Date(),
-              firstObservedAt: isResolved ? new Date() : existingAlert.firstObservedAt,
-              resolvedAt: isResolved ? null : existingAlert.resolvedAt
-            }
-          });
-          updatedCount++;
+            await this.createAuditEvent(tx, organizationId, newAlert.id, 'security_alert', 'OPEN', 'Alert opened');
 
-          if (isResolved) {
-            await this.createAuditEvent(db, organizationId, existingAlert.id, 'security_alert', 'OPEN', 'Alert reopened');
             if (['CRITICAL', 'HIGH'].includes(ruleInfo.severity) || ruleInfo.key === 'ACCOUNT_CONNECTIVITY_DEGRADED') {
-              await this.createNotification(db, organizationId, existingAlert, 'REOPENED');
+              await this.createNotification(tx, organizationId, newAlert, 'OPENED');
+            }
+
+          } else {
+            savedAlertId = existingAlert.id;
+            const isResolved = existingAlert.status === 'RESOLVED';
+
+            await tx.securityAlert.update({
+              where: { id: existingAlert.id },
+              data: {
+                status: isResolved ? 'OPEN' : existingAlert.status,
+                evidence: alertData.evidence,
+                evidenceCount: existingAlert.evidenceCount + 1,
+                mappedEvidence: updatedMappedEvidence,
+                lastObservedAt: new Date(),
+                firstObservedAt: isResolved ? new Date() : existingAlert.firstObservedAt,
+                resolvedAt: isResolved ? null : existingAlert.resolvedAt
+              }
+            });
+            updatedCount++;
+
+            if (isResolved) {
+              await this.createAuditEvent(tx, organizationId, existingAlert.id, 'security_alert', 'OPEN', 'Alert reopened');
+              if (['CRITICAL', 'HIGH'].includes(ruleInfo.severity) || ruleInfo.key === 'ACCOUNT_CONNECTIVITY_DEGRADED') {
+                await this.createNotification(tx, organizationId, existingAlert, 'REOPENED');
+              }
             }
           }
-        }
+
+          const evParams = mapEvaluatedAlertToEvidenceParams(alertData);
+          await appendSecurityAlertEvidence(tx, {
+            organizationId,
+            securityAlertId: savedAlertId,
+            monitoringRunId: run.id,
+            evidenceType: evParams.evidenceType,
+            sourceType: evParams.sourceType,
+            sourceId: evParams.sourceId,
+            title: alertData.title || ruleInfo.title,
+            summary: evParams.summary,
+            observedAt: new Date(),
+            correlationId: null
+          });
+        });
       }
 
       // Auto-resolution
@@ -249,7 +420,7 @@ export class MonitoringOrchestrator {
         }
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       const sanitized = sanitizeProviderError(error);
       logger.error({
         component: "security-monitoring-orchestrator",
@@ -298,7 +469,7 @@ export class MonitoringOrchestrator {
     }
   }
 
-  private async createAuditEvent(db: any, organizationId: string, alertId: string, targetType: string, action: string, message: string) {
+  private async createAuditEvent(db: Prisma.TransactionClient, organizationId: string, alertId: string, targetType: string, action: string, message: string) {
     await db.auditEvent.create({
       data: {
         organizationId,
@@ -311,7 +482,7 @@ export class MonitoringOrchestrator {
     });
   }
 
-  private async createNotification(db: any, organizationId: string, alert: any, action: string) {
+  private async createNotification(db: Prisma.TransactionClient, organizationId: string, alert: { id: string; title: string; description: string; severity: string }, action: string) {
     const dedupeKey = `ALERT_${action}_${alert.id}_${Date.now()}`;
     await db.notification.create({
       data: {

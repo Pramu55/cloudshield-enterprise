@@ -18,7 +18,8 @@ import {
   FrontendSecurityAlertsListSchema,
   FrontendRemediationPlanListSchema,
   FrontendInventorySyncResponseSchema,
-  createFrontendInventoryAccountSyncResponseSchema
+  createFrontendInventoryAccountSyncResponseSchema,
+  FrontendSecurityAlertEvidenceListSchema
 } from "../lib/response-contracts.ts";
 import { SecurityAlertLifecycleMutationResponseSchema, EvaluateMonitoringResponseSchema } from "@cloudshield/contracts";
 
@@ -819,5 +820,35 @@ assert.equal(FrontendInventorySyncResponseSchema.safeParse({ ...orchestrationRes
 assert.equal(createFrontendInventoryAccountSyncResponseSchema(orchestrationResponse.items[0].account.id).safeParse({ ...orchestrationResponse, items: [orchestrationResponse.items[0], orchestrationResponse.items[0]] }).success, false);
 assert.equal(createFrontendInventoryAccountSyncResponseSchema("different-account").safeParse(orchestrationResponse).success, false);
 assert.equal(createFrontendInventoryAccountSyncResponseSchema(orchestrationResponse.items[0].account.id).safeParse({ ...orchestrationResponse, dryRun: true }).success, false);
+
+const evidenceResponse = {
+  items: [
+    {
+      id: "ev-1",
+      securityAlertId: "alert-1",
+      monitoringRunId: "run-1",
+      evidenceType: "SECURITY_FINDING",
+      sourceType: "SecurityFinding",
+      sourceId: "finding-1",
+      title: "Title",
+      summary: "Summary",
+      observedAt: timestamp,
+      createdAt: timestamp,
+      correlationId: null
+    }
+  ],
+  total: 1,
+  nextCursor: "cursor-123",
+  hasMore: false
+};
+
+const parsedEvidence = FrontendSecurityAlertEvidenceListSchema.parse(evidenceResponse);
+assert.equal(parsedEvidence.items.length, 1);
+assert.equal(parsedEvidence.total, 1);
+assert.equal(parsedEvidence.nextCursor, "cursor-123");
+
+assert.equal(FrontendSecurityAlertEvidenceListSchema.safeParse({ ...evidenceResponse, items: [{ ...evidenceResponse.items[0], ...unsafeFields }] }).success, false);
+assert.equal(FrontendSecurityAlertEvidenceListSchema.safeParse({ ...evidenceResponse, total: -1 }).success, false);
+assert.equal(FrontendSecurityAlertEvidenceListSchema.safeParse({ ...evidenceResponse, total: 1.5 }).success, false);
 
 console.log("Frontend response-contract assertions passed.");

@@ -170,6 +170,21 @@ Sample/demo records may render only when the response explicitly marks them as s
 
 Semantic tokens change under `prefers-color-scheme: dark`; components consume tokens rather than fixed surface colors. Existing application CSS still contains fixed light colors, so dark support currently applies to the new foundation only. Full application theme migration is future work and must include contrast testing.
 
+## Monitoring Evidence History UI and Gating
+
+The `AlertEvidenceHistory` component provides a robust implementation of evidence history presentation.
+
+### State Transitions & Gating
+- **Initial Loading State**: Renders `LoadingState` while the first page is fetched.
+- **Empty State**: Renders `EmptyState` when the alert reports zero authoritative evidence records, stating clearly that no security conclusion is inferred.
+- **Error State**: Shows a safe initial error panel on initial request failure, with an explicit manual retry action.
+- **Populated State**: Lists authoritative evidence records ordered by `observedAt` and `id` descending.
+- **Load-More Progress & Exhausted States**: Provides inline loading indicators during pagination fetches. Gated to prevent concurrent duplicate requests. Hides the "Load older evidence" button when `hasMore` becomes `false`.
+- **Deduplication**: Uses deterministic ID-based merging to avoid duplicate items in the viewport, preserving backend order.
+- **Stale Response Avoidance**: Tracks active request sequences using tokens and an `AbortController` to discard out-of-order or stale responses from previous alert IDs.
+- **No Automatic Retry**: Errors on pagination display inline retry buttons and do not automatically reload.
+- **Capability Gating**: Only runs and displays history if the user has `monitoring.read` capability. A backend `403` preserves any already loaded data when it occurs during load-more, showing a safe restriction state.
+
 ## Roadmap
 
 1. Permission, disabled-mode, stale, and production-restriction panels.
