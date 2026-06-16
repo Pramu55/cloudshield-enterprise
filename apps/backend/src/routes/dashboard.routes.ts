@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
-import { hasPermission, PERMISSIONS } from "@cloudshield/security";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getCommandCenterData } from "../modules/dashboard/dashboard.service.js";
 import { CommandCenterResponseSchema } from "@cloudshield/contracts";
 
@@ -10,10 +10,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
-      
-      if (!hasPermission(auth.role, PERMISSIONS.ACCOUNTS_READ)) {
-        return reply.status(403).send({ message: "Permission denied." });
-      }
+      requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
 
       const response = await getCommandCenterData(auth.organizationId);
 

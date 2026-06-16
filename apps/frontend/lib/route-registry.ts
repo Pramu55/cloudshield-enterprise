@@ -1,3 +1,5 @@
+import type { CurrentUserCapabilityKey } from "@cloudshield/contracts";
+
 export type RouteCategory = "Overview" | "Cloud" | "Security" | "Operations" | "Administration";
 
 export interface RouteMetadata {
@@ -6,8 +8,8 @@ export interface RouteMetadata {
   href: string;
   icon: string;
   category: RouteCategory;
-  // Role-based visibility is UX-only and never grants endpoint authority.
-  roles?: string[];
+  // Capability visibility is UX-only and never grants endpoint authority.
+  requiredCapability?: CurrentUserCapabilityKey;
   description?: string;
   keywords: string[];
 }
@@ -136,7 +138,7 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     href: "/dashboard/settings",
     icon: "settings",
     category: "Administration",
-    roles: ["OWNER", "ADMIN"],
+    requiredCapability: "settings.read",
     description: "Workspace and organization settings.",
     keywords: ["workspace", "organization", "preferences", "billing"]
   },
@@ -146,7 +148,7 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     href: "/dashboard/settings/members",
     icon: "members",
     category: "Administration",
-    roles: ["OWNER", "ADMIN"],
+    requiredCapability: "members.read",
     description: "Manage team members and access.",
     keywords: ["team", "users", "access", "rbac", "roles"]
   }

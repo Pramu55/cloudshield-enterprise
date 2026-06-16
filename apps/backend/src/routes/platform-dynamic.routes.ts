@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 
@@ -14,6 +15,7 @@ const SafetyFlags = {
 export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/v1/dashboard/activity", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.AUDIT_READ);
     const scope = scopeByOrganization(auth.organizationId);
     
     const [scans, findings, reports, riskAcceptances] = await Promise.all([
@@ -35,6 +37,7 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
 
   app.get("/api/v1/dashboard/readiness", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
     const accounts = await prisma.awsAccount.findMany({ where: scopeByOrganization(auth.organizationId) });
     const awsAccounts = accounts.map(a => ({
       accountId: a.accountId,
@@ -53,7 +56,9 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
     };
   });
 
-  app.get("/api/v1/settings/safety", { preHandler: requireAuth }, async () => {
+  app.get("/api/v1/settings/safety", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_READ);
     const credentialReadiness = getAwsCredentialReadiness(app.config);
 
     return {
@@ -75,6 +80,7 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
 
   app.get("/api/v1/inventory/resources/:resourceId", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
     const { resourceId } = request.params as { resourceId: string };
     const resource = await prisma.cloudResource.findFirst({
       where: { ...scopeByOrganization(auth.organizationId), id: resourceId },
@@ -133,6 +139,7 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
 
   app.get("/api/v1/platform/readiness", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     const orgScope = scopeByOrganization(auth.organizationId);
     const accountsCount = await prisma.awsAccount.count({ where: orgScope });
     const credentialsReady = getAwsCredentialReadiness(app.config);
@@ -152,6 +159,7 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
 
   app.get("/api/v1/dashboard/module-status", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     const orgScope = scopeByOrganization(auth.organizationId);
     const [accounts, resources, findings, recommendations, reports] = await Promise.all([
       prisma.awsAccount.count({ where: orgScope }),
@@ -175,7 +183,9 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
     };
   });
 
-  app.get("/api/v1/aws/readiness/details", { preHandler: requireAuth }, async () => {
+  app.get("/api/v1/aws/readiness/details", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
     const credentialReadiness = getAwsCredentialReadiness(app.config);
     return {
       ...credentialReadiness,
@@ -190,6 +200,7 @@ export async function registerPlatformDynamicRoutes(app: FastifyInstance): Promi
 
   app.get("/api/v1/inventory/resources/:resourceId/context", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
     const { resourceId } = request.params as { resourceId: string };
     const orgScope = scopeByOrganization(auth.organizationId);
     const resource = await prisma.cloudResource.findFirst({

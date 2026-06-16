@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import {
   evaluateComplianceEvidence,
@@ -19,11 +20,13 @@ export async function registerComplianceEvidenceRoutes(
 ): Promise<void> {
   app.get("/api/v1/compliance/evidence-center", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.REPORTS_READ);
     return getComplianceEvidenceCenter(auth.organizationId);
   });
 
   app.get("/api/v1/compliance/controls", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.REPORTS_READ);
     return listComplianceControls(auth.organizationId);
   });
 
@@ -32,6 +35,7 @@ export async function registerComplianceEvidenceRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.REPORTS_READ);
       const params = ControlParamsSchema.parse(request.params);
       const detail = await getComplianceControlDetail(
         auth.organizationId,
@@ -51,16 +55,19 @@ export async function registerComplianceEvidenceRoutes(
 
   app.post("/api/v1/compliance/evaluate", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.REPORTS_GENERATE);
     return evaluateComplianceEvidence(auth.organizationId);
   });
 
   app.get("/api/v1/compliance/evidence", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.REPORTS_READ);
     return listComplianceEvidence(auth.organizationId);
   });
 
   app.get("/api/v1/compliance/export/preview", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.REPORTS_GENERATE);
     return getComplianceExportPreview(auth.organizationId);
   });
 }

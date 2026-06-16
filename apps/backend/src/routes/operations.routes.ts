@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
 
@@ -19,6 +20,7 @@ const ResourceParamsSchema = z.object({
 export async function registerOperationsRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/v1/resources/graph", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.OPERATIONS_READ);
     const scope = scopeByOrganization(auth.organizationId);
 
     const [
@@ -275,6 +277,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/resources/:resourceId/context", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.OPERATIONS_READ);
     const { resourceId } = ResourceParamsSchema.parse(request.params);
     const resource = await prisma.cloudResource.findFirst({
       where: { ...scopeByOrganization(auth.organizationId), id: resourceId },
@@ -383,6 +386,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/operations/timeline", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.OPERATIONS_READ);
     const timeline = await buildOperationsTimeline(auth.organizationId);
     return {
       items: timeline,
@@ -392,6 +396,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/scans/runs", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
     const scope = scopeByOrganization(auth.organizationId);
     const readiness = getAwsCredentialReadiness(app.config);
     const runs = await prisma.scanRun.findMany({
@@ -463,6 +468,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/reports/evidence-summary", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.REPORTS_READ);
     const scope = scopeByOrganization(auth.organizationId);
     const [evidence, reports, controls, plans, approvals, findings, successfulInventoryRuns] = await Promise.all([
       prisma.complianceEvidence.findMany({

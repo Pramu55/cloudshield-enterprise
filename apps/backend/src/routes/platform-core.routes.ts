@@ -7,6 +7,7 @@ import {
   GOVERNED_AWS_CHANGE_QUEUE_NAME
 } from "@cloudshield/contracts";
 import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { optionalEnv } from "@cloudshield/utils";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import {
@@ -60,17 +61,20 @@ const settingsBodySchema = z.object({
 export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/v1/platform/overview", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     return buildPlatformOverview(auth.organizationId, app.config);
   });
 
   app.get("/api/v1/platform/activity", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.AUDIT_READ);
     const query = paginationQuerySchema.parse(request.query);
     return buildPlatformActivity(auth.organizationId, query);
   });
 
   app.get("/api/v1/platform/accounts/:id/detail", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
     const { id } = idParamsSchema.parse(request.params);
     const detail = await buildAccountDetail(auth.organizationId, id);
     if (!detail) {
@@ -82,6 +86,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.get("/api/v1/platform/resources/:id/detail", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
     const { id } = idParamsSchema.parse(request.params);
     const detail = await buildResourceDetail(auth.organizationId, id);
     if (!detail) {
@@ -93,6 +98,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.get("/api/v1/saved-views", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_READ);
     const query = z.object({
       workspace: savedViewBodySchema.shape.workspace.optional()
     }).parse(request.query);
@@ -120,6 +126,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.post("/api/v1/saved-views", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_UPDATE);
     const body = savedViewBodySchema.parse(request.body);
     const { filters, sort } = validateSavedViewPayload(body);
     const safeFilters = toJson(filters);
@@ -201,6 +208,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.get("/api/v1/platform/settings", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_READ);
     const [organization, accounts, teams] = await Promise.all([
       prisma.organization.findFirstOrThrow({ where: { id: auth.organizationId } }),
       prisma.awsAccount.findMany({ where: scopeByOrganization(auth.organizationId), select: { id: true, name: true, environment: true, changeExecutionEnabled: true } }),
@@ -225,11 +233,8 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.patch("/api/v1/platform/settings", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_UPDATE);
     const body = settingsBodySchema.parse(request.body);
-    if (auth.role !== "admin" && auth.role !== "owner") {
-      reply.status(403).send({ error: "forbidden", message: "Only organization administrators can update platform settings." });
-      return;
-    }
     await audit(auth.organizationId, auth.userId, "settings.platform.updated", "organization", auth.organizationId, {
       changedFields: Object.keys(body),
       secretsReturned: false,
@@ -244,6 +249,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.get("/api/v1/platform/operations-health", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.OPERATIONS_READ);
     const queues = await getQueueHealth();
     const [
       lastSuccessfulScan,
