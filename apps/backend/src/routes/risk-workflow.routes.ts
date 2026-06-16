@@ -1,5 +1,6 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import {
   AcceptRiskRequestSchema,
   AcknowledgeFindingRequestSchema,
@@ -32,6 +33,7 @@ export async function registerRiskWorkflowRoutes(
 ): Promise<void> {
   app.get("/api/v1/risk/findings", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RISKS_READ);
     return RiskFindingsResponseSchema.parse({
       sampleData: true,
       sampleDataLabel:
@@ -48,6 +50,7 @@ export async function registerRiskWorkflowRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
       const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.FINDINGS_READ);
       const { findingId } = paramsSchema.parse(request.params);
       const finding = await getRiskFindingDetail(auth.organizationId, findingId);
 
@@ -66,113 +69,137 @@ export async function registerRiskWorkflowRoutes(
   app.post(
     "/api/v1/risk/findings/:findingId/acknowledge",
     { preHandler: requireAuth },
-    async (request, reply) =>
-      sendWorkflowResult(
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.FINDINGS_MANAGE);
+      return sendWorkflowResult(
         reply,
         await acknowledgeFinding(
-          getAuthContext(request),
+          auth,
           paramsSchema.parse(request.params).findingId,
           AcknowledgeFindingRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+    }
   );
 
   app.post(
     "/api/v1/risk/findings/:findingId/assign",
     { preHandler: requireAuth },
-    async (request, reply) =>
-      sendWorkflowResult(
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.RISKS_MANAGE);
+      return sendWorkflowResult(
         reply,
         await assignFinding(
-          getAuthContext(request),
+          auth,
           paramsSchema.parse(request.params).findingId,
           AssignFindingRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+    }
   );
 
   app.post(
     "/api/v1/risk/findings/:findingId/plan-remediation",
     { preHandler: requireAuth },
-    async (request, reply) =>
-      sendWorkflowResult(
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.RISKS_MANAGE);
+      return sendWorkflowResult(
         reply,
         await planRemediation(
-          getAuthContext(request),
+          auth,
           paramsSchema.parse(request.params).findingId,
           PlanRemediationRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+    }
   );
 
   app.post(
     "/api/v1/risk/findings/:findingId/accept-risk",
     { preHandler: requireAuth },
-    async (request, reply) =>
-      sendWorkflowResult(
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.RISK_ACCEPT);
+      return sendWorkflowResult(
         reply,
         await acceptRisk(
-          getAuthContext(request),
+          auth,
           paramsSchema.parse(request.params).findingId,
           AcceptRiskRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+    }
   );
 
   app.post(
     "/api/v1/risk/findings/:findingId/false-positive",
     { preHandler: requireAuth },
-    async (request, reply) =>
-      sendWorkflowResult(
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.FINDINGS_MANAGE);
+      return sendWorkflowResult(
         reply,
         await markFalsePositive(
-          getAuthContext(request),
+          auth,
           paramsSchema.parse(request.params).findingId,
           FalsePositiveRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+    }
   );
 
   app.post(
     "/api/v1/risk/findings/:findingId/resolve",
     { preHandler: requireAuth },
-    async (request, reply) =>
-      sendWorkflowResult(
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.FINDINGS_MANAGE);
+      return sendWorkflowResult(
         reply,
         await resolveFinding(
-          getAuthContext(request),
+          auth,
           paramsSchema.parse(request.params).findingId,
           ResolveFindingRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+    }
   );
 
   app.post(
     "/api/v1/risk/findings/:findingId/archive",
     { preHandler: requireAuth },
-    async (request, reply) =>
-      sendWorkflowResult(
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.RISKS_MANAGE);
+      return sendWorkflowResult(
         reply,
         await archiveFinding(
-          getAuthContext(request),
+          auth,
           paramsSchema.parse(request.params).findingId,
           ArchiveFindingRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+    }
   );
 
   app.post(
     "/api/v1/risk/findings/:findingId/reopen",
     { preHandler: requireAuth },
-    async (request, reply) =>
-      sendWorkflowResult(
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.RISKS_MANAGE);
+      return sendWorkflowResult(
         reply,
         await reopenFinding(
-          getAuthContext(request),
+          auth,
           paramsSchema.parse(request.params).findingId,
           ReopenFindingRequestSchema.parse(request.body ?? {})
         )
-      )
+      );
+    }
   );
 }
 
@@ -180,7 +207,7 @@ const paramsSchema = z.object({
   findingId: z.string().min(1).max(128)
 });
 
-function sendWorkflowResult(reply: any, result: unknown) {
+function sendWorkflowResult(reply: FastifyReply, result: unknown) {
   if (!result) {
     reply.status(404).send({
       error: "risk_finding_not_found",

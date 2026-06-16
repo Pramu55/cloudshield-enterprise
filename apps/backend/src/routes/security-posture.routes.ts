@@ -1,9 +1,12 @@
 import type { FastifyInstance } from "fastify";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import { getRuleCatalog, runEvaluation, getFindings } from "../modules/security-posture/security-rule.service.js";
 
 export async function registerSecurityPostureRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/v1/security/rules", { preHandler: requireAuth }, async () => {
+  app.get("/api/v1/security/rules", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.FINDINGS_READ);
     return {
       rules: getRuleCatalog(),
       message: "CloudShield deterministic security posture rules catalog. Rules evaluate stored CloudShield inventory records only. No AWS scan is triggered."
@@ -12,11 +15,13 @@ export async function registerSecurityPostureRoutes(app: FastifyInstance): Promi
 
   app.post("/api/v1/security/evaluate", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.FINDINGS_MANAGE);
     return await runEvaluation(auth.organizationId);
   });
 
   const findingsHandler = async (request: any) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.FINDINGS_READ);
     const items = await getFindings(auth.organizationId);
     return {
       sampleData: true,

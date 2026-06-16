@@ -29,9 +29,9 @@ import {
 } from "../../lib/response-contracts";
 
 // Navigation filtering is presentation only; backend permission checks remain authoritative.
-function canSee(item: { roles?: string[] }, role?: string) {
-  if (!item.roles?.length) return true;
-  return item.roles.includes(String(role ?? "").toUpperCase());
+function canSee(item: { requiredCapability?: keyof FrontendCapabilitySession["capabilities"] }, session?: FrontendCapabilitySession | null) {
+  if (!item.requiredCapability) return true;
+  return Boolean(session?.capabilities[item.requiredCapability]);
 }
 
 function isActive(pathname: string, href: string) {
@@ -75,9 +75,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const visibleGroups = useMemo(() => {
     return NAV_GROUPS
-      .map((group) => ({ ...group, items: group.items.filter((item) => canSee(item, user?.role)) }))
+      .map((group) => ({ ...group, items: group.items.filter((item) => canSee(item, authState.data)) }))
       .filter((group) => group.items.length);
-  }, [user?.role]);
+  }, [authState.data]);
 
   useEffect(() => {
     setProfileOpen(false);

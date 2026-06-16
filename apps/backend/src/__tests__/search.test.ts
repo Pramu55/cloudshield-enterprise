@@ -15,10 +15,12 @@ test("Global Search Backend", async (t) => {
   // We are not mocking Prisma because this is an integration test suite.
   // We'll insert test data.
   const uniquePrefix = `search_test_${Date.now()}`;
+  const testAccountId = createUniqueTestAccountId();
 
   // Setup data
   let orgId = "";
   let userId = "";
+  let awsAccountId = "";
 
   t.before(async () => {
     // Create an organization
@@ -42,15 +44,16 @@ test("Global Search Backend", async (t) => {
     baseAuth.userId = userId;
 
     // Create some search entities
-    await prisma.awsAccount.create({
+    const account = await prisma.awsAccount.create({
       data: {
         organizationId: orgId,
-        accountId: "123456789012",
+        accountId: testAccountId,
         name: "Test Account",
         environment: Environment.prod,
         status: AwsAccountStatus.CONNECTED
       }
     });
+    awsAccountId = account.id;
 
     const team = await prisma.team.create({
       data: {
@@ -88,7 +91,9 @@ test("Global Search Backend", async (t) => {
 
   t.after(async () => {
     // Cleanup
-    await prisma.awsAccount.deleteMany({ where: { accountId: "123456789012" } });
+    if (awsAccountId) {
+      await prisma.awsAccount.delete({ where: { id: awsAccountId } }).catch(() => undefined);
+    }
     await prisma.user.deleteMany({ where: { id: userId } });
     await prisma.organization.deleteMany({ where: { id: orgId } });
     await prisma.$disconnect();
@@ -141,3 +146,8 @@ test("Global Search Backend", async (t) => {
     assert.ok(titles.includes("Hidden Team"));
   });
 });
+
+function createUniqueTestAccountId(): string {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`.slice(-9);
+  return `987${suffix.padStart(9, "0")}`;
+}
