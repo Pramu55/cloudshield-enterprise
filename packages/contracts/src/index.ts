@@ -636,7 +636,11 @@ export const CurrentUserCapabilitiesSchema = z.object({
   "operations.prepare": z.boolean(),
   "approvals.read": z.boolean(),
   "approvals.decide": z.boolean(),
-  "audit.read": z.boolean()
+  "audit.read": z.boolean(),
+  "monitoring.read": z.boolean(),
+  "monitoring.evaluate": z.boolean(),
+  "monitoring.alerts.acknowledge": z.boolean(),
+  "monitoring.alerts.resolve": z.boolean()
 }).strict();
 export type CurrentUserCapabilities = z.infer<typeof CurrentUserCapabilitiesSchema>;
 export type CurrentUserCapabilityKey = keyof CurrentUserCapabilities;

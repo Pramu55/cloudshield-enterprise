@@ -362,7 +362,11 @@ const completeCapabilities = {
   "operations.prepare": false,
   "approvals.read": true,
   "approvals.decide": false,
-  "audit.read": true
+  "audit.read": true,
+  "monitoring.read": true,
+  "monitoring.evaluate": true,
+  "monitoring.alerts.acknowledge": true,
+  "monitoring.alerts.resolve": true
 };
 const capabilitySessionInput = {
   user: { id: "user-1", email: "operator@example.com", name: "Operator", role: "OWNER", organizationId: "org-1", ...unsafeFields },
@@ -373,6 +377,48 @@ const capabilitySession = FrontendCapabilitySessionSchema.parse(capabilitySessio
 assertUnsafeFieldsRemoved(capabilitySession, "capability session");
 assert.equal(capabilitySession.capabilities["accounts.manage"], false);
 assert.equal(capabilitySession.capabilities["accounts.read"], true);
+
+assert.equal(capabilitySession.capabilities["monitoring.read"], true);
+assert.equal(capabilitySession.capabilities["monitoring.evaluate"], true);
+assert.equal(capabilitySession.capabilities["monitoring.alerts.acknowledge"], true);
+assert.equal(capabilitySession.capabilities["monitoring.alerts.resolve"], true);
+
+const readOnlySessionInput = {
+  ...capabilitySessionInput,
+  user: { ...capabilitySessionInput.user, role: "VIEWER" },
+  capabilities: {
+    ...completeCapabilities,
+    "monitoring.read": true,
+    "monitoring.evaluate": false,
+    "monitoring.alerts.acknowledge": false,
+    "monitoring.alerts.resolve": false
+  }
+};
+const readOnlySession = FrontendCapabilitySessionSchema.parse(readOnlySessionInput);
+assert.equal(readOnlySession.capabilities["monitoring.read"], true);
+assert.equal(readOnlySession.capabilities["monitoring.evaluate"], false);
+assert.equal(readOnlySession.capabilities["monitoring.alerts.acknowledge"], false);
+assert.equal(readOnlySession.capabilities["monitoring.alerts.resolve"], false);
+
+assert.equal(
+  FrontendCapabilitySessionSchema.safeParse({
+    ...capabilitySessionInput,
+    capabilities: {
+      ...capabilitySessionInput.capabilities,
+      "monitoring.admin": true
+    }
+  }).success,
+  false
+);
+
+assert.equal(
+  FrontendCapabilitySessionSchema.safeParse({
+    ...capabilitySessionInput,
+    capabilities: (({ "monitoring.evaluate": _, ...rest }) => rest)(completeCapabilities)
+  }).success,
+  false
+);
+
 assert.deepEqual(Object.keys(capabilitySession.organization).sort(), ["id", "name", "slug"]);
 assert.equal(FrontendCapabilitySessionSchema.safeParse({ ...capabilitySessionInput, capabilities: undefined }).success, false);
 const { "audit.read": _omittedCapability, ...missingCapability } = completeCapabilities;

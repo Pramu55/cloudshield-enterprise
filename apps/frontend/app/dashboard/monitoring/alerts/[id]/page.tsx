@@ -13,11 +13,13 @@ import {
   SecurityAlertLifecycleMutationResponseSchema,
   type SecurityAlertLifecycleMutationResponse
 } from "@cloudshield/contracts";
-import { fetchCloudShieldClient } from "../../../../../lib/client-api";
+import { fetchCloudShieldClient, useCloudShieldData } from "../../../../../lib/client-api";
 import { API_ERROR_MESSAGES, ApiRequestError, toApiError, type ApiError } from "../../../../../lib/api-error";
 import {
   FrontendSecurityAlertDetailSchema,
   resolveFrontendAlertRouteId,
+  FrontendCapabilitySessionSchema,
+  type FrontendCapabilitySession,
   type FrontendSecurityAlertDetail
 } from "../../../../../lib/response-contracts";
 
@@ -35,6 +37,10 @@ function formatTimestamp(value: string): string {
 }
 
 export default function SecurityAlertDetailsPage() {
+  const authState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, {
+    schema: FrontendCapabilitySessionSchema
+  });
+  const session = authState.data;
   const params = useParams<{ id?: string | string[] }>();
   const alertId = useMemo(() => resolveFrontendAlertRouteId(params.id), [params.id]);
   const [alert, setAlert] = useState<FrontendSecurityAlertDetail | null>(null);
@@ -219,7 +225,7 @@ export default function SecurityAlertDetailsPage() {
                   disabled={actionLoading !== null}
                   className="w-full text-sm border border-slate-300 rounded-md px-3 py-2"
                 />
-                <button type="button" onClick={() => void handleAcknowledge()} disabled={actionLoading !== null} aria-describedby="acknowledge-help" className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-md text-sm font-medium disabled:opacity-60">{actionLoading === "acknowledge" ? "Acknowledging..." : "Acknowledge alert"}</button>
+                <button type="button" onClick={() => void handleAcknowledge()} disabled={actionLoading !== null || !session?.capabilities?.["monitoring.alerts.acknowledge"]} aria-describedby="acknowledge-help" className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-md text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">{actionLoading === "acknowledge" ? "Acknowledging..." : "Acknowledge alert"}</button>
                 <p id="acknowledge-help" className="text-xs text-slate-500">The action is confirmed only after a validated alert refresh reports Acknowledged.</p>
               </div>
             ) : null}
@@ -228,7 +234,7 @@ export default function SecurityAlertDetailsPage() {
                 <label className="text-sm font-medium text-slate-900" htmlFor="resolve-reason">Resolve alert</label>
                 <p className="text-xs text-slate-500">Manual resolution requires an authoritative resolved state and timestamp.</p>
                 <input id="resolve-reason" type="text" maxLength={1000} value={resolveReason} onChange={(event) => setResolveReason(event.target.value)} disabled={actionLoading !== null} className="w-full text-sm border border-slate-300 rounded-md px-3 py-2" />
-                <button type="button" onClick={() => void handleResolve()} disabled={actionLoading !== null} aria-describedby="resolve-help" className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium disabled:opacity-60">{actionLoading === "resolve" ? "Resolving..." : "Resolve alert"}</button>
+                <button type="button" onClick={() => void handleResolve()} disabled={actionLoading !== null || !session?.capabilities?.["monitoring.alerts.resolve"]} aria-describedby="resolve-help" className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">{actionLoading === "resolve" ? "Resolving..." : "Resolve alert"}</button>
                 <p id="resolve-help" className="text-xs text-slate-500">The action is confirmed only after a validated alert refresh reports Resolved.</p>
               </div>
             ) : <div className="flex flex-col items-center p-4 text-emerald-700 bg-emerald-50 rounded-lg"><CheckCircle className="w-8 h-8 mb-2" aria-hidden="true" /><span className="font-semibold text-sm">Alert resolved</span></div>}

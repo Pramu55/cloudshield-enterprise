@@ -285,7 +285,13 @@ The frontend validates the strict shared DTO before removing `organizationId` du
 
 No dedicated evidence-history endpoint exists. No evidence-history endpoint or evidence-history UI was added.
 
-Remaining monitoring gaps:
+## Monitoring capability authority milestone
 
-- Authoritative evidence-history storage and API design.
-- Explicit permission and capability authority for monitoring mutations.
+Every security-monitoring route is explicitly controlled by the project's central authoritative permission resolver (`requirePermission`). The backend remains the security boundary, and frontend gating is for usability only.
+
+The role-to-capability matrix provides explicit definitions for all active roles and disabled users:
+- `OWNER`, `ADMIN`, `SECURITY_OPERATOR`: Full monitoring authority (Read, Evaluate, Acknowledge, Resolve).
+- `CLOUD_OPERATOR`, `AUDITOR`, `VIEWER`: Monitoring read only.
+- Disabled User: No monitoring authority.
+
+Disabled user sessions are safely handled by the `requireAuth` platform authentication semantics, properly returning a 401 instead of a 403. Side-effect safety is guaranteed by strictly denying queue execution or DB mutations on 403. Unknown role handling explicitly fails closed by returning a 403 rather than escalating to `VIEWER_PERMISSIONS`.
