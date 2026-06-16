@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { prisma } from "@cloudshield/database";
 import { BackendMonitoringHealthService } from "../modules/security-monitoring/backend-monitoring-health.service.js";
 import { securityMonitoringQueue } from "../modules/security-monitoring/monitoring.queue.js";
@@ -160,6 +161,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/security-monitoring/overview", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const health = await healthService.getHealth(auth.organizationId);
     return {
       status: health.status,
@@ -176,11 +178,13 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/security-monitoring/health", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     return await healthService.getHealth(auth.organizationId);
   });
 
   app.get("/api/v1/security-monitoring/monitors", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const items = await prisma.securityMonitor.findMany({
       where: { organizationId: auth.organizationId }
     });
@@ -189,6 +193,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/security-monitoring/alerts", { preHandler: requireAuth }, async (request: any) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const { status, severity } = request.query as { status?: string; severity?: string };
 
     const where: any = { organizationId: auth.organizationId };
@@ -210,6 +215,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/security-monitoring/alerts/:id", { preHandler: requireAuth }, async (request: any, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const { id } = ParamsSchema.parse(request.params);
     const item = await prisma.securityAlert.findUnique({
       where: { id, organizationId: auth.organizationId }
@@ -220,6 +226,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/security-monitoring/runs", { preHandler: requireAuth }, async (request: any) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const items = await prisma.monitoringRun.findMany({
       where: { organizationId: auth.organizationId },
       orderBy: { startedAt: 'desc' },
@@ -236,6 +243,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/security-monitoring/runs/:id", { preHandler: requireAuth }, async (request: any, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_READ);
     const { id } = ParamsSchema.parse(request.params);
     const item = await prisma.monitoringRun.findUnique({
       where: { id, organizationId: auth.organizationId }
@@ -246,6 +254,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
 
   app.post("/api/v1/security-monitoring/evaluate", { preHandler: requireAuth }, async (request: any) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_EVALUATE);
     const payload = EvaluateMonitoringRequestSchema.parse(request.body || {});
     const trigger = payload.trigger || "API_REQUEST";
 
@@ -264,6 +273,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     preHandler: [requireAuth, app.csrfProtection]
   }, async (request: any, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_ALERTS_ACKNOWLEDGE);
     const { id } = ParamsSchema.parse(request.params);
     const { note } = AcknowledgeAlertRequestSchema.parse(request.body || {});
 
@@ -292,6 +302,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     preHandler: [requireAuth, app.csrfProtection]
   }, async (request: any, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.MONITORING_ALERTS_RESOLVE);
     const { id } = ParamsSchema.parse(request.params);
     const { reason } = ResolveAlertRequestSchema.parse(request.body || {});
 

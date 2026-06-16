@@ -312,7 +312,7 @@ test("Security Monitoring API Endpoints", async (t) => {
     assert.strictEqual(listBody.page, 1);
     assert.strictEqual(listBody.pageSize, 50);
 
-    const completedDto = listBody.items.find((i: any) => i.id === runId);
+    const completedDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === runId);
     assert.ok(completedDto);
     assert.strictEqual(completedDto.status, "COMPLETED");
     assert.strictEqual(typeof completedDto.startedAt, "string");
@@ -323,28 +323,28 @@ test("Security Monitoring API Endpoints", async (t) => {
     assert.strictEqual("AccessKeyId" in completedDto.errorSummary, false);
     assert.strictEqual("stack" in completedDto.errorSummary, false);
 
-    const failedDto = listBody.items.find((i: any) => i.id === failedRun.id);
+    const failedDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === failedRun.id);
     assert.deepStrictEqual(failedDto.errorSummary, {});
 
-    const blankMsgDto = listBody.items.find((i: any) => i.id === blankMessageRun.id);
+    const blankMsgDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === blankMessageRun.id);
     assert.deepStrictEqual(blankMsgDto.errorSummary, { category: "VALID", retryable: true });
 
-    const overlongMsgDto = listBody.items.find((i: any) => i.id === overlongMessageRun.id);
+    const overlongMsgDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === overlongMessageRun.id);
     assert.deepStrictEqual(overlongMsgDto.errorSummary, { category: "VALID", retryable: true });
 
-    const blankCatDto = listBody.items.find((i: any) => i.id === blankCategoryRun.id);
+    const blankCatDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === blankCategoryRun.id);
     assert.deepStrictEqual(blankCatDto.errorSummary, { message: "Valid", retryable: true });
 
-    const overlongCatDto = listBody.items.find((i: any) => i.id === overlongCategoryRun.id);
+    const overlongCatDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === overlongCategoryRun.id);
     assert.deepStrictEqual(overlongCatDto.errorSummary, { message: "Valid", retryable: true });
 
-    const nonBoolDto = listBody.items.find((i: any) => i.id === nonBooleanRetryableRun.id);
+    const nonBoolDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === nonBooleanRetryableRun.id);
     assert.deepStrictEqual(nonBoolDto.errorSummary, { message: "Valid", category: "VALID" });
 
-    const arrayDto = listBody.items.find((i: any) => i.id === arraySummaryRun.id);
+    const arrayDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === arraySummaryRun.id);
     assert.deepStrictEqual(arrayDto.errorSummary, {});
 
-    const nestedObjDto = listBody.items.find((i: any) => i.id === nestedObjectSummaryRun.id);
+    const nestedObjDto = listBody.items.find((i: ReturnType<typeof MonitoringRunDtoSchema.parse>) => i.id === nestedObjectSummaryRun.id);
     assert.deepStrictEqual(nestedObjDto.errorSummary, { category: "VALID" });
 
     const detail = await app.inject({
@@ -369,11 +369,11 @@ test("Security Monitoring API Endpoints", async (t) => {
   });
 
   await t.test("evaluate endpoint", async (st) => {
-    let queueCalls: any[] = [];
+    let queueCalls: Parameters<typeof securityMonitoringQueue.add>[] = [];
     const originalAdd = securityMonitoringQueue.add;
-    securityMonitoringQueue.add = async (...args: any[]) => {
+    securityMonitoringQueue.add = async (...args: Parameters<typeof securityMonitoringQueue.add>) => {
       queueCalls.push(args);
-      return {} as any;
+      return { id: "mock-job-id" } as Awaited<ReturnType<typeof securityMonitoringQueue.add>>;
     };
 
     st.after(() => {
@@ -402,9 +402,11 @@ test("Security Monitoring API Endpoints", async (t) => {
       assert.strictEqual("alertsCreated" in res.json(), false);
       assert.strictEqual("mutationExecuted" in res.json(), false);
       assert.strictEqual(queueCalls.length, 1);
-      assert.strictEqual(queueCalls[0][0], "evaluate-security-monitoring");
-      assert.strictEqual(queueCalls[0][1].organizationId, orgId);
-      assert.strictEqual(queueCalls[0][1].trigger, "MANUAL");
+      const callArgs = queueCalls[0]!;
+      assert.strictEqual(callArgs[0], "evaluate-security-monitoring");
+      const jobData = callArgs[1]!;
+      assert.strictEqual(jobData.organizationId, orgId);
+      assert.strictEqual(jobData.trigger, "MANUAL");
     });
 
     await st.test("defaults omitted trigger to API_REQUEST", async () => {
@@ -417,7 +419,9 @@ test("Security Monitoring API Endpoints", async (t) => {
       });
       assert.strictEqual(res.statusCode, 200);
       assert.strictEqual(queueCalls.length, 1);
-      assert.strictEqual(queueCalls[0][1].trigger, "API_REQUEST");
+      const callArgs = queueCalls[0]!;
+      const jobData = callArgs[1]!;
+      assert.strictEqual(jobData.trigger, "API_REQUEST");
     });
 
     await st.test("rejects unknown fields in strict request schema", async () => {
@@ -583,4 +587,268 @@ test("Security Monitoring API Endpoints", async (t) => {
     assert.deepStrictEqual(res.json(), { error: "not_found", message: "Monitoring run not found." });
   });
 
+  await t.test("DISABLED user is rejected", async () => {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { status: "DISABLED" }
+    });
+
+    const meRes = await app.inject({ method: "GET", url: "/api/v1/auth/me", headers: { cookie: sessionCookie } });
+    assert.strictEqual(meRes.statusCode, 401);
+
+    const disOverview = await app.inject({ method: "GET", url: "/api/v1/security-monitoring/overview", headers: { cookie: sessionCookie } });
+    assert.strictEqual(disOverview.statusCode, 401);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { status: "ACTIVE" }
+    });
+  });
+
+  await t.test("Authorization Matrix & Side Effect Safety", async (st) => {
+    const rolesToTest = [
+      "OWNER", "ADMIN", "SECURITY_OPERATOR", "CLOUD_OPERATOR", "AUDITOR", "VIEWER"
+    ];
+
+    let queueCalls: Parameters<typeof securityMonitoringQueue.add>[] = [];
+    const originalAdd = securityMonitoringQueue.add;
+    securityMonitoringQueue.add = async (...args: Parameters<typeof securityMonitoringQueue.add>) => {
+      queueCalls.push(args);
+      return { id: "mock-job-id" } as Awaited<ReturnType<typeof securityMonitoringQueue.add>>;
+    };
+
+    st.after(() => {
+      securityMonitoringQueue.add = originalAdd;
+    });
+
+    for (const role of rolesToTest) {
+      await st.test(`role: ${role}`, async () => {
+        // Reset state
+        queueCalls = [];
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            role,
+            status: "ACTIVE"
+          }
+        });
+        await prisma.organizationMembership.updateMany({
+          where: { userId },
+          data: { role }
+        });
+
+        // Test /auth/me capability map
+        const meRes = await app.inject({ method: "GET", url: "/api/v1/auth/me", headers: { cookie: sessionCookie } });
+
+        assert.strictEqual(meRes.statusCode, 200);
+        const meData = meRes.json();
+        const caps = meData.capabilities;
+
+        const isMutationAllowed = ["OWNER", "ADMIN", "SECURITY_OPERATOR"].includes(role);
+
+        assert.strictEqual(caps["monitoring.read"], true);
+        assert.strictEqual(caps["monitoring.evaluate"], isMutationAllowed);
+        assert.strictEqual(caps["monitoring.alerts.acknowledge"], isMutationAllowed);
+        assert.strictEqual(caps["monitoring.alerts.resolve"], isMutationAllowed);
+
+        // Read routes
+        const readRoutes = [
+          "/api/v1/security-monitoring/overview",
+          "/api/v1/security-monitoring/health",
+          "/api/v1/security-monitoring/monitors",
+          "/api/v1/security-monitoring/alerts",
+          `/api/v1/security-monitoring/alerts/${alertId}`,
+          "/api/v1/security-monitoring/runs",
+          `/api/v1/security-monitoring/runs/${runId}`
+        ];
+        for (const url of readRoutes) {
+          const rRes = await app.inject({ method: "GET", url, headers: { cookie: sessionCookie } });
+          assert.strictEqual(rRes.statusCode, 200, `Expected 200 for ${url} as ${role}`);
+        }
+
+        // Mutation - Evaluate
+        const evalRes = await app.inject({
+          method: "POST",
+          url: "/api/v1/security-monitoring/evaluate",
+          headers: { cookie: sessionCookie, "x-csrf-token": csrfToken }
+        });
+
+        if (isMutationAllowed) {
+          assert.strictEqual(evalRes.statusCode, 200);
+          assert.strictEqual(queueCalls.length, 1);
+        } else {
+          assert.strictEqual(evalRes.statusCode, 403);
+          assert.strictEqual(queueCalls.length, 0, "Evaluate queue must remain 0 on 403");
+        }
+
+        // Reset alert status for mutation tests
+        await prisma.auditEvent.deleteMany({ where: { targetId: alertId } });
+        await prisma.securityAlert.update({
+          where: { id: alertId },
+          data: { status: "OPEN", resolvedAt: null }
+        });
+
+        // Mutation - Acknowledge
+        const ackRes = await app.inject({
+          method: "PATCH",
+          url: `/api/v1/security-monitoring/alerts/${alertId}/acknowledge`,
+          headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+          payload: { note: "test" }
+        });
+
+        if (isMutationAllowed) {
+          assert.strictEqual(ackRes.statusCode, 200);
+        } else {
+          assert.strictEqual(ackRes.statusCode, 403);
+          const checkAlert = await prisma.securityAlert.findUnique({ where: { id: alertId } });
+          assert.strictEqual(checkAlert?.status, "OPEN", "Alert status must remain OPEN on 403 acknowledge");
+          const ackAudits = await prisma.auditEvent.findMany({ where: { targetId: alertId, targetType: "ACKNOWLEDGED" } });
+          assert.strictEqual(ackAudits.length, 0, "No ACKNOWLEDGED audit record should be created on 403");
+        }
+
+        // Reset again
+        await prisma.auditEvent.deleteMany({ where: { targetId: alertId } });
+        await prisma.securityAlert.update({
+          where: { id: alertId },
+          data: { status: "OPEN", resolvedAt: null }
+        });
+
+        // Mutation - Resolve
+        const resRes = await app.inject({
+          method: "PATCH",
+          url: `/api/v1/security-monitoring/alerts/${alertId}/resolve`,
+          headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+          payload: { reason: "test" }
+        });
+
+        if (isMutationAllowed) {
+          assert.strictEqual(resRes.statusCode, 200);
+        } else {
+          assert.strictEqual(resRes.statusCode, 403);
+          const checkAlert = await prisma.securityAlert.findUnique({ where: { id: alertId } });
+          assert.strictEqual(checkAlert?.status, "OPEN", "Alert status must remain OPEN on 403 resolve");
+          assert.strictEqual(checkAlert?.resolvedAt, null, "resolvedAt must remain null on 403 resolve");
+          const resAudits = await prisma.auditEvent.findMany({ where: { targetId: alertId, targetType: "RESOLVED" } });
+          assert.strictEqual(resAudits.length, 0, "No RESOLVED audit record should be created on 403");
+        }
+      });
+    }
+  });
+
+  await t.test("Capability Escalation Resistance", async (st) => {
+    let queueCalls: Parameters<typeof securityMonitoringQueue.add>[] = [];
+    const originalAdd = securityMonitoringQueue.add;
+    securityMonitoringQueue.add = async (...args: Parameters<typeof securityMonitoringQueue.add>) => {
+      queueCalls.push(args);
+      return { id: "mock-job-id" } as Awaited<ReturnType<typeof securityMonitoringQueue.add>>;
+    };
+
+    st.after(() => {
+      securityMonitoringQueue.add = originalAdd;
+    });
+
+    await st.test("Case 1: Unauthorized VIEWER with malicious unknown fields", async () => {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { role: "VIEWER", status: "ACTIVE" }
+      });
+      await prisma.organizationMembership.updateMany({
+        where: { userId },
+        data: { role: "VIEWER" }
+      });
+
+      queueCalls = [];
+      const initialRunsCount = await prisma.monitoringRun.count();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate",
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+        payload: {
+          trigger: "MANUAL",
+          role: "OWNER",
+          capabilities: {
+            "monitoring.evaluate": true
+          }
+        }
+      });
+
+      assert.strictEqual(res.statusCode, 403);
+      assert.strictEqual(queueCalls.length, 0);
+      assert.strictEqual(await prisma.monitoringRun.count(), initialRunsCount);
+    });
+
+    await st.test("Case 2: Unauthorized VIEWER with valid body", async () => {
+      queueCalls = [];
+      const initialRunsCount = await prisma.monitoringRun.count();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate",
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+        payload: { trigger: "MANUAL" }
+      });
+
+      assert.strictEqual(res.statusCode, 403);
+      assert.strictEqual(queueCalls.length, 0);
+      assert.strictEqual(await prisma.monitoringRun.count(), initialRunsCount);
+    });
+
+    await st.test("Case 3: Authorized role with malformed unknown fields", async () => {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { role: "OWNER", status: "ACTIVE" }
+      });
+      await prisma.organizationMembership.updateMany({
+        where: { userId },
+        data: { role: "OWNER" }
+      });
+
+      queueCalls = [];
+      const initialRunsCount = await prisma.monitoringRun.count();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate",
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+        payload: {
+          trigger: "MANUAL",
+          role: "OWNER",
+          capabilities: {
+            "monitoring.evaluate": true
+          }
+        }
+      });
+
+      assert.strictEqual(res.statusCode, 400);
+      assert.strictEqual(queueCalls.length, 0);
+      assert.strictEqual(await prisma.monitoringRun.count(), initialRunsCount);
+
+      // Restore user to VIEWER
+      await prisma.user.update({
+        where: { id: userId },
+        data: { role: "VIEWER", status: "ACTIVE" }
+      });
+      await prisma.organizationMembership.updateMany({
+        where: { userId },
+        data: { role: "VIEWER" }
+      });
+    });
+
+    await st.test("Case 4: Query escalation as VIEWER", async () => {
+      queueCalls = [];
+      const initialRunsCount = await prisma.monitoringRun.count();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate?role=OWNER&organizationId=other&capabilities=monitoring.evaluate",
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+        payload: { trigger: "MANUAL" }
+      });
+
+      assert.strictEqual(res.statusCode, 403);
+      assert.strictEqual(queueCalls.length, 0);
+      assert.strictEqual(await prisma.monitoringRun.count(), initialRunsCount);
+    });
+  });
 });

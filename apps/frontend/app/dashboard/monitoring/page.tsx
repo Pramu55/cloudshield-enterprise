@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchCloudShieldClient } from "../../../lib/client-api";
+import { fetchCloudShieldClient, useCloudShieldData } from "../../../lib/client-api";
 import { RefreshCcw, ShieldAlert, CheckCircle, Activity, AlertTriangle, List, History, CheckCircle2, ServerCrash, Clock, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { ErrorState } from "../../../components/ui/error-state";
@@ -17,6 +17,8 @@ import {
   FrontendMonitoringHealthSchema,
   FrontendMonitoringRunsListSchema,
   FrontendSecurityAlertsListSchema,
+  FrontendCapabilitySessionSchema,
+  type FrontendCapabilitySession,
   type FrontendMonitoringHealth,
   type FrontendMonitoringRunsList,
   type FrontendSecurityAlertsList
@@ -32,6 +34,10 @@ function monitoringActionContractError() {
 }
 
 export default function SecurityMonitoringPage() {
+  const authState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, {
+    schema: FrontendCapabilitySessionSchema
+  });
+  const session = authState.data;
   const [activeTab, setActiveTab] = useState<"overview" | "alerts" | "runs">("overview");
   const [health, setHealth] = useState<FrontendMonitoringHealth | null>(null);
   const [alerts, setAlerts] = useState<FrontendSecurityAlertsList["items"]>([]);
@@ -248,12 +254,12 @@ export default function SecurityMonitoringPage() {
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   {alert.status === 'OPEN' && (
-                    <button onClick={() => handleAcknowledge(alert.id)} className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-colors">
+                    <button onClick={() => handleAcknowledge(alert.id)} disabled={!session?.capabilities?.["monitoring.alerts.acknowledge"]} className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                       Acknowledge
                     </button>
                   )}
                   {alert.status !== 'RESOLVED' && (
-                    <button onClick={() => handleResolve(alert.id)} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors">
+                    <button onClick={() => handleResolve(alert.id)} disabled={!session?.capabilities?.["monitoring.alerts.resolve"]} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                       Resolve
                     </button>
                   )}
@@ -325,7 +331,7 @@ export default function SecurityMonitoringPage() {
             <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button onClick={handleEvaluate} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 flex items-center gap-2 shadow-sm transition-colors">
+          <button onClick={handleEvaluate} disabled={!session?.capabilities?.["monitoring.evaluate"]} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 flex items-center gap-2 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Activity className="w-4 h-4" />
             Evaluate Now
           </button>

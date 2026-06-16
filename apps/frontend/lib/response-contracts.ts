@@ -88,7 +88,11 @@ export const FrontendCapabilitySessionSchema = CurrentUserResponseSchema.transfo
     "operations.prepare": data.capabilities["operations.prepare"],
     "approvals.read": data.capabilities["approvals.read"],
     "approvals.decide": data.capabilities["approvals.decide"],
-    "audit.read": data.capabilities["audit.read"]
+    "audit.read": data.capabilities["audit.read"],
+    "monitoring.read": data.capabilities["monitoring.read"],
+    "monitoring.evaluate": data.capabilities["monitoring.evaluate"],
+    "monitoring.alerts.acknowledge": data.capabilities["monitoring.alerts.acknowledge"],
+    "monitoring.alerts.resolve": data.capabilities["monitoring.alerts.resolve"]
   }
 }));
 

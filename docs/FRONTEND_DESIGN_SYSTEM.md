@@ -125,7 +125,21 @@ Read retry is explicit and keyboard accessible, and is offered only for network,
 
 `ActionCapability` separates four restriction layers: permission, policy, environment, and runtime mode. Capability data defaults closed. A missing or unknown value never enables an action, and a role label alone is not permission authority. Backend authorization remains final for every request.
 
-Authenticated capability authority comes from the required closed map in `CurrentUserResponseSchema`. `/api/v1/auth/me` supplies an atomic user, organization, and capability snapshot computed by the backend's existing permission resolver. Frontend projections explicitly retain only the known capability keys. A reported `true` maps to `ALLOWED`, a reported `false` maps to `DENIED`, and missing or invalid session authority maps to `UNKNOWN`/not configured. Frontend code must never reconstruct the backend role-to-permission matrix.
+Authenticated capability authority comes from the required closed map in `CurrentUserResponseSchema`. `/api/v1/auth/me` supplies an atomic user, organization, and capability snapshot computed by the backend's existing permission resolver. Frontend projections explicitly retain only the known capability keys (e.g., `monitoring.read`, `monitoring.evaluate`, `monitoring.alerts.acknowledge`, `monitoring.alerts.resolve`). A reported `true` maps to `ALLOWED`, a reported `false` maps to `DENIED`, and missing or invalid session authority maps to `UNKNOWN`/not configured. Frontend code must never reconstruct the backend role-to-permission matrix.
+
+### Monitoring Capability Matrix
+
+The backend enforces the following permission matrix for monitoring capabilities. The frontend consumes this matrix blindly via `/api/v1/auth/me` without knowing the user's role:
+
+| Role              | Read | Evaluate | Acknowledge | Resolve |
+| ----------------- | ---- | -------- | ----------- | ------- |
+| OWNER             | Yes  | Yes      | Yes         | Yes     |
+| ADMIN             | Yes  | Yes      | Yes         | Yes     |
+| SECURITY_OPERATOR | Yes  | Yes      | Yes         | Yes     |
+| CLOUD_OPERATOR    | Yes  | No       | No          | No      |
+| AUDITOR           | Yes  | No       | No          | No      |
+| VIEWER            | Yes  | No       | No          | No      |
+| disabled user     | No   | No       | No          | No      |
 
 Role labels may still drive display badges and route visibility. That filtering is UX-only: it is not authorization, must not enable mutations, and must not be described as a security boundary. Each migrated mutation control consumes its exact capability key through `GuardedAction`, while backend `requirePermission` checks remain authoritative.
 
