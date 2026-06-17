@@ -37,6 +37,7 @@ import {
 import { createQueueConnection } from "./queue-connection.js";
 import { createSingleRunShutdown } from "./shutdown.js";
 import { securityMonitoringQueue, securityMonitoringWorker } from "./security-monitoring.processor.js";
+import { runStartupReconciliation } from "./reliability-reconciliation.js";
 
 const logger = createLogger("cloudshield-worker");
 
@@ -576,6 +577,10 @@ logger.info(
   },
   "cloud-scans queue ready; EC2 read-only scanner slice is available"
 );
+
+if (process.env.NODE_ENV !== "test") {
+  void runStartupReconciliation();
+}
 
 export { securityMonitoringQueue, securityMonitoringWorker };
 
