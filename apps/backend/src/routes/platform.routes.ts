@@ -9,6 +9,7 @@ import {
 import { recommendationExecutionPolicy } from "@cloudshield/security";
 import { nowIso } from "@cloudshield/utils";
 import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
+import { prisma } from "@cloudshield/database";
 
 export async function registerPlatformRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health", async () => {
@@ -20,12 +21,56 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/ready", async () => {
+    let postgresStatus = "configured";
+    let migrationStatus = "unknown";
+
+    try {
+      // Bounded SELECT 1
+      await prisma.$queryRaw`SELECT 1 as "alive"`;
+      postgresStatus = "connected";
+
+      // Read latest migration
+      const latestMigrations = await prisma.$queryRaw<
+        Array<{ finished_at: Date | null; rolled_back_at: Date | null }>
+      >`SELECT finished_at, rolled_back_at FROM _prisma_migrations ORDER BY started_at DESC LIMIT 1`;
+
+      if (latestMigrations.length === 0) {
+        migrationStatus = "no_migrations";
+      } else {
+        const latest = latestMigrations[0]!;
+        if (latest.rolled_back_at) {
+          migrationStatus = "rolled_back";
+        } else if (latest.finished_at) {
+          migrationStatus = "completed";
+        } else {
+          // It's either applying or failed. Prisma typically sets finished_at when done.
+          migrationStatus = "applying_or_failed";
+          // If a migration is definitively failed, we return 503 so Kubernetes stops routing traffic.
+          // However, we shouldn't fail liveness, just readiness.
+          return {
+            status: "not_ready",
+            service: "backend",
+            dependencies: { postgres: "migration_incomplete", redis: "configured" },
+            timestamp: nowIso()
+          };
+        }
+      }
+    } catch (err) {
+      return {
+        status: "not_ready",
+        service: "backend",
+        dependencies: { postgres: "unavailable", redis: "configured" },
+        timestamp: nowIso()
+      };
+    }
+
     return {
       status: "ready",
       service: "backend",
       dependencies: {
-        postgres: "configured",
-        redis: "configured"
+        postgres: postgresStatus,
+        redis: "configured",
+        migrations: migrationStatus
       },
       timestamp: nowIso()
     };

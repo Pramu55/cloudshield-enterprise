@@ -2,7 +2,8 @@ import { PrismaClient } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 
 export const prisma = new PrismaClient();
-export type { Prisma };
+export { Prisma, PrismaClient } from "@prisma/client";
+export type { Prisma as PrismaType };
 export { Environment, AwsAccountStatus } from "@prisma/client";
 
 export type OrganizationScope = {
@@ -29,3 +30,4 @@ export * from "./security-posture/security-rule.types.js";
 export * from "./security-posture/security-rule.catalog.js";
 export * from "./security-posture/security-rule.engine.js";
 export * from "./security-alert-evidence.repository.js";
+export * from "./reliability-reconciliation.repository.js";

@@ -66,3 +66,12 @@ CloudShield does not add a database poison-job table in this milestone. Operator
 - governed mutation uncertainty: read-only reconciliation or manual review only.
 
 Governed mutation jobs must not be manually replayed from failed queue payloads.
+
+## Worker Redis Loss and Recovery
+If Redis connection drops, the worker gracefully degrades by attempting local reconnects while rejecting new jobs. Scheduled queues pause automatically, and when Redis returns online, execution resumes securely. Stale `QUEUED` and `RUNNING` records abandoned during unexpected crashes are reconciled automatically at startup to `FAILED` with specific classifications like `QUEUE_JOB_LOST` or `WORKER_RUN_STALE`.
+
+## Reconciliation Semantics
+The `runStartupReconciliation()` function sweeps `ScanRun` and `MonitoringRun` tables for orphaned rows that missed a terminal phase transition.
+- Bounds limit candidates to 100 globally per domain to prevent resource contention.
+- Re-checks status upon update to avoid concurrent collisions.
+- Governed execution attempts, manual review states, and terminal records are strictly protected from reconciliation sweeps, guaranteeing automated sweeps never implicitly repeat side-effects on AWS targets.

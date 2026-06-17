@@ -1,8 +1,9 @@
 import { CLOUD_INVENTORY_SYNC_QUEUE_NAME, InventoryOrchestrationResponseSchema, InventoryUnsupportedScannerResponseSchema } from "@cloudshield/contracts";
+import { z } from "zod";
 import {
   prisma,
   scopeByOrganization,
-  type Prisma
+  Prisma
 } from "@cloudshield/database";
 import type { RuntimeEnv } from "@cloudshield/config";
 import { cloudScanQueue } from "./aws-inventory.queue.js";
@@ -657,26 +658,64 @@ function buildRegionalFailures(failedRegions: RegionFailure[], scanRunId: string
   }));
 }
 
-async function latestScansByAccount(organizationId: string, statuses: string[]) {
-  const runs = await prisma.scanRun.findMany({
-    where: { organizationId, status: { in: statuses as any[] }, awsAccountId: { not: null } },
-    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }]
-  });
-  const byAccount = new Map<string, any>();
+const ScanRunQueryResultSchema = z.object({
+  id: z.string(),
+  awsAccountId: z.string().nullable(),
+  status: z.string(),
+  completedAt: z.preprocess((val) => (val ? new Date(val as string | number | Date) : null), z.date().nullable()),
+  completedRegions: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(z.string())),
+  failedRegions: z.unknown()
+});
+
+export interface ScanRunQueryResult {
+  id: string;
+  awsAccountId: string | null;
+  status: string;
+  completedAt: Date | null;
+  completedRegions: string[];
+  failedRegions: unknown;
+}
+
+export async function latestScansByAccount(organizationId: string, statuses: string[]): Promise<Map<string, ScanRunQueryResult>> {
+  // Use a native PostgreSQL distinct query to fetch the latest scan for each account.
+  const rawRuns = await prisma.$queryRaw<unknown[]>`
+    SELECT DISTINCT ON ("awsAccountId")
+      "id",
+      "awsAccountId",
+      "status",
+      "completedAt",
+      "completedRegions",
+      "failedRegions"
+    FROM "ScanRun"
+    WHERE "organizationId" = ${organizationId}
+      AND "status"::text IN (${Prisma.join(statuses)})
+      AND "awsAccountId" IS NOT NULL
+    ORDER BY
+      "awsAccountId" ASC,
+      "completedAt" DESC NULLS LAST,
+      "createdAt" DESC,
+      "id" DESC
+  `;
+
+  const runs = z.array(ScanRunQueryResultSchema).parse(rawRuns);
+
+  const byAccount = new Map<string, ScanRunQueryResult>();
   for (const run of runs) {
-    if (run.awsAccountId && !byAccount.has(run.awsAccountId)) byAccount.set(run.awsAccountId, run);
+    if (run.awsAccountId && !byAccount.has(run.awsAccountId)) {
+      byAccount.set(run.awsAccountId, run);
+    }
   }
   return byAccount;
 }
 
-function latestScanDto(scan: any) {
+function latestScanDto(scan: ScanRunQueryResult | null | undefined) {
   return scan
     ? {
         id: scan.id,
         status: normalizeScanLifecycleStatus(scan.status),
         completedAt: scan.completedAt?.toISOString() ?? null,
         completedRegions: scan.completedRegions ?? [],
-        failedRegions: scan.failedRegions ?? []
+        failedRegions: Array.isArray(scan.failedRegions) ? (scan.failedRegions as unknown[]) : []
       }
     : null;
 }
