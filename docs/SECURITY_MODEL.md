@@ -349,3 +349,46 @@ Default local mode is `EVALUATION`, where AWS execution is blocked and all autom
 AWS inventory sync is allowlisted and disabled by default. Disabled mode returns `BLOCKED_DISABLED` with `awsApiCallExecuted=false` and `scannerRun=false`. Enabled mode validates `sts:GetCallerIdentity` first, checks the registered account match, and only calls the Phase 1 EC2 describe APIs documented in `docs/AWS_READONLY_INVENTORY_SYNC.md`.
 
 CloudShield does not persist AWS credentials, log secret values, run Terraform apply, execute automatic remediation, or call Create/Update/Delete/Put/Attach/Detach/Authorize/Revoke APIs.
+
+## Frontend HTTP Security Headers and CSRF Boundary Verification
+
+The CloudShield frontend is hardened using browser-level security headers, and the browser-to-backend CSRF and CORS boundaries are audited and verified.
+
+### Browser Security Headers
+
+The following response headers are applied to all page responses served by the Next.js frontend:
+
+*   `X-Content-Type-Options: nosniff`: Prevents MIME-sniffing vulnerabilities.
+*   `X-Frame-Options: DENY`: Prevents clickjacking by denying framing of all pages.
+*   `Referrer-Policy: strict-origin-when-cross-origin`: Restricts referrer logs to cross-origin requests.
+*   `Permissions-Policy: camera=(), microphone=(), geolocation=()`: Disables high-risk device APIs.
+*   `Cross-Origin-Opener-Policy: same-origin`: Isolates the browsing context to prevent cross-origin leaks.
+*   `X-DNS-Prefetch-Control: off`: Disables DNS prefetching to protect user privacy.
+
+### Next.js vs. Fastify Headers
+
+*   **Frontend Headers**: Configured in `next.config.mjs` to protect responses returned when browser clients access page routes (`/`, `/login`, `/dashboard`).
+*   **Backend Headers**: Configured via Fastify Helmet to protect API routes (prefixed with `/api/v1/` or other backend routes).
+
+### CSP and CORP Deferrals
+
+*   **Content-Security-Policy (CSP) Deferral**: Enforced CSP has been intentionally deferred. Next.js uses inline scripts for hydration, which would fail under a strict script CSP. Enabling `'unsafe-inline'` as a permanent policy substitute was rejected due to lack of protection. Enforced CSP requires a future milestone implementing dynamic nonces in middleware.
+*   **Cross-Origin-Resource-Policy (CORP) Deferral**: Deferred to prevent asset load failure regressions for static chunks, optimized images, local/external assets, and potential future CDN architectures.
+
+### Request Body Limit
+
+*   **Fastify Default Limit**: Fastify defaults to a request payload limit of `1048576` bytes (1 MiB). This is documented as the active control and is not modified to prevent breaking legitimate payloads or introducing redundant declarations. There are no multipart uploads or JSON payloads in this milestone exceeding this limit.
+
+### CSRF and Origin Verification
+
+*   **CSRF Protection**: All mutative backend routes (POST, PUT, PATCH, DELETE) require a valid CSRF token in the `x-csrf-token` header and a matching `_csrf` cookie. Safe HTTP methods (GET, HEAD, OPTIONS) do not require CSRF tokens.
+*   **Origin Validation**: The global Fastify hook validates the `Origin` header for all mutative requests. Wrong or mismatched origins are immediately rejected with a `403 Forbidden` (`unexpected_origin`) response without exposing allowed origin lists.
+
+### Cookie Security
+
+*   **Session Cookies**: The `cloudshield_session` and `_csrf` cookies are configured as `HttpOnly`, with `SameSite=lax` and `Path=/`.
+*   **Secure flag**: The `Secure` flag is enabled only in environment configurations where `AUTH_COOKIE_SECURE === "true"` (standard for production). Over local HTTP development connections, the secure flag is omitted to preserve session persistence.
+
+### Failed-Login Auditing Deferral
+
+*   Failed-login database logging is deferred because the `AuditEvent` schema requires a valid, authoritative `organizationId`. A non-existent account has no tenant mapping, and creating dummy tenant associations would create audit ambiguity. Furthermore, storing a row per failed login attempt creates storage abuse/spam risks. Security telemetry should be handled in a dedicated future logging infrastructure.
