@@ -1,15 +1,17 @@
 import type { FastifyInstance } from "fastify";
-import { Queue } from "bullmq";
+import { Queue, type JobType } from "bullmq";
 import { z } from "zod";
 import {
   CLOUD_ASSESSMENT_QUEUE_NAME,
   CLOUD_INVENTORY_SYNC_QUEUE_NAME,
-  GOVERNED_AWS_CHANGE_QUEUE_NAME
+  CLOUD_SCAN_QUEUE_NAME,
+  GOVERNED_AWS_CHANGE_QUEUE_NAME,
+  SECURITY_MONITORING_QUEUE_NAME
 } from "@cloudshield/contracts";
 import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
-import { optionalEnv } from "@cloudshield/utils";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import { createQueueConnection } from "../modules/queue/queue-connection.js";
 import {
   PLATFORM_CORE_SAFETY_FLAGS,
   buildAccountDetail,
@@ -317,37 +319,81 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
   });
 }
 
-async function getQueueHealth() {
-  const connection = {
-    host: optionalEnv("REDIS_HOST", "localhost"),
-    port: Number(optionalEnv("REDIS_PORT", "6379")),
-    maxRetriesPerRequest: null
-  };
-  const queues = [
-    CLOUD_INVENTORY_SYNC_QUEUE_NAME,
-    CLOUD_ASSESSMENT_QUEUE_NAME,
-    GOVERNED_AWS_CHANGE_QUEUE_NAME
-  ];
-  const handles = process.env.DISABLE_QUEUE_CONNECTIONS_FOR_TESTS === "true" ? queues.map(name => ({ name, getJobCounts: async () => ({}) } as unknown as Queue)) : queues.map((name) => new Queue(name, { connection }));
+export type QueueHealthHandle = {
+  name: string;
+  close: () => Promise<void>;
+  getJobCounts: (...types: JobType[]) => Promise<Record<string, number>>;
+  isPaused: () => Promise<boolean>;
+  getWaiting: (start: number, end: number) => Promise<Array<{ timestamp?: number }>>;
+};
+
+export async function collectQueueHealth(handles: QueueHealthHandle[]) {
   try {
-    const counts = await Promise.all(handles.map(async (queue) => ({
-      name: queue.name,
-      counts: await queue.getJobCounts("waiting", "active", "completed", "failed", "delayed")
-    })));
+    const items = await Promise.all(handles.map(async (queue) => {
+      try {
+        const [counts, paused, waitingJobs] = await Promise.all([
+          queue.getJobCounts("waiting", "active", "completed", "failed", "delayed", "paused"),
+          queue.isPaused(),
+          queue.getWaiting(0, 0)
+        ]);
+        const oldestWaitingJob = waitingJobs[0];
+        const oldestWaitingAgeMs = oldestWaitingJob?.timestamp
+          ? Math.max(0, Date.now() - oldestWaitingJob.timestamp)
+          : null;
+        return {
+          name: queue.name,
+          status: "ok",
+          counts: {
+            waiting: counts.waiting ?? 0,
+            active: counts.active ?? 0,
+            delayed: counts.delayed ?? 0,
+            failed: counts.failed ?? 0,
+            completed: counts.completed ?? 0,
+            paused: counts.paused ?? 0
+          },
+          paused,
+          oldestWaitingAgeMs
+        };
+      } catch {
+        return {
+          name: queue.name,
+          status: "degraded",
+          counts: null,
+          paused: null,
+          oldestWaitingAgeMs: null
+        };
+      }
+    }));
+    const degraded = items.some((item) => item.status !== "ok");
     return {
-      redis: "reachable",
+      redis: degraded ? "degraded" : "reachable",
       workerHeartbeat: "queue-counts-available",
-      items: counts
-    };
-  } catch {
-    return {
-      redis: "unreachable",
-      workerHeartbeat: "unknown",
-      items: queues.map((name) => ({ name, counts: null }))
+      items
     };
   } finally {
     await Promise.allSettled(handles.map((queue) => queue.close()));
   }
+}
+
+async function getQueueHealth() {
+  const connection = createQueueConnection();
+  const queues = [
+    CLOUD_SCAN_QUEUE_NAME,
+    CLOUD_INVENTORY_SYNC_QUEUE_NAME,
+    CLOUD_ASSESSMENT_QUEUE_NAME,
+    GOVERNED_AWS_CHANGE_QUEUE_NAME,
+    SECURITY_MONITORING_QUEUE_NAME
+  ];
+  const handles: QueueHealthHandle[] = process.env.DISABLE_QUEUE_CONNECTIONS_FOR_TESTS === "true"
+    ? queues.map((name) => ({
+        name,
+        close: async () => {},
+        getJobCounts: async () => ({}),
+        isPaused: async () => false,
+        getWaiting: async () => []
+      }))
+    : queues.map((name) => new Queue(name, { connection }));
+  return collectQueueHealth(handles);
 }
 
 async function audit(

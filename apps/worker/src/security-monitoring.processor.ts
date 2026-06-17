@@ -1,25 +1,35 @@
-import { Worker as BullWorker } from "bullmq";
+import { Queue, Worker as BullWorker } from "bullmq";
 import { SECURITY_MONITORING_QUEUE_NAME } from "@cloudshield/contracts";
 import { createLogger } from "@cloudshield/logger";
-import { optionalEnv, sanitizeProviderError } from "@cloudshield/utils";
+import { sanitizeProviderError } from "@cloudshield/utils";
 import { MonitoringOrchestrator } from "./monitoring-orchestrator.js";
+import { createQueueConnection } from "./queue-connection.js";
 
 const logger = createLogger("cloudshield-worker-monitoring");
 
-const connection = {
-  host: optionalEnv("REDIS_HOST", "localhost"),
-  port: Number(optionalEnv("REDIS_PORT", "6379")),
-  maxRetriesPerRequest: null
-};
+const connection = createQueueConnection();
 
 type EvaluateMonitoringJob = {
   organizationId: string;
   runId: string;
+  trigger?: string;
+  correlationId?: string;
 };
 
 const orchestrator = new MonitoringOrchestrator();
+type TestMonitoringWorker = {
+  on: (event: string, handler: unknown) => void;
+  close: () => Promise<void>;
+};
+const testSecurityMonitoringWorker: TestMonitoringWorker = {
+  on: () => {},
+  close: async () => {}
+};
+export const securityMonitoringQueue = process.env.NODE_ENV === "test"
+  ? { close: async () => {} }
+  : new Queue(SECURITY_MONITORING_QUEUE_NAME, { connection });
 
-export const securityMonitoringWorker = process.env.NODE_ENV === "test" ? { on: () => {} } as any : new BullWorker<EvaluateMonitoringJob>(
+export const securityMonitoringWorker = process.env.NODE_ENV === "test" ? testSecurityMonitoringWorker : new BullWorker<EvaluateMonitoringJob>(
   SECURITY_MONITORING_QUEUE_NAME,
   async (job) => {
     logger.info(
@@ -55,7 +65,7 @@ export const securityMonitoringWorker = process.env.NODE_ENV === "test" ? { on: 
 
     throw new Error(`Unknown job name: ${job.name}`);
   },
-  { connection }
+  { connection, lockDuration: 120_000, maxStalledCount: 1 }
 );
 
 securityMonitoringWorker.on("completed", (job: any) => {

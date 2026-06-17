@@ -25,7 +25,13 @@ test("governed AWS HTTP execution enqueues canonical correlation IDs", async (t)
   const app = await buildApp();
   const originalAdd = governedAwsChangeQueue.add.bind(governedAwsChangeQueue);
   const queueCalls: Array<{ name: string; data: any; options: any }> = [];
+  const acceptedJobIds = new Set<string>();
+  let failQueueAdd = false;
   governedAwsChangeQueue.add = (async (name: string, data: any, options: any) => {
+    if (failQueueAdd) throw new Error("synthetic governed queue failure");
+    const jobId = typeof options?.jobId === "string" ? options.jobId : undefined;
+    if (jobId && acceptedJobIds.has(jobId)) return { id: jobId };
+    if (jobId) acceptedJobIds.add(jobId);
     queueCalls.push({ name, data, options });
     return { id: options?.jobId };
   }) as any;
@@ -187,6 +193,43 @@ test("governed AWS HTTP execution enqueues canonical correlation IDs", async (t)
     assert.equal(queued.lifecycleState, "QUEUED");
     assert.equal(queued.approvedByRequestId, approvedByRequestId);
     assert.equal(queued.idempotencyKey, idempotencyKey);
+  });
+
+  await t.test("definite enqueue failure does not leave false queued state", async () => {
+    const plan = await createApprovedPlan(auth.organizationId, auth.userId);
+    const idempotencyKey = `idem-${randomUUID()}`;
+    const before = queueCalls.length;
+    failQueueAdd = true;
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/governance/remediation-plans/${plan.id}/execute`,
+      headers: {
+        cookie: auth.cookie,
+        "x-csrf-token": auth.csrfToken,
+        "x-correlation-id": VALID_CORRELATION_ID
+      },
+      payload: {
+        confirmationToken: "APPLY_GOVERNANCE_TAGS",
+        idempotencyKey
+      }
+    });
+    failQueueAdd = false;
+
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(queueCalls.length, before);
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.equal(stored.lifecycleState, "FAILED");
+    assert.equal(stored.executionStatus, "EXECUTION_BLOCKED");
+    assert.equal(stored.mutationOutcome, "NOT_ATTEMPTED");
+    assert.equal(stored.failureClassification, "QUEUE_ENQUEUE_FAILED");
+    const successAudit = await prisma.auditEvent.count({
+      where: {
+        organizationId: auth.organizationId,
+        targetId: plan.id,
+        action: "governance.aws_change.execution_queued"
+      }
+    });
+    assert.equal(successAudit, 0);
   });
 
   for (const [name, mutateApproval] of [

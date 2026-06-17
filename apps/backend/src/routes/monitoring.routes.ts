@@ -396,16 +396,68 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     return projectMonitoringRun(item);
   });
 
-  app.post("/api/v1/security-monitoring/evaluate", { preHandler: requireAuth }, async (request: FastifyRequest) => {
+  app.post("/api/v1/security-monitoring/evaluate", { preHandler: requireAuth }, async (request: FastifyRequest, reply) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_EVALUATE);
     const payload = EvaluateMonitoringRequestSchema.parse(request.body || {});
     const trigger = payload.trigger || "API_REQUEST";
 
-    await securityMonitoringQueue.add("evaluate-security-monitoring", {
-      organizationId: auth.organizationId,
-      trigger
+    const existingActiveRun = await prisma.monitoringRun.findFirst({
+      where: {
+        organizationId: auth.organizationId,
+        trigger,
+        status: { in: ["QUEUED", "RUNNING"] }
+      },
+      orderBy: { startedAt: "desc" }
     });
+
+    if (existingActiveRun) {
+      return EvaluateMonitoringResponseSchema.parse({
+        status: "QUEUED",
+        message: "Security monitoring evaluation queued successfully."
+      });
+    }
+
+    const run = await prisma.monitoringRun.create({
+      data: {
+        organizationId: auth.organizationId,
+        trigger,
+        status: "QUEUED"
+      }
+    });
+
+    try {
+      await securityMonitoringQueue.add("evaluate-security-monitoring", {
+        organizationId: auth.organizationId,
+        runId: run.id,
+        trigger,
+        correlationId: request.id
+      }, {
+        jobId: run.id,
+        attempts: 1,
+        removeOnComplete: 100,
+        removeOnFail: 250
+      });
+    } catch {
+      await prisma.monitoringRun.update({
+        where: { id: run.id },
+        data: {
+          status: "FAILED",
+          completedAt: new Date(),
+          errorCode: "QUEUE_ENQUEUE_FAILED",
+          errorSummary: {
+            message: "Security monitoring evaluation could not be queued.",
+            category: "QUEUE_ENQUEUE_FAILED",
+            retryable: true
+          }
+        }
+      });
+
+      return reply.status(503).send({
+        error: "queue_unavailable",
+        message: "Security monitoring evaluation could not be queued."
+      });
+    }
 
     return EvaluateMonitoringResponseSchema.parse({
       status: "QUEUED",

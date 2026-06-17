@@ -8,6 +8,7 @@ import {
   GOVERNED_AWS_CHANGE_QUEUE_NAME,
   CLOUD_INVENTORY_SYNC_QUEUE_NAME,
   CLOUD_SCAN_QUEUE_NAME,
+  SECURITY_MONITORING_QUEUE_NAME,
   CloudScanJobTypeSchema,
   type GovernedAwsChangeJob,
   type CloudScanJobType
@@ -33,14 +34,13 @@ import {
   runMutationReconciliationBatch,
   startMutationReconciliationScheduler
 } from "./mutation-reconciliation.js";
+import { createQueueConnection } from "./queue-connection.js";
+import { createSingleRunShutdown } from "./shutdown.js";
+import { securityMonitoringQueue, securityMonitoringWorker } from "./security-monitoring.processor.js";
 
 const logger = createLogger("cloudshield-worker");
 
-const connection = {
-  host: optionalEnv("REDIS_HOST", "localhost"),
-  port: Number(optionalEnv("REDIS_PORT", "6379")),
-  maxRetriesPerRequest: null
-};
+const connection = createQueueConnection();
 
 export const cloudScanQueue = process.env.NODE_ENV === "test" ? {} as any : new Queue(CLOUD_SCAN_QUEUE_NAME, { connection });
 export const cloudInventorySyncQueue = process.env.NODE_ENV === "test" ? {} as any : new Queue(CLOUD_INVENTORY_SYNC_QUEUE_NAME, { connection });
@@ -179,7 +179,7 @@ const worker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWo
       reason: "CloudShield worker foundation received the job but did not execute AWS API calls."
     };
   },
-  { connection }
+  { connection, lockDuration: 300_000, maxStalledCount: 1 }
 );
 
 const assessmentWorker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWorker<CloudAssessmentJob>(
@@ -205,7 +205,7 @@ const assessmentWorker = process.env.NODE_ENV === "test" ? createWorkerStub() : 
       reason: "CloudShield assessment worker hook is installed. Backend deterministic engine handles evaluation-mode assessments without AWS execution."
     };
   },
-  { connection }
+  { connection, lockDuration: 120_000, maxStalledCount: 1 }
 );
 
 export const processGovernedAwsChangeJob = async (job: any) => {
@@ -220,6 +220,7 @@ export const processGovernedAwsChangeJob = async (job: any) => {
   // Step 5: Strengthen idempotency and concurrency
   const existingCompleted = await prisma.remediationPlan.findFirst({
     where: {
+      organizationId: jobData.organizationId,
       idempotencyKey: jobData.idempotencyKey,
       lifecycleState: { in: ["SUCCEEDED", "FAILED", "BLOCKED", "ROLLED_BACK", "EXECUTING", "ROLLBACK_AVAILABLE"] }
     }
@@ -291,7 +292,7 @@ export const processGovernedAwsChangeJob = async (job: any) => {
     return { status: "FAILED", reason: "Plan not found for organization.", correlationId: jobContext.correlationId };
   }
 
-  if (plan.lifecycleState !== "QUEUED") {
+  if (!["QUEUED", "APPROVED"].includes(plan.lifecycleState)) {
     return await blockGovernedPlan(plan.id, "Plan is not queued for worker execution.", prisma, jobContext);
   }
 
@@ -336,7 +337,7 @@ export const processGovernedAwsChangeJob = async (job: any) => {
       id: plan.id,
       organizationId: jobData.organizationId,
       idempotencyKey: jobData.idempotencyKey,
-      lifecycleState: "QUEUED",
+      lifecycleState: { in: ["QUEUED", "APPROVED"] },
       approvalStatus: "APPROVED",
       mutationOutcome: "NOT_ATTEMPTED",
       OR: [
@@ -346,6 +347,7 @@ export const processGovernedAwsChangeJob = async (job: any) => {
     },
     data: {
       lifecycleState: "EXECUTING",
+      idempotencyKey: jobData.idempotencyKey,
       executionStartedAt: new Date(),
       executionLeaseStartedAt: new Date(),
       preflightEvidence: {
@@ -458,15 +460,15 @@ export function getPersistedGovernedCorrelationId(value: unknown): string | unde
   return value.trim().toLowerCase();
 }
 
-type TestSafeWorker = { on: (event: string, handler: any) => void };
+type TestSafeWorker = { on: (event: string, handler: unknown) => void; close: () => Promise<void> };
 function createWorkerStub(): TestSafeWorker {
-  return { on: () => {} };
+  return { on: () => {}, close: async () => {} };
 }
 
 const governedAwsChangeWorker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWorker<GovernedAwsChangeJob>(
   GOVERNED_AWS_CHANGE_QUEUE_NAME,
   processGovernedAwsChangeJob,
-  { connection, concurrency: 1 }
+  { connection, concurrency: 1, lockDuration: 300_000, maxStalledCount: 1 }
 );
 
 const stopMutationReconciliation = process.env.NODE_ENV === "test" || getAwsChangeExecutionMode() === "disabled"
@@ -481,8 +483,40 @@ const stopMutationReconciliation = process.env.NODE_ENV === "test" || getAwsChan
       }
     );
 
-process.once("SIGTERM", stopMutationReconciliation);
-process.once("SIGINT", stopMutationReconciliation);
+const shutdownOnce = createSingleRunShutdown({
+  stopTimers: stopMutationReconciliation,
+  workers: [
+    { name: "cloud-inventory-worker", close: () => worker.close() },
+    { name: "cloud-assessment-worker", close: () => assessmentWorker.close() },
+    { name: "governed-aws-change-worker", close: () => governedAwsChangeWorker.close() },
+    { name: "security-monitoring-worker", close: () => securityMonitoringWorker.close() }
+  ],
+  queues: [
+    { name: CLOUD_SCAN_QUEUE_NAME, close: () => cloudScanQueue.close() },
+    { name: CLOUD_INVENTORY_SYNC_QUEUE_NAME, close: () => cloudInventorySyncQueue.close() },
+    { name: CLOUD_ASSESSMENT_QUEUE_NAME, close: () => cloudAssessmentQueue.close() },
+    { name: GOVERNED_AWS_CHANGE_QUEUE_NAME, close: () => governedAwsChangeQueue.close() },
+    { name: SECURITY_MONITORING_QUEUE_NAME, close: () => securityMonitoringQueue.close() }
+  ],
+  disconnectPrisma: () => prisma.$disconnect(),
+  timeoutMs: 30_000
+});
+
+async function handleShutdown(signal: "SIGTERM" | "SIGINT") {
+  logger.info({ signal }, "CloudShield worker shutdown started");
+  const result = await shutdownOnce();
+  if (result.ok) {
+    logger.info({ signal, closedWorkers: result.closedWorkers, closedQueues: result.closedQueues }, "CloudShield worker shutdown completed");
+    process.exit(0);
+  }
+  logger.error({ signal, timedOut: result.timedOut }, "CloudShield worker shutdown timed out");
+  process.exit(1);
+}
+
+if (process.env.NODE_ENV !== "test") {
+  process.once("SIGTERM", () => { void handleShutdown("SIGTERM"); });
+  process.once("SIGINT", () => { void handleShutdown("SIGINT"); });
+}
 
 worker.on("completed", (job: any) => {
   logger.info({ jobId: job.id }, "CloudShield worker job completed");
@@ -543,7 +577,7 @@ logger.info(
   "cloud-scans queue ready; EC2 read-only scanner slice is available"
 );
 
-export { securityMonitoringWorker } from "./security-monitoring.processor.js";
+export { securityMonitoringQueue, securityMonitoringWorker };
 
 function isAwsInventoryJob(jobType: CloudScanJobType) {
   return [

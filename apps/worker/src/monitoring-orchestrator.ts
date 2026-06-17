@@ -165,8 +165,11 @@ export class MonitoringOrchestrator {
   async evaluateMonitoring(organizationId: string, runId: string) {
     const db = prisma;
 
-    const run = await db.monitoringRun.findUnique({
-      where: { id: runId }
+    const run = await db.monitoringRun.findFirst({
+      where: {
+        id: runId,
+        organizationId
+      }
     });
 
     if (!run || run.status !== 'QUEUED') {
