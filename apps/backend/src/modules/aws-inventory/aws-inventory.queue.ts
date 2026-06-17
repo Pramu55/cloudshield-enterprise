@@ -1,10 +1,8 @@
 import { Queue, type JobsOptions } from "bullmq";
 import { CLOUD_INVENTORY_SYNC_QUEUE_NAME } from "@cloudshield/contracts";
+import { createQueueConnection } from "../queue/queue-connection.js";
 
-const connection = {
-  host: process.env.REDIS_HOST || "localhost",
-  port: Number(process.env.REDIS_PORT || "6379"),
-};
+const connection = createQueueConnection();
 
 type InventoryQueueJob = { id?: string };
 type InventoryQueueAdd = (

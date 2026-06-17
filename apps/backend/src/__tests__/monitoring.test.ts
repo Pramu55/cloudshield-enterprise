@@ -382,6 +382,7 @@ test("Security Monitoring API Endpoints", async (t) => {
 
     await st.test("accepts evaluate and enqueues job", async () => {
       queueCalls = [];
+      const beforeRuns = await prisma.monitoringRun.count({ where: { organizationId: orgId } });
       const res = await app.inject({
         method: "POST",
         url: "/api/v1/security-monitoring/evaluate",
@@ -405,8 +406,17 @@ test("Security Monitoring API Endpoints", async (t) => {
       const callArgs = queueCalls[0]!;
       assert.strictEqual(callArgs[0], "evaluate-security-monitoring");
       const jobData = callArgs[1]!;
+      const jobOptions = callArgs[2]!;
       assert.strictEqual(jobData.organizationId, orgId);
       assert.strictEqual(jobData.trigger, "MANUAL");
+      assert.strictEqual(typeof jobData.runId, "string");
+      assert.strictEqual(jobOptions.jobId, jobData.runId);
+      assert.strictEqual(jobOptions.attempts, 1);
+      const createdRun = await prisma.monitoringRun.findUniqueOrThrow({ where: { id: jobData.runId as string } });
+      assert.strictEqual(createdRun.organizationId, orgId);
+      assert.strictEqual(createdRun.status, "QUEUED");
+      assert.strictEqual(createdRun.trigger, "MANUAL");
+      assert.strictEqual(await prisma.monitoringRun.count({ where: { organizationId: orgId } }), beforeRuns + 1);
     });
 
     await st.test("defaults omitted trigger to API_REQUEST", async () => {
@@ -422,6 +432,47 @@ test("Security Monitoring API Endpoints", async (t) => {
       const callArgs = queueCalls[0]!;
       const jobData = callArgs[1]!;
       assert.strictEqual(jobData.trigger, "API_REQUEST");
+    });
+
+    await st.test("enqueue failure marks run failed without alert or evidence", async () => {
+      queueCalls = [];
+      securityMonitoringQueue.add = async (...args: Parameters<typeof securityMonitoringQueue.add>) => {
+        queueCalls.push(args);
+        throw new Error("synthetic queue failure");
+      };
+      const beforeAlerts = await prisma.securityAlert.count({ where: { organizationId: orgId } });
+      const beforeEvidence = await prisma.securityAlertEvidence.count({ where: { organizationId: orgId } });
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate",
+        headers: { cookie: sessionCookie },
+        payload: { trigger: "QUEUE_FAILURE_TEST" }
+      });
+      assert.strictEqual(res.statusCode, 503);
+      assert.strictEqual(queueCalls.length, 1);
+      const jobData = queueCalls[0]![1]!;
+      const failedRun = await prisma.monitoringRun.findUniqueOrThrow({ where: { id: jobData.runId as string } });
+      assert.strictEqual(failedRun.status, "FAILED");
+      assert.strictEqual(failedRun.errorCode, "QUEUE_ENQUEUE_FAILED");
+      assert.ok(failedRun.completedAt);
+      assert.strictEqual(await prisma.securityAlert.count({ where: { organizationId: orgId } }), beforeAlerts);
+      assert.strictEqual(await prisma.securityAlertEvidence.count({ where: { organizationId: orgId } }), beforeEvidence);
+      securityMonitoringQueue.add = originalAdd;
+    });
+
+    await st.test("duplicate active evaluation does not create another run or job", async () => {
+      queueCalls = [];
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/security-monitoring/evaluate",
+        headers: { cookie: sessionCookie },
+        payload: { trigger: "MANUAL" }
+      });
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(queueCalls.length, 0);
+      assert.strictEqual(await prisma.monitoringRun.count({
+        where: { organizationId: orgId, trigger: "MANUAL", status: { in: ["QUEUED", "RUNNING"] } }
+      }), 1);
     });
 
     await st.test("rejects unknown fields in strict request schema", async () => {
@@ -670,7 +721,8 @@ test("Security Monitoring API Endpoints", async (t) => {
         const evalRes = await app.inject({
           method: "POST",
           url: "/api/v1/security-monitoring/evaluate",
-          headers: { cookie: sessionCookie, "x-csrf-token": csrfToken }
+          headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
+          payload: { trigger: `AUTH_MATRIX_${role}` }
         });
 
         if (isMutationAllowed) {

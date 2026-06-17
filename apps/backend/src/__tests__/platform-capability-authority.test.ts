@@ -7,6 +7,7 @@ import { cloudScanQueue } from "../modules/aws-inventory/aws-inventory.queue.js"
 import { cloudAssessmentQueue } from "../modules/intelligence/assessment.queue.js";
 import { governedAwsChangeQueue } from "../modules/governance/aws-change-execution.queue.js";
 import { securityMonitoringQueue } from "../modules/security-monitoring/monitoring.queue.js";
+import { collectQueueHealth, type QueueHealthHandle } from "../routes/platform-core.routes.js";
 
 type Session = {
   csrfToken: string;
@@ -153,6 +154,111 @@ test("platform capability authority denies before tenant side effects", async (t
       payload: { sampleDataVisible: false }
     });
     assert.equal(allowed.statusCode, 200, allowed.body);
+  });
+
+  await t.test("operations health exposes safe bounded queue projection", async () => {
+    const denied = await app.inject({
+      method: "GET",
+      url: "/api/v1/platform/operations-health"
+    });
+    assert.equal(denied.statusCode, 401);
+
+    const ready = await app.inject({ method: "GET", url: "/ready" });
+    assert.equal(ready.statusCode, 200);
+    assert.equal(ready.json().status, "ready");
+
+    await setRole(tenantA, "OWNER");
+    const allowed = await app.inject({
+      method: "GET",
+      url: "/api/v1/platform/operations-health",
+      headers: { cookie: tenantA.sessionCookie }
+    });
+    assert.equal(allowed.statusCode, 200, allowed.body);
+    const body = allowed.json();
+    const queueNames = body.queues.map((queue: { name: string }) => queue.name).sort();
+    assert.deepEqual(queueNames, [
+      "cloud-assessment",
+      "cloud-inventory-sync",
+      "cloud-scans",
+      "governed-aws-changes",
+      "security-monitoring"
+    ].sort());
+    for (const queue of body.queues) {
+      assert.equal(typeof queue.name, "string");
+      assert.equal(["ok", "degraded"].includes(queue.status), true);
+      assert.equal("data" in queue, false);
+      assert.equal("stack" in queue, false);
+      assert.equal("connection" in queue, false);
+    }
+  });
+
+  await t.test("operations health helper degrades only one failing queue and closes handles", async () => {
+    const closed: string[] = [];
+    const queueNames = [
+      "cloud-scans",
+      "cloud-inventory-sync",
+      "cloud-assessment",
+      "governed-aws-changes",
+      "security-monitoring"
+    ];
+    const handles: QueueHealthHandle[] = queueNames.map((name) => ({
+      name,
+      close: async () => {
+        closed.push(name);
+      },
+      getJobCounts: async () => {
+        if (name === "security-monitoring") {
+          throw new Error("synthetic queue health failure");
+        }
+        return {
+          waiting: 1,
+          active: 0,
+          delayed: 0,
+          failed: 0,
+          completed: 2,
+          paused: 0
+        };
+      },
+      isPaused: async () => false,
+      getWaiting: async () => [{ timestamp: Date.now() - 1000 }]
+    }));
+
+    const health = await collectQueueHealth(handles);
+
+    assert.equal(health.redis, "degraded");
+    assert.deepEqual(health.items.map((queue) => queue.name).sort(), [...queueNames].sort());
+    const degraded = health.items.filter((queue) => queue.status === "degraded");
+    assert.equal(degraded.length, 1);
+    assert.equal(degraded[0]?.name, "security-monitoring");
+    for (const queue of health.items) {
+      assert.equal(typeof queue.name, "string");
+      assert.equal(queue.status === "ok" || queue.status === "degraded", true);
+      assert.equal("stack" in queue, false);
+      assert.equal("connection" in queue, false);
+      assert.equal("payload" in queue, false);
+      assert.equal("organizationId" in queue, false);
+      if (queue.status === "ok") {
+        assert.ok(queue.counts);
+        assert.equal(typeof queue.counts.waiting, "number");
+        assert.equal(typeof queue.counts.active, "number");
+        assert.equal(typeof queue.counts.delayed, "number");
+        assert.equal(typeof queue.counts.failed, "number");
+        assert.equal(typeof queue.counts.completed, "number");
+        assert.equal(typeof queue.counts.paused, "number");
+        assert.equal(typeof queue.paused, "boolean");
+        const oldestWaitingAgeMs = queue.oldestWaitingAgeMs;
+        assert.equal(typeof oldestWaitingAgeMs, "number");
+        if (typeof oldestWaitingAgeMs !== "number") {
+          throw new Error("Expected numeric oldest waiting age.");
+        }
+        assert.ok(oldestWaitingAgeMs >= 0);
+      } else {
+        assert.equal(queue.counts, null);
+        assert.equal(queue.paused, null);
+        assert.equal(queue.oldestWaitingAgeMs, null);
+      }
+    }
+    assert.deepEqual(closed.sort(), [...queueNames].sort());
   });
 
   await t.test("authorized cross-tenant detail lookup returns the same safe 404 as missing", async () => {
