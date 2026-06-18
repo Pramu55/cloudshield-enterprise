@@ -75,3 +75,6 @@ The custom assertions (`assert-response-contracts.mjs` and `assert-security-head
 ## Interpreting Failures
 - **Unsafe TypeScript Detected**: Ensure no `any`, `@ts-ignore`, or `as unknown as` assertions were added in the PR diff.
 - **Unexpected Tracked Files**: You committed a `.env`, key file, or the build modified a file that isn't `gitignore`d.
+
+## History
+- The first GitHub Actions runtime run exposed and corrected an undeclared direct package dependency (`zod`) within the `@cloudshield/database` workspace, validating the strict isolation of the CI environment.
