@@ -6,7 +6,8 @@ import {
   CLOUD_INVENTORY_SYNC_QUEUE_NAME,
   CLOUD_SCAN_QUEUE_NAME,
   GOVERNED_AWS_CHANGE_QUEUE_NAME,
-  SECURITY_MONITORING_QUEUE_NAME
+  SECURITY_MONITORING_QUEUE_NAME,
+  PlatformOperationsHealthResponseSchema
 } from "@cloudshield/contracts";
 import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
@@ -279,8 +280,32 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
         take: 10
       })
     ]);
+    const FailedRegionArraySchema = z.array(z.object({
+      region: z.string(),
+      failureClassification: z.string().nullable().optional()
+    }));
+
+    function getSafeFailureClassification(rawClassification: unknown) {
+      if (typeof rawClassification === "string") {
+        if (rawClassification === "NETWORK_UNREACHABLE") return "NETWORK_UNREACHABLE";
+        if (rawClassification === "AUTH_FAILED") return "AUTH_FAILED";
+        if (rawClassification === "PERMISSION_DENIED") return "PERMISSION_DENIED";
+        if (rawClassification === "RATE_LIMITED") return "RATE_LIMITED";
+      }
+      return "UNKNOWN_SAFE_CLASSIFICATION" as const;
+    }
+
+    const safeRecentFailures = recentRegionFailures.map(scan => {
+      const parsedRegions = FailedRegionArraySchema.safeParse(scan.failedRegions);
+      const regions = parsedRegions.success ? parsedRegions.data : [];
+      return {
+        ...scan,
+        regions
+      };
+    });
+
     const configuredRegions = new Set(accounts.flatMap((account) => account.regions));
-    return {
+    const responsePayload = {
       api: "ok",
       database: "configured",
       redis: queues.redis,
@@ -298,24 +323,32 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
           blockedAccounts: accounts.filter((account) => account.archivedAt || account.connectionStatus === "DISABLED" || account.status === "AUTH_FAILED").length,
           configuredRegions: configuredRegions.size
         },
-        regionFailures: recentRegionFailures.flatMap((scan) =>
-          Array.isArray(scan.failedRegions)
-            ? (scan.failedRegions as any[]).map((failure) => ({
-                scanRunId: scan.id,
-                awsAccountId: scan.awsAccountId,
-                region: failure.region,
-                failureClassification: failure.failureClassification ?? scan.failureClassification,
-                completedAt: scan.completedAt?.toISOString() ?? null
-              }))
-            : []
-        )
+        regionFailureSummary: {
+          totalFailures: safeRecentFailures.reduce((acc, scan) => acc + scan.regions.length, 0),
+          affectedRegionCount: new Set(safeRecentFailures.flatMap((scan) => scan.regions.map((f) => f.region))).size,
+          classifications: Array.from(new Set(safeRecentFailures.flatMap((scan) => scan.regions.map((f) => {
+            return getSafeFailureClassification(f.failureClassification ?? scan.failureClassification);
+          }))))
+        }
       },
-      lastSuccessfulScan: lastSuccessfulScan ? { id: lastSuccessfulScan.id, completedAt: lastSuccessfulScan.completedAt?.toISOString() ?? null } : null,
-      lastFailedScan: lastFailedScan ? { id: lastFailedScan.id, failureClassification: lastFailedScan.failureClassification ?? lastFailedScan.errorCode, completedAt: lastFailedScan.completedAt?.toISOString() ?? null } : null,
+      lastSuccessfulScanAt: lastSuccessfulScan?.completedAt?.toISOString() ?? null,
+      lastFailedScanAt: lastFailedScan?.completedAt?.toISOString() ?? null,
+      lastFailureClassification: lastFailedScan ? getSafeFailureClassification(lastFailedScan.failureClassification ?? lastFailedScan.errorCode) : null,
       executionMode: app.config.AWS_CHANGE_EXECUTION_MODE,
       scannerMode: app.config.AWS_INVENTORY_SCANNER_MODE,
-      ...PLATFORM_CORE_SAFETY_FLAGS
-    };
+      awsApiCallExecuted: false,
+      scannerRun: false,
+      mutationExecuted: false,
+      terraformApplyExecuted: false,
+      automaticRemediationExecuted: false
+    } as const;
+
+    try {
+      return PlatformOperationsHealthResponseSchema.parse(responsePayload);
+    } catch {
+      app.log.error("OPERATIONS_HEALTH_CONTRACT_INVALID");
+      throw new Error("Unexpected backend error");
+    }
   });
 }
 
