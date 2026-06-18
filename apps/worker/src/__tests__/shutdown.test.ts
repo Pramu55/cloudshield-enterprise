@@ -53,6 +53,7 @@ test("worker shutdown executes once for repeated signal handlers", async () => {
 test("worker shutdown reports timeout progress without claiming success", async () => {
   const calls: string[] = [];
   let releaseBlockedClose: () => void = () => {};
+  let releaseBlockedCloseTimer: ReturnType<typeof setTimeout> | undefined;
   let markCloseSequenceComplete: () => void = () => {};
 
   const blockedClose = new Promise<void>((resolve) => {
@@ -64,6 +65,8 @@ test("worker shutdown reports timeout progress without claiming success", async 
   });
 
   try {
+    releaseBlockedCloseTimer = setTimeout(releaseBlockedClose, 25);
+
     const result = await shutdownWorkerRuntime({
       stopTimers: () => calls.push("timers"),
       workers: [{
@@ -87,6 +90,7 @@ test("worker shutdown reports timeout progress without claiming success", async 
     assert.deepEqual(result.closedWorkers, ["closed-worker"]);
     assert.equal(result.prismaDisconnected, false);
   } finally {
+    if (releaseBlockedCloseTimer) clearTimeout(releaseBlockedCloseTimer);
     releaseBlockedClose();
     await closeSequenceComplete;
   }
