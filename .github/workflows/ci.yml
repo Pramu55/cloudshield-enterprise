@@ -105,6 +105,13 @@ jobs:
           pnpm --filter @cloudshield/database typecheck
           pnpm --filter @cloudshield/database build
 
+      - name: Validate Security Monitoring
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/security-monitoring typecheck
+          pnpm --filter @cloudshield/security-monitoring build
+          pnpm --filter @cloudshield/security-monitoring test
+
       - name: Validate Backend
         run: |
           set -euo pipefail
