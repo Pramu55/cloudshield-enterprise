@@ -112,6 +112,24 @@ jobs:
           pnpm --filter @cloudshield/security-monitoring build
           pnpm --filter @cloudshield/security-monitoring test
 
+      - name: Validate Config
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/config typecheck
+          pnpm --filter @cloudshield/config build
+
+      - name: Validate Logger
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/logger typecheck
+          pnpm --filter @cloudshield/logger build
+
+      - name: Validate Utils
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/utils typecheck
+          pnpm --filter @cloudshield/utils build
+
       - name: Validate Backend
         run: |
           set -euo pipefail

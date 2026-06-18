@@ -79,3 +79,4 @@ The custom assertions (`assert-response-contracts.mjs` and `assert-security-head
 ## History
 - The first GitHub Actions runtime run exposed and corrected an undeclared direct package dependency (`zod`) within the `@cloudshield/database` workspace, validating the strict isolation of the CI environment.
 - The second runtime CI run exposed that `@cloudshield/security-monitoring` used a dist-only types entry and was omitted from the workflow validation sequence. The correction aligned its types entry with workspace source resolution and added security-monitoring validation before backend validation.
+- The third runtime CI run exposed that backend tests execute compiled JavaScript and require built runtime outputs for internal workspace dependencies. The correction added config, logger, and utils validation before backend validation so clean CI no longer relies on stale local dist artifacts.
