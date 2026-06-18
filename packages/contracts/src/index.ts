@@ -2230,3 +2230,71 @@ export const InventorySyncResponseSchema = z.union([
   InventoryUnsupportedScannerResponseSchema
 ]);
 export type InventorySyncResponse = z.infer<typeof InventorySyncResponseSchema>;
+
+export const PlatformOperationsHealthResponseSchema = z.object({
+  api: z.literal("ok"),
+  database: z.literal("configured"),
+  redis: z.enum(["reachable", "degraded"]),
+  workerHeartbeat: z.literal("queue-counts-available"),
+  queues: z.array(z.object({
+    name: z.enum([
+      "cloud-scans",
+      "cloud-inventory-sync",
+      "cloud-assessment",
+      "governed-aws-changes",
+      "security-monitoring"
+    ]),
+    status: z.enum(["ok", "degraded"]),
+    counts: z.object({
+      waiting: z.number().int().nonnegative(),
+      active: z.number().int().nonnegative(),
+      delayed: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      completed: z.number().int().nonnegative(),
+      paused: z.number().int().nonnegative()
+    }).nullable(),
+    paused: z.boolean().nullable(),
+    oldestWaitingAgeMs: z.number().int().nonnegative().nullable()
+  })),
+  inventoryScans: z.object({
+    active: z.number().int().nonnegative(),
+    queued: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    partial: z.number().int().nonnegative(),
+    staleResources: z.number().int().nonnegative(),
+    accountCoverageSummary: z.object({
+      registeredAccounts: z.number().int().nonnegative(),
+      connectedAccounts: z.number().int().nonnegative(),
+      blockedAccounts: z.number().int().nonnegative(),
+      configuredRegions: z.number().int().nonnegative()
+    }),
+    regionFailureSummary: z.object({
+      totalFailures: z.number().int().nonnegative(),
+      affectedRegionCount: z.number().int().nonnegative(),
+      classifications: z.array(z.enum([
+        "NETWORK_UNREACHABLE",
+        "AUTH_FAILED",
+        "PERMISSION_DENIED",
+        "RATE_LIMITED",
+        "UNKNOWN_SAFE_CLASSIFICATION"
+      ]))
+    })
+  }),
+  lastSuccessfulScanAt: z.string().datetime().nullable(),
+  lastFailedScanAt: z.string().datetime().nullable(),
+  lastFailureClassification: z.enum([
+    "NETWORK_UNREACHABLE",
+    "AUTH_FAILED",
+    "PERMISSION_DENIED",
+    "RATE_LIMITED",
+    "UNKNOWN_SAFE_CLASSIFICATION"
+  ]).nullable(),
+  executionMode: AwsChangeExecutionModeSchema,
+  scannerMode: AwsInventoryScannerModeSchema,
+  awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false)
+}).strict();
+export type PlatformOperationsHealthResponse = z.infer<typeof PlatformOperationsHealthResponseSchema>;

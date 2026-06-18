@@ -389,6 +389,6 @@ The following response headers are applied to all page responses served by the N
 *   **Session Cookies**: The `cloudshield_session` and `_csrf` cookies are configured as `HttpOnly`, with `SameSite=lax` and `Path=/`.
 *   **Secure flag**: The `Secure` flag is enabled only in environment configurations where `AUTH_COOKIE_SECURE === "true"` (standard for production). Over local HTTP development connections, the secure flag is omitted to preserve session persistence.
 
-### Failed-Login Auditing Deferral
+### Security-Event Logging Deferral
 
-*   Failed-login database logging is deferred because the `AuditEvent` schema requires a valid, authoritative `organizationId`. A non-existent account has no tenant mapping, and creating dummy tenant associations would create audit ambiguity. Furthermore, storing a row per failed login attempt creates storage abuse/spam risks. Security telemetry should be handled in a dedicated future logging infrastructure.
+*   Security-event logging (including failed logins and rate-limit rejections) is deferred to future scope as the backend currently lacks a single centralized hook that can distinguish authentic authentication events from rate-limiter rejections without violating timing constraints or leaking PII. Failed-login database logging is also deferred because the `AuditEvent` schema requires a valid, authoritative `organizationId`. A non-existent account has no tenant mapping, and creating dummy tenant associations would create audit ambiguity. Furthermore, storing a row per failed login attempt creates storage abuse/spam risks. Security telemetry should be handled in a dedicated future logging infrastructure.
