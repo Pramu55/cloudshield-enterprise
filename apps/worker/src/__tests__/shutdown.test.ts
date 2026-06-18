@@ -52,26 +52,37 @@ test("worker shutdown executes once for repeated signal handlers", async () => {
 
 test("worker shutdown reports timeout progress without claiming success", async () => {
   const calls: string[] = [];
-  const result = await shutdownWorkerRuntime({
-    stopTimers: () => calls.push("timers"),
-    workers: [{
-      name: "closed-worker",
-      close: async () => {
-        calls.push("closed-worker");
-      }
-    }, {
-      name: "blocked-worker",
-      close: () => new Promise(() => {})
-    }],
-    queues: [],
-    disconnectPrisma: async () => {},
-    timeoutMs: 5
+  let releaseBlockedClose: () => void = () => {};
+
+  const blockedClose = new Promise<void>((resolve) => {
+    releaseBlockedClose = resolve;
   });
 
-  assert.equal(result.ok, false);
-  assert.equal(result.timedOut, true);
-  assert.deepEqual(result.closedWorkers, ["closed-worker"]);
-  assert.equal(result.prismaDisconnected, false);
+  try {
+    const result = await shutdownWorkerRuntime({
+      stopTimers: () => calls.push("timers"),
+      workers: [{
+        name: "closed-worker",
+        close: async () => {
+          calls.push("closed-worker");
+        }
+      }, {
+        name: "blocked-worker",
+        close: () => blockedClose
+      }],
+      queues: [],
+      disconnectPrisma: async () => {},
+      timeoutMs: 5
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.timedOut, true);
+    assert.deepEqual(result.closedWorkers, ["closed-worker"]);
+    assert.equal(result.prismaDisconnected, false);
+  } finally {
+    releaseBlockedClose();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 });
 
 test("worker shutdown cleans up partially initialized runtime", async () => {
