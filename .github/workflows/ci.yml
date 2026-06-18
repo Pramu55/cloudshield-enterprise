@@ -1,0 +1,242 @@
+name: CI Validation Foundation
+
+on:
+  pull_request:
+    branches:
+      - feat/real-aws-live-sandbox-operations
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validation Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: cloudshield_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U test -d cloudshield_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      CI: "true"
+      DATABASE_URL: postgresql://test:test@localhost:5432/cloudshield_test
+      TEST_DATABASE_URL: postgresql://test:test@localhost:5432/cloudshield_test
+      REDIS_URL: redis://localhost:6379
+      ALLOW_INTEGRATION_TEST_DATABASE: "true"
+      DISABLE_QUEUE_CONNECTIONS_FOR_TESTS: "true"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@9.15.4 --activate
+          pnpm --version
+
+      - name: Install Dependencies
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+
+      - name: Verify Lockfile and Manifest Safety
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- package.json pnpm-lock.yaml
+
+      - name: Generate and Deploy Prisma
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/database prisma:generate
+          pnpm --filter @cloudshield/database prisma:deploy
+
+      - name: Validate Contracts
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/contracts typecheck
+          pnpm --filter @cloudshield/contracts build
+
+      - name: Validate Security
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/security typecheck
+          pnpm --filter @cloudshield/security build
+
+      - name: Validate Database
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/database typecheck
+          pnpm --filter @cloudshield/database build
+
+      - name: Validate Backend
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/backend typecheck
+          pnpm --filter @cloudshield/backend build
+          pnpm --filter @cloudshield/backend test
+        env:
+          NODE_ENV: test
+
+      - name: Validate Worker
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/worker typecheck
+          pnpm --filter @cloudshield/worker build
+          pnpm --filter @cloudshield/worker test
+        env:
+          NODE_ENV: test
+
+      - name: Validate Frontend
+        run: |
+          set -euo pipefail
+          pnpm --filter @cloudshield/frontend typecheck
+          pnpm --filter @cloudshield/frontend build
+        env:
+          NODE_ENV: production
+
+      - name: Assert Response Contracts
+        run: |
+          set -euo pipefail
+          node apps/frontend/scripts/assert-response-contracts.mjs
+        env:
+          NODE_ENV: production
+
+      - name: Assert Security Headers
+        run: |
+          set -euo pipefail
+          node apps/frontend/scripts/assert-security-headers.mjs
+        env:
+          NODE_ENV: production
+
+      - name: Validate Whitespace
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            git diff --check origin/${{ github.base_ref }}...HEAD
+          else
+            if git rev-parse HEAD^ >/dev/null 2>&1; then
+              git diff --check HEAD^ HEAD
+            else
+              echo "Skipping manual diff check, no parent commit exists."
+            fi
+          fi
+
+      - name: Scan Unsafe TypeScript Added Lines
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base_ref="origin/${{ github.base_ref }}"
+
+          added_lines="$(
+            git diff --unified=0 "${base_ref}...HEAD" -- \
+              '*.ts' \
+              '*.tsx' \
+              '*.js' \
+              '*.jsx' \
+              '*.mjs' \
+              '*.cjs' |
+            awk '
+              /^\+\+\+/ { next }
+              /^\+/ { print }
+            '
+          )"
+
+          unsafe_lines="$(
+            printf '%s\n' "$added_lines" |
+            grep -E '(:[[:space:]]*any([^[:alnum:]_]|$)|as[[:space:]]+any([^[:alnum:]_]|$)|as[[:space:]]+unknown[[:space:]]+as|@ts-ignore|@ts-expect-error)' ||
+            true
+          )"
+
+          if [ -n "$unsafe_lines" ]; then
+            echo "Unsafe TypeScript patterns were introduced:"
+            printf '%s\n' "$unsafe_lines"
+            exit 1
+          fi
+
+          echo "No unsafe TypeScript patterns were introduced."
+
+      - name: Secret File Safety Check
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base_ref="origin/${{ github.base_ref }}"
+          risky_files=""
+
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+
+            name="$(basename "$path")"
+            lower_name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+
+            case "$lower_name" in
+              .env.example|.env.test.example|.env.local.example)
+                continue
+                ;;
+              .env|.env.*|*.pem|*.key|id_rsa|id_rsa.*|credentials|credentials.*|*-credentials|*-credentials.*)
+                risky_files="${risky_files}${path}"$'\n'
+                ;;
+            esac
+          done < <(
+            git diff \
+              --name-only \
+              --diff-filter=A \
+              "${base_ref}...HEAD"
+          )
+
+          if [ -n "$risky_files" ]; then
+            echo "Risky filenames were introduced:"
+            printf '%s' "$risky_files"
+            exit 1
+          fi
+
+          echo "No risky filenames were introduced."
+
+      - name: Repository Cleanliness Check
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Error: Unexpected tracked or untracked files produced."
+            git status --porcelain
+            exit 1
+          fi
