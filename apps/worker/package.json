@@ -21,7 +21,8 @@
     "@cloudshield/logger": "workspace:*",
     "@cloudshield/security-monitoring": "workspace:*",
     "@cloudshield/utils": "workspace:*",
-    "bullmq": "^5.34.2"
+    "bullmq": "^5.34.2",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
