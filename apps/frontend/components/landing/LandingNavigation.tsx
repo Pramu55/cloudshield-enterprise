@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { ShieldCheck, Menu } from "lucide-react";
@@ -16,33 +16,30 @@ export function LandingNavigation() {
   }, []);
 
   return (
-    <nav className={`premium-nav sticky top-0 z-50 flex items-center justify-between transition-all duration-200 ${scrolled ? "bg-[#020617]/90 backdrop-blur-md border-b border-slate-800" : "bg-transparent"}`} aria-label="Primary navigation">
-      <div className="flex items-center w-1/3">
-        <Link href="/" className="premium-brand flex items-center gap-3 text-white no-underline">
-          <span className="grid place-items-center w-9 h-9 rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 text-orange-500">
-            <ShieldCheck size={18} />
-          </span>
-          <strong className="text-xl tracking-tight font-extrabold text-white">CloudShield</strong>
-        </Link>
-      </div>
-      
-      <div className="premium-nav-links hidden md:flex items-center justify-center w-1/3 gap-8">
-        <a href="#platform" className="text-sm font-semibold text-slate-300 hover:text-white transition-colors">Platform</a>
-        <a href="#security" className="text-sm font-semibold text-slate-300 hover:text-white transition-colors">Security</a>
-        <a href="#governance" className="text-sm font-semibold text-slate-300 hover:text-white transition-colors">Governance</a>
-        <a href="#compliance" className="text-sm font-semibold text-slate-300 hover:text-white transition-colors">Compliance</a>
+    <nav className={`premium-nav ${scrolled ? "scrolled" : ""}`} aria-label="Primary navigation">
+      <Link href="/" className="premium-brand" style={{ display: "flex", alignItems: "center", gap: "10px", color: "#fff", textDecoration: "none" }}>
+        <span style={{ display: "grid", placeItems: "center", width: "34px", height: "34px", borderRadius: "8px", background: "linear-gradient(135deg, #1e293b, #0f172a)", border: "1px solid rgba(255,255,255,0.1)", color: "#ec7211" }}>
+          <ShieldCheck size={18} />
+        </span>
+        <strong style={{ fontSize: "18px", letterSpacing: "-0.02em" }}>CloudShield</strong>
+      </Link>
+
+      <div className="premium-nav-links">
+        <a href="#platform" className="premium-nav-link">Platform</a>
+        <a href="#security" className="premium-nav-link">Security</a>
+        <a href="#governance" className="premium-nav-link">Governance</a>
+        <a href="#compliance" className="premium-nav-link">Compliance</a>
+        <a href="#architecture" className="premium-nav-link">Architecture</a>
       </div>
 
-      <div className="premium-nav-actions flex items-center justify-end w-1/3 gap-4">
-        <div className="hidden sm:flex items-center gap-3">
-          <Link href="/login" className="px-4 py-2 rounded-lg font-bold text-sm text-slate-200 border border-slate-600 hover:border-slate-400 hover:text-white transition-colors">
-            Sign in
-          </Link>
-          <Link href="/register" className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(234,88,12,0.3)] transition-colors border border-orange-500">
-            Create workspace
-          </Link>
+      <div style={{ display: "flex", alignItems: "center", gap: "16px" }} className="premium-nav-actions">
+        <Link href="/login" className="premium-nav-link" style={{ display: "none" /* mobile */ }}>Sign in</Link>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <Link href="/login" className="premium-btn-secondary" style={{ display: "none" }}>Open console</Link>
+          <Link href="/login" className="premium-nav-link">Sign in</Link>
+          <Link href="/register" className="premium-btn-primary">Create workspace</Link>
         </div>
-        <button className="md:hidden bg-transparent border-none text-white p-2">
+        <button className="premium-mobile-menu-btn" style={{ background: "transparent", border: "none", color: "#fff", display: "none" }}>
           <Menu size={24} />
         </button>
       </div>

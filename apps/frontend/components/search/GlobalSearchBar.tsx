@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -6,7 +6,6 @@ import { Search, Loader2, X, Command } from "lucide-react";
 import { GlobalSearchResponse, GlobalSearchResult } from "@cloudshield/contracts";
 import { fetchCloudShieldClient } from "../../lib/client-api";
 import { GlobalSearchDropdown } from "./GlobalSearchDropdown";
-import { ROUTE_REGISTRY } from "../../lib/route-registry";
 
 interface SearchRecentItem {
   id: string;
@@ -54,52 +53,10 @@ export function GlobalSearchBar() {
     localStorage.removeItem("cloudshield.search.recent");
   }, []);
 
-  const staticAliases = useMemo(() => {
-    if (!query || query.trim().length < 2) return [];
-    const qLower = query.toLowerCase();
-
-    const ALIASES = ROUTE_REGISTRY.map(item => ({
-      id: item.id,
-      type: "alias",
-      title: item.label,
-      subtitle: `Platform > ${item.category}`,
-      href: item.href,
-      keywords: [item.label.toLowerCase(), item.category.toLowerCase(), ...(item.keywords || [])]
-    }));
-
-    return ALIASES.filter(a => a.keywords.some(k => k.includes(qLower)) || a.title.toLowerCase().includes(qLower));
-  }, [query]);
-
-  const enhancedResponse = useMemo(() => {
-    if (!response || response.query !== query) {
-      if (loading) return null;
-      if (staticAliases.length > 0) {
-        return {
-          query,
-          total: staticAliases.length,
-          generatedAt: new Date().toISOString(),
-          groups: [{ type: "navigation", label: "Quick Navigation", results: staticAliases, hasMore: false }]
-        } as unknown as GlobalSearchResponse;
-      }
-      return null;
-    }
-
-    if (staticAliases.length === 0) return response;
-
-    return {
-      ...response,
-      total: response.total + staticAliases.length,
-      groups: [
-        { type: "navigation", label: "Quick Navigation", results: staticAliases, hasMore: false },
-        ...response.groups
-      ]
-    } as unknown as GlobalSearchResponse;
-  }, [response, query, staticAliases, loading]);
-
   const flatResults = useMemo(() => {
-    if (!enhancedResponse) return [];
-    return enhancedResponse.groups.flatMap(g => g.results);
-  }, [enhancedResponse]);
+    if (!response || response.query !== query) return [];
+    return response.groups.flatMap(g => g.results);
+  }, [response, query]);
 
   // Handle global shortcuts
   useEffect(() => {
@@ -168,7 +125,8 @@ export function GlobalSearchBar() {
         if (err.name === "AbortError") {
           return;
         }
-        setError(err instanceof Error ? err.message : "Search is temporarily unavailable.");
+        setError(err.message || "Failed to search");
+        console.error("Search API Error:", err);
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -229,23 +187,22 @@ export function GlobalSearchBar() {
   const activeDescendant = open && flatResults.length > 0 ? `search-result-${selectedIndex}` : undefined;
 
   return (
-    <div 
-      ref={wrapperRef} 
+    <div
+      ref={wrapperRef}
       className="relative flex-1 max-w-[680px] w-full mx-4 hidden sm:block z-50"
     >
-      <div 
-        className={`relative flex items-center w-full h-10 border transition-all duration-200 rounded-md overflow-hidden bg-white shadow-sm ${
+      <div
+        className={`relative flex items-center w-full h-9 bg-slate-100/80 dark:bg-slate-900/50 border transition-all duration-200 rounded-md overflow-hidden ${
           open
-            ? "border-blue-500 ring-1 ring-blue-500/20"
-            : "border-slate-200 hover:border-slate-300"
+            ? "border-cyan-500/50 dark:border-cyan-500/50 ring-1 ring-cyan-500/20 shadow-sm bg-white dark:bg-slate-900"
+            : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
         }`}
       >
-        <div className="pl-3 pr-2 flex items-center justify-center text-slate-700">
+        <div className="pl-3 pr-2 flex items-center justify-center text-slate-400 dark:text-slate-500">
           <Search size={16} />
         </div>
 
         <input
-          id="global-search-input"
           ref={inputRef}
           type="text"
           role="combobox"
@@ -253,8 +210,8 @@ export function GlobalSearchBar() {
           aria-controls="search-results-listbox"
           aria-autocomplete="list"
           aria-activedescendant={activeDescendant}
-          className="flex-1 w-full bg-transparent border-none outline-none text-sm text-slate-900 placeholder-slate-500 py-2"
-          placeholder="Search accounts, resources, findings, scans, reports, teams…"
+          className="flex-1 w-full bg-transparent border-none outline-none text-sm text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 py-1.5"
+          placeholder="Search accounts, resources, findings, scans, reports, teamsâ€¦"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -269,13 +226,13 @@ export function GlobalSearchBar() {
           {loading && <Loader2 size={14} className="text-cyan-500 animate-spin mr-1" />}
 
           {query && !loading && (
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => {
                 setQuery("");
                 inputRef.current?.focus();
               }}
-              className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
               aria-label="Clear search"
             >
               <X size={14} />
@@ -283,7 +240,7 @@ export function GlobalSearchBar() {
           )}
 
           {!query && !open && (
-            <kbd className="hidden lg:flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 border border-slate-200 rounded bg-white">
+            <kbd className="hidden lg:flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 rounded bg-white dark:bg-slate-950">
               <Command size={10} />K
             </kbd>
           )}
@@ -291,14 +248,13 @@ export function GlobalSearchBar() {
       </div>
 
       {open && (
-        <div className="absolute top-[calc(100%+8px)] left-0 right-0 bg-white border border-slate-200 rounded-md shadow-xl overflow-hidden max-h-[70vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-200 origin-top">
-
-...          <div className="overflow-y-auto overscroll-contain flex-1 custom-scrollbar">
+        <div className="absolute top-[calc(100%+8px)] left-0 right-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md shadow-xl overflow-hidden max-h-[70vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-200 origin-top">
+          <div className="overflow-y-auto overscroll-contain flex-1 custom-scrollbar">
             <GlobalSearchDropdown
               query={query}
               loading={loading}
               error={error}
-              response={enhancedResponse}
+              response={response}
               recent={recent}
               selectedIndex={selectedIndex}
               flatResults={flatResults}
