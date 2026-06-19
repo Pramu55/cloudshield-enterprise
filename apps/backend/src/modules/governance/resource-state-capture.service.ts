@@ -185,7 +185,21 @@ export async function captureGovernedEc2ResourceState(
           evidenceSnapshot: { ...snapshot, resourceStateCapture: captureMetadata }
         }
       });
-      if (update.count !== 1) throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_CONFLICT", true, providerRequestId);
+      if (update.count !== 1) {
+        const latest = await tx.approvalRequest.findFirst({
+          where: { id: approval.id, organizationId: actor.organizationId, remediationPlanId: plan.id }
+        });
+        if (
+          latest &&
+          latest.status === "PENDING" &&
+          (!latest.expiresAt || latest.expiresAt >= now) &&
+          latest.resourceStateFingerprint &&
+          isSameCapture(latest, fingerprint, evidence, captureMetadata)
+        ) {
+          return { approval: latest, idempotent: true };
+        }
+        throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_CONFLICT", true, providerRequestId);
+      }
       await auditCapture(tx, actor, plan.id, approval.id, "governance.resource_state.capture_succeeded", correlationId, {
         ...captureMetadata,
         awsApiCallExecuted: true

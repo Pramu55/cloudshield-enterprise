@@ -52,26 +52,53 @@ test("worker shutdown executes once for repeated signal handlers", async () => {
 
 test("worker shutdown reports timeout progress without claiming success", async () => {
   const calls: string[] = [];
-  const result = await shutdownWorkerRuntime({
-    stopTimers: () => calls.push("timers"),
-    workers: [{
-      name: "closed-worker",
-      close: async () => {
-        calls.push("closed-worker");
-      }
-    }, {
-      name: "blocked-worker",
-      close: () => new Promise(() => {})
-    }],
-    queues: [],
-    disconnectPrisma: async () => {},
-    timeoutMs: 5
+  let releaseBlockedClose: () => void = () => {};
+  let markCloseSequenceComplete: () => void = () => {};
+
+  const blockedClose = new Promise<void>((resolve) => {
+    releaseBlockedClose = resolve;
   });
 
-  assert.equal(result.ok, false);
-  assert.equal(result.timedOut, true);
-  assert.deepEqual(result.closedWorkers, ["closed-worker"]);
-  assert.equal(result.prismaDisconnected, false);
+  const closeSequenceComplete = new Promise<void>((resolve) => {
+    markCloseSequenceComplete = resolve;
+  });
+
+  let guardTimeout!: ReturnType<typeof setTimeout>;
+  const guardPromise = new Promise<any>((_, reject) => {
+    guardTimeout = setTimeout(() => reject(new Error("guard timeout")), 100);
+  });
+
+  try {
+    const result = await Promise.race([
+      shutdownWorkerRuntime({
+        stopTimers: () => calls.push("timers"),
+        workers: [{
+          name: "closed-worker",
+          close: async () => {
+            calls.push("closed-worker");
+          }
+        }, {
+          name: "blocked-worker",
+          close: () => blockedClose
+        }],
+        queues: [],
+        disconnectPrisma: async () => {
+          markCloseSequenceComplete();
+        },
+        timeoutMs: 5
+      }),
+      guardPromise
+    ]);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.timedOut, true);
+    assert.deepEqual(result.closedWorkers, ["closed-worker"]);
+    assert.equal(result.prismaDisconnected, false);
+  } finally {
+    clearTimeout(guardTimeout);
+    releaseBlockedClose();
+    await closeSequenceComplete;
+  }
 });
 
 test("worker shutdown cleans up partially initialized runtime", async () => {
@@ -118,19 +145,31 @@ test("worker shutdown consumes late close rejection after timeout", async () => 
     rejectLate = () => reject(new Error("synthetic late close failure"));
   });
 
-  const result = await shutdownWorkerRuntime({
-    stopTimers: () => {},
-    workers: [{
-      name: "late-worker",
-      close: () => lateFailure
-    }],
-    queues: [],
-    disconnectPrisma: async () => {},
-    timeoutMs: 5
+  let guardTimeout!: ReturnType<typeof setTimeout>;
+  const guardPromise = new Promise<any>((_, reject) => {
+    guardTimeout = setTimeout(() => reject(new Error("guard timeout")), 100);
   });
 
-  assert.equal(result.ok, false);
-  assert.equal(result.timedOut, true);
-  rejectLate();
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  try {
+    const result = await Promise.race([
+      shutdownWorkerRuntime({
+        stopTimers: () => {},
+        workers: [{
+          name: "late-worker",
+          close: () => lateFailure
+        }],
+        queues: [],
+        disconnectPrisma: async () => {},
+        timeoutMs: 5
+      }),
+      guardPromise
+    ]);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.timedOut, true);
+  } finally {
+    clearTimeout(guardTimeout);
+    rejectLate();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 });
