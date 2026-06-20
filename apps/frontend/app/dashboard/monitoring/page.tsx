@@ -157,6 +157,19 @@ export default function SecurityMonitoringPage() {
 
     return (
       <div className="space-y-6">
+        {["SETUP_INCOMPLETE", "INSUFFICIENT_DATA", "DISABLED"].includes(health.status) ? (
+          <section className="cs-setup-callout">
+            <div>
+              <span>Monitoring prerequisites</span>
+              <h2>Security Monitoring needs registered inventory before it can evaluate posture</h2>
+              <p>Register a non-production AWS account, validate its role-based identity, and explicitly enable approved read-only inventory mode. No AWS call or mutation is performed from this setup message.</p>
+            </div>
+            <div className="cs-action-grid">
+              <Link className="cs-action-primary" href="/dashboard/accounts">Review AWS accounts</Link>
+              <Link className="cs-link" href="/dashboard/settings">Open safe settings</Link>
+            </div>
+          </section>
+        ) : null}
         <div className={`border rounded-xl p-6 ${getHealthColor(health.status)}`}>
           <div className="flex items-center gap-4">
             <div className="p-3 bg-white rounded-xl shadow-sm">
@@ -320,8 +333,8 @@ export default function SecurityMonitoringPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="monitoring-workspace p-6 max-w-7xl mx-auto space-y-6">
+      <div className="monitoring-command-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Security Monitoring</h1>
           <p className="text-slate-500 text-sm mt-1">On-demand deterministic evaluation of persisted AWS inventory and compliance posture.</p>
@@ -350,8 +363,8 @@ export default function SecurityMonitoringPage() {
         <ErrorState title="Action not completed" message={actionError.safeMessage} correlationId={actionError.correlationId} />
       ) : null}
 
-      <div className="border-b border-slate-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="monitoring-tabs-shell border-b border-slate-200">
+        <nav className="monitoring-tabs -mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab("overview")}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${

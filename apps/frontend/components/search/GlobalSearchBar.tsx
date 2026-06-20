@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, X, Command } from "lucide-react";
 import { GlobalSearchResponse, GlobalSearchResult } from "@cloudshield/contracts";
 import { fetchCloudShieldClient } from "../../lib/client-api";
+import { toApiError } from "../../lib/api-error";
+import { ROUTE_REGISTRY } from "../../lib/route-registry";
 import { GlobalSearchDropdown } from "./GlobalSearchDropdown";
 
 interface SearchRecentItem {
@@ -53,10 +55,51 @@ export function GlobalSearchBar() {
     localStorage.removeItem("cloudshield.search.recent");
   }, []);
 
-  const flatResults = useMemo(() => {
-    if (!response || response.query !== query) return [];
-    return response.groups.flatMap(g => g.results);
-  }, [response, query]);
+  const trimmedQuery = query.trim();
+  const routeResults = useMemo<GlobalSearchResult[]>(() => {
+    if (!trimmedQuery) return [];
+    const normalized = trimmedQuery.toLowerCase();
+    return ROUTE_REGISTRY
+      .map((route) => {
+        const searchable = [route.label, route.category, route.description ?? "", ...route.keywords].map((value) => value.toLowerCase());
+        const exact = route.label.toLowerCase() === normalized;
+        const prefix = route.label.toLowerCase().startsWith(normalized);
+        const keywordMatch = searchable.some((value) => value.includes(normalized));
+        return { route, score: exact ? 0 : prefix ? 1 : keywordMatch ? 2 : 99 };
+      })
+      .filter(({ score }) => score < 99)
+      .sort((left, right) => left.score - right.score || left.route.label.localeCompare(right.route.label))
+      .slice(0, 8)
+      .map(({ route }) => ({
+        id: route.id,
+        type: "navigation",
+        title: route.label,
+        subtitle: `${route.category} · ${route.description ?? "CloudShield workspace"}`,
+        href: route.href
+      }));
+  }, [trimmedQuery]);
+
+  const enhancedResponse = useMemo<GlobalSearchResponse | null>(() => {
+    const backendResponse = response?.query === trimmedQuery ? response : null;
+    const backendGroups = backendResponse?.groups.filter((group) => group.type !== "alias" && group.type !== "navigation") ?? [];
+    if (!routeResults.length && !backendResponse) return null;
+    return {
+      query: trimmedQuery,
+      generatedAt: backendResponse?.generatedAt ?? new Date().toISOString(),
+      total: routeResults.length + backendGroups.reduce((total, group) => total + group.results.length, 0),
+      groups: [
+        ...(routeResults.length ? [{
+          type: "navigation" as const,
+          label: "Platform modules",
+          results: routeResults,
+          hasMore: false
+        }] : []),
+        ...backendGroups
+      ]
+    };
+  }, [response, routeResults, trimmedQuery]);
+
+  const flatResults = useMemo(() => enhancedResponse?.groups.flatMap((group) => group.results) ?? [], [enhancedResponse]);
 
   // Handle global shortcuts
   useEffect(() => {
@@ -93,7 +136,7 @@ export function GlobalSearchBar() {
 
     if (!open) return;
 
-    if (query.trim().length < 2) {
+    if (trimmedQuery.length < 2) {
       setLoading(false);
       setError(null);
       setSelectedIndex(0);
@@ -108,7 +151,7 @@ export function GlobalSearchBar() {
     debounceTimerRef.current = setTimeout(async () => {
       try {
         const data = await fetchCloudShieldClient<GlobalSearchResponse>(
-          `/api/v1/search?q=${encodeURIComponent(query.trim())}`,
+          `/api/v1/search?q=${encodeURIComponent(trimmedQuery)}`,
           { signal: controller.signal }
         );
 
@@ -118,15 +161,13 @@ export function GlobalSearchBar() {
           setSelectedIndex(0);
           setError(null);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") {
           return;
         }
-        if (err.name === "AbortError") {
-          return;
-        }
-        setError(err.message || "Failed to search");
-        console.error("Search API Error:", err);
+        const normalized = toApiError(err);
+        if (normalized.kind === "CANCELLED") return;
+        setError(normalized.safeMessage);
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -138,7 +179,7 @@ export function GlobalSearchBar() {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [query, open]);
+  }, [trimmedQuery, open]);
 
   const handleSelectResult = (item: GlobalSearchResult | SearchRecentItem) => {
     saveRecent(item);
@@ -189,16 +230,16 @@ export function GlobalSearchBar() {
   return (
     <div
       ref={wrapperRef}
-      className="relative flex-1 max-w-[680px] w-full mx-4 hidden sm:block z-50"
+      className="global-search relative flex-1 max-w-[680px] w-full mx-4 hidden sm:block z-50"
     >
       <div
-        className={`relative flex items-center w-full h-9 bg-slate-100/80 dark:bg-slate-900/50 border transition-all duration-200 rounded-md overflow-hidden ${
+        className={`global-search-field relative flex items-center w-full h-10 border transition-all duration-200 rounded-lg overflow-hidden bg-white ${
           open
-            ? "border-cyan-500/50 dark:border-cyan-500/50 ring-1 ring-cyan-500/20 shadow-sm bg-white dark:bg-slate-900"
-            : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
+            ? "border-blue-500 ring-2 ring-blue-500/15 shadow-md"
+            : "border-slate-300 hover:border-slate-400 shadow-sm"
         }`}
       >
-        <div className="pl-3 pr-2 flex items-center justify-center text-slate-400 dark:text-slate-500">
+        <div className="pl-3 pr-2 flex items-center justify-center text-slate-700">
           <Search size={16} />
         </div>
 
@@ -210,8 +251,8 @@ export function GlobalSearchBar() {
           aria-controls="search-results-listbox"
           aria-autocomplete="list"
           aria-activedescendant={activeDescendant}
-          className="flex-1 w-full bg-transparent border-none outline-none text-sm text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 py-1.5"
-          placeholder="Search accounts, resources, findings, scans, reports, teamsâ€¦"
+          className="flex-1 w-full bg-transparent border-none outline-none text-sm font-medium text-slate-950 placeholder:text-slate-600 py-2"
+          placeholder="Search accounts, resources, findings, monitoring, teams..."
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -232,7 +273,7 @@ export function GlobalSearchBar() {
                 setQuery("");
                 inputRef.current?.focus();
               }}
-              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+              className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
               aria-label="Clear search"
             >
               <X size={14} />
@@ -240,7 +281,7 @@ export function GlobalSearchBar() {
           )}
 
           {!query && !open && (
-            <kbd className="hidden lg:flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 rounded bg-white dark:bg-slate-950">
+            <kbd className="hidden lg:flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-300 rounded bg-slate-50">
               <Command size={10} />K
             </kbd>
           )}
@@ -248,13 +289,13 @@ export function GlobalSearchBar() {
       </div>
 
       {open && (
-        <div className="absolute top-[calc(100%+8px)] left-0 right-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md shadow-xl overflow-hidden max-h-[70vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-200 origin-top">
+        <div className="global-search-dropdown absolute top-[calc(100%+8px)] left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-[70vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-200 origin-top">
           <div className="overflow-y-auto overscroll-contain flex-1 custom-scrollbar">
             <GlobalSearchDropdown
               query={query}
               loading={loading}
               error={error}
-              response={response}
+              response={enhancedResponse}
               recent={recent}
               selectedIndex={selectedIndex}
               flatResults={flatResults}

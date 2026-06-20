@@ -148,7 +148,8 @@ export function Section({
   icon,
   variant = "detail",
   action,
-  children
+  children,
+  noPadding = false
 }: {
   title: string;
   description?: string;
@@ -156,6 +157,7 @@ export function Section({
   variant?: PanelVariant;
   action?: ReactNode;
   children: ReactNode;
+  noPadding?: boolean;
 }) {
   return (
     <section className="cs-section" data-variant={variant}>
@@ -169,7 +171,9 @@ export function Section({
         </div>
         {action}
       </div>
-      {children}
+      <div className={noPadding ? "" : "cs-section-body"}>
+        {children}
+      </div>
     </section>
   );
 }

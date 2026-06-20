@@ -5,79 +5,36 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
-  ChevronLeft,
-  ChevronRight,
-  Command,
+  PanelLeftClose,
+  PanelLeftOpen,
   LogOut,
   HelpCircle,
-  Menu,
-  Search,
   ShieldCheck,
-  X
+  Building,
+  BookOpen,
+  CheckCircle2,
+  Cloud,
+  ExternalLink,
+  Settings,
+  User
 } from "lucide-react";
 import { clearCsrfToken, fetchCloudShieldClient, useCloudShieldData } from "../../lib/client-api";
 import { RouteIcon } from "./route-views";
 import { GlobalSearchBar } from "../../components/search/GlobalSearchBar";
+import { NotificationFeed } from "../../components/notifications/NotificationFeed";
+import { NAV_GROUPS } from "../../lib/route-registry";
+import type { CommandCenterResponse } from "@cloudshield/contracts";
+import { ErrorState } from "../../components/ui/error-state";
+import {
+  FrontendCapabilitySessionSchema,
+  FrontendCommandCenterResponseSchema,
+  type FrontendCapabilitySession
+} from "../../lib/response-contracts";
 
-type CurrentUserPayload = {
-  user?: {
-    name?: string;
-    email?: string;
-    role?: string;
-    organizationName?: string;
-  };
-};
-
-type NavItem = {
-  label: string;
-  href: string;
-  icon: string;
-  roles?: string[];
-};
-
-const navGroups: Array<{ label: string; items: NavItem[] }> = [
-  {
-    label: "Overview",
-    items: [{ label: "Dashboard", href: "/dashboard", icon: "overview" }]
-  },
-  {
-    label: "Cloud",
-    items: [
-      { label: "Accounts", href: "/dashboard/accounts", icon: "accounts" },
-      { label: "Inventory", href: "/dashboard/inventory", icon: "inventory" },
-      { label: "Resource graph", href: "/dashboard/graph", icon: "graph" },
-      { label: "Cost", href: "/dashboard/cost", icon: "cost" }
-    ]
-  },
-  {
-    label: "Security",
-    items: [
-      { label: "Findings", href: "/dashboard/security", icon: "security" },
-      { label: "Governance", href: "/dashboard/governance", icon: "governance" },
-      { label: "Compliance", href: "/dashboard/compliance", icon: "compliance" },
-      { label: "Recommendations", href: "/dashboard/recommendations", icon: "recommendations" }
-    ]
-  },
-  {
-    label: "Operations",
-    items: [
-      { label: "Automation", href: "/dashboard/automation", icon: "automation" },
-      { label: "Scans", href: "/dashboard/scans", icon: "scans" },
-      { label: "Reports", href: "/dashboard/reports", icon: "reports" }
-    ]
-  },
-  {
-    label: "Administration",
-    items: [
-      { label: "Settings", href: "/dashboard/settings", icon: "settings", roles: ["OWNER", "ADMIN"] },
-      { label: "Members", href: "/dashboard/settings/members", icon: "members", roles: ["OWNER", "ADMIN"] }
-    ]
-  }
-];
-
-function canSee(item: NavItem, role?: string) {
-  if (!item.roles?.length) return true;
-  return item.roles.includes(String(role ?? "").toUpperCase());
+// Navigation filtering is presentation only; backend permission checks remain authoritative.
+function canSee(item: { requiredCapability?: keyof FrontendCapabilitySession["capabilities"] }, session?: FrontendCapabilitySession | null) {
+  if (!item.requiredCapability) return true;
+  return Boolean(session?.capabilities[item.requiredCapability]);
 }
 
 function isActive(pathname: string, href: string) {
@@ -85,15 +42,32 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+type PlatformReadinessPayload = {
+  awsAccountsCount?: number;
+  connectorMode?: string;
+  scannerMode?: string;
+  isReadyForReadOnlyScans?: boolean;
+};
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data } = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
-  const user = data.user;
+  const authState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, {
+    schema: FrontendCapabilitySessionSchema
+  });
+  const user = authState.data?.user;
+  const { data: commandCenterData } = useCloudShieldData<CommandCenterResponse | null>(
+    "/api/v1/dashboard/command-center",
+    null,
+    { schema: FrontendCommandCenterResponseSchema }
+  );
+  const readinessState = useCloudShieldData<PlatformReadinessPayload | null>("/api/v1/platform/readiness", null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
 
   useEffect(() => {
@@ -103,14 +77,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     media.addEventListener("change", handler);
     return () => media.removeEventListener("change", handler);
   }, []);
-
-  const toggleMenu = () => {
-    if (isDesktop) {
-      setCollapsed(prev => !prev);
-    } else {
-      setMobileOpen(prev => !prev);
-    }
-  };
 
   useEffect(() => {
     const saved = window.localStorage.getItem("cloudshield.sidebar.collapsed");
@@ -122,25 +88,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [collapsed]);
 
   const visibleGroups = useMemo(() => {
-    return navGroups
-      .map((group) => ({ ...group, items: group.items.filter((item) => canSee(item, user?.role)) }))
+    return NAV_GROUPS
+      .map((group) => ({ ...group, items: group.items.filter((item) => canSee(item, authState.data)) }))
       .filter((group) => group.items.length);
-  }, [user?.role]);
+  }, [authState.data]);
+  const primaryGroups = visibleGroups.filter((group) => group.label !== "Administration");
+  const administrationItems = visibleGroups.find((group) => group.label === "Administration")?.items ?? [];
 
   useEffect(() => {
     setMobileOpen(false);
     setProfileOpen(false);
+    setWorkspaceOpen(false);
     setNotificationsOpen(false);
+    setHelpOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    const links = navGroups.flatMap((group) => group.items.map((item) => item.href));
+    const links = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
     links.forEach((href) => router.prefetch(href));
   }, [router]);
 
   async function logout() {
     try {
-      await fetchCloudShieldClient("/api/v1/auth/logout", { method: "POST" });
+      await fetchCloudShieldClient("/api/v1/auth/logout", { method: "POST", handleSessionExpired: false });
     } catch {
       // Session may already be expired; route away either way.
     }
@@ -149,24 +119,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.refresh();
   }
 
-  const organizationName = user?.organizationName ?? "Workspace";
+  const organizationName = authState.data?.organization.name ?? "Workspace";
   const userName = user?.name ?? user?.email ?? "Signed-in user";
   const userRole = user?.role ? user.role.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()) : "Member";
+  const connectedAccounts = commandCenterData?.executiveSummary?.connectedAccounts;
+  const totalAccounts = commandCenterData?.executiveSummary?.totalAccounts;
+  const connectorStatus = commandCenterData?.accountHealth?.length
+    ? commandCenterData.accountHealth.some((account) => account.connectionStatus === "VALIDATION_SUCCEEDED")
+      ? "CONNECTED"
+      : "NOT_CONFIGURED"
+    : "NOT_CONFIGURED";
+
+  if (authState.error?.sessionExpired) {
+    return (
+      <main className="portal-content" aria-live="assertive">
+        <ErrorState title="Session expired" message={authState.error.safeMessage} />
+      </main>
+    );
+  }
 
   const sidebar = (
     <aside className="portal-sidebar" data-collapsed={collapsed}>
       <div className="portal-brand">
         <Link href="/dashboard" aria-label="CloudShield dashboard">
-          <span><ShieldCheck size={20} /></span>
+          <span className="portal-brand-mark"><ShieldCheck size={20} /></span>
           {!collapsed ? <strong>CloudShield</strong> : null}
         </Link>
-        <button className="portal-icon-button portal-mobile-close" onClick={() => setMobileOpen(false)} type="button" aria-label="Close navigation">
-          <X size={18} />
+        <button
+          className="portal-icon-button"
+          onClick={() => {
+            if (isDesktop) setCollapsed((value) => !value);
+            else setMobileOpen(false);
+          }}
+          type="button"
+          aria-label={isDesktop ? (collapsed ? "Expand sidebar" : "Collapse sidebar") : "Close sidebar"}
+        >
+          {isDesktop ? (collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />) : <PanelLeftClose size={18} />}
         </button>
       </div>
 
       <nav className="portal-nav" aria-label="Dashboard navigation">
-        {visibleGroups.map((group) => (
+        {primaryGroups.map((group) => (
           <section key={group.label}>
             {!collapsed ? <p>{group.label}</p> : null}
             {group.items.map((item) => (
@@ -187,45 +180,113 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       <div className="portal-sidebar-footer">
-        <button className="portal-collapse" onClick={() => setCollapsed((value) => !value)} type="button" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          {!collapsed ? <span>Collapse</span> : null}
-        </button>
+        {!collapsed ? <p>Administration</p> : null}
+        {administrationItems.map((item) => (
+          <Link
+            className="portal-nav-link"
+            data-active={isActive(pathname, item.href)}
+            href={item.href}
+            key={item.href}
+            title={collapsed ? item.label : undefined}
+          >
+            <RouteIcon name={item.icon} />
+            {!collapsed ? <span>{item.label}</span> : null}
+            {collapsed ? <em role="tooltip">{item.label}</em> : null}
+          </Link>
+        ))}
       </div>
     </aside>
   );
 
   return (
     <div className="portal-shell" data-collapsed={collapsed}>
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <div className="portal-desktop-sidebar">{sidebar}</div>
-      {mobileOpen ? <div className="portal-mobile-backdrop" onClick={() => setMobileOpen(false)} /> : null}
-      <div className="portal-mobile-sidebar" data-open={mobileOpen}>{sidebar}</div>
-
       <div className="portal-main">
         <header className="portal-topbar">
-          <div className="portal-topbar-left flex-1 flex items-center">
-            <button className="portal-icon-button portal-sidebar-toggle" onClick={toggleMenu} type="button" aria-label="Toggle navigation">
-              <Menu size={18} />
-            </button>
-            <GlobalSearchBar />
+          <div className="portal-topbar-left flex-1 flex items-center relative">
+            {!mobileOpen ? (
+              <button className="portal-icon-button lg:hidden mr-2" onClick={() => setMobileOpen(true)} type="button" aria-label="Open sidebar">
+                <PanelLeftOpen size={18} />
+              </button>
+            ) : null}
+            <div className="ml-4 flex-1"><GlobalSearchBar /></div>
           </div>
-          <div className="portal-topbar-right">
-            <button className="portal-icon-button" onClick={() => setNotificationsOpen((value) => !value)} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
+          <div className="portal-topbar-right relative">
+            <button className="portal-icon-button relative" onClick={() => { setNotificationsOpen((value) => !value); setWorkspaceOpen(false); setProfileOpen(false); setHelpOpen(false); }} type="button" aria-label="Notifications" aria-expanded={notificationsOpen}>
               <Bell size={17} />
             </button>
-            {notificationsOpen ? (
-              <div className="portal-popover portal-notifications">
-                <strong>Notifications</strong>
-                <p>No new notifications.</p>
-              </div>
-            ) : null}
-            <button className="portal-icon-button" type="button" aria-label="Help">
+            {notificationsOpen ? <NotificationFeed /> : null}
+            <button className="portal-icon-button" onClick={() => { setHelpOpen((value) => !value); setNotificationsOpen(false); setWorkspaceOpen(false); setProfileOpen(false); }} type="button" aria-label="Help and setup guide" aria-expanded={helpOpen}>
               <HelpCircle size={17} />
             </button>
-            <div className="portal-org" aria-label="Organization">
+            {helpOpen ? (
+              <aside className="portal-popover portal-help" aria-label="CloudShield help and setup guide">
+                <div className="portal-help-head">
+                  <span><BookOpen size={20} /></span>
+                  <div>
+                    <strong>CloudShield setup guide</strong>
+                    <p>Platform status and safe next steps</p>
+                  </div>
+                </div>
+                <div className="portal-help-status">
+                  <div>
+                    <span>Platform API</span>
+                    <strong data-tone={readinessState.error ? "warning" : "success"}>
+                      {readinessState.error ? "Check required" : "Available"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>AWS accounts</span>
+                    <strong>{readinessState.data?.awsAccountsCount ?? totalAccounts ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Connector mode</span>
+                    <strong>{readinessState.data?.connectorMode ?? "Not reported"}</strong>
+                  </div>
+                  <div>
+                    <span>Scanner mode</span>
+                    <strong>{readinessState.data?.scannerMode ?? "Not reported"}</strong>
+                  </div>
+                </div>
+                <div className="portal-help-checklist">
+                  <h3>Setup checklist</h3>
+                  <p><CheckCircle2 size={15} /> Sign-in and tenant boundary active</p>
+                  <p data-complete={Boolean(totalAccounts)}><CheckCircle2 size={15} /> Register a non-production AWS account</p>
+                  <p data-complete={connectorStatus === "CONNECTED"}><CheckCircle2 size={15} /> Validate role-based AWS identity</p>
+                  <p data-complete={Boolean(readinessState.data?.isReadyForReadOnlyScans)}><CheckCircle2 size={15} /> Enable approved read-only inventory mode</p>
+                </div>
+                <div className="portal-help-links">
+                  <Link href="/dashboard/accounts" onClick={() => setHelpOpen(false)}><Cloud size={16} />AWS account setup<ExternalLink size={14} /></Link>
+                  <Link href="/dashboard/monitoring" onClick={() => setHelpOpen(false)}><ShieldCheck size={16} />Monitoring status<ExternalLink size={14} /></Link>
+                  <Link href="/dashboard/settings" onClick={() => setHelpOpen(false)}><Settings size={16} />Workspace settings<ExternalLink size={14} /></Link>
+                </div>
+                <p className="portal-help-note">Use the repository runbooks for IAM trust policy, sandbox validation, inventory sync, and governed-operation incident handling. Production mutation remains blocked by design.</p>
+              </aside>
+            ) : null}
+
+            <button className="portal-org" onClick={() => { setWorkspaceOpen((value) => !value); setProfileOpen(false); setNotificationsOpen(false); setHelpOpen(false); }} type="button" aria-label="Workspace" aria-expanded={workspaceOpen}>
               <span>{organizationName}</span>
-            </div>
-            <button className="portal-user" onClick={() => setProfileOpen((value) => !value)} type="button" aria-haspopup="menu" aria-expanded={profileOpen}>
+            </button>
+            {workspaceOpen ? (
+              <div className="portal-popover portal-workspace" role="menu">
+                <div className="portal-workspace-head">
+                  <span><Building size={20} /></span>
+                  <div><strong>{organizationName}</strong><p>{userRole} · Single workspace</p></div>
+                </div>
+                <dl>
+                  <div><dt>AWS accounts</dt><dd>{totalAccounts ?? "Unavailable"}</dd></div>
+                  <div><dt>Connected</dt><dd>{connectedAccounts ?? "Unavailable"}</dd></div>
+                  <div><dt>Connector state</dt><dd>{connectorStatus.replace(/_/g, " ")}</dd></div>
+                </dl>
+                <div className="portal-workspace-links">
+                  <Link href="/dashboard/accounts" onClick={() => setWorkspaceOpen(false)}><Cloud size={16} />Manage AWS accounts</Link>
+                  <Link href="/dashboard/settings" onClick={() => setWorkspaceOpen(false)}><Settings size={16} />Workspace settings</Link>
+                </div>
+              </div>
+            ) : null}
+
+            <button className="portal-user" onClick={() => { setProfileOpen((value) => !value); setWorkspaceOpen(false); setNotificationsOpen(false); setHelpOpen(false); }} type="button" aria-haspopup="menu" aria-expanded={profileOpen}>
               <span>{userName.slice(0, 1).toUpperCase()}</span>
               <div>
                 <strong>{userName}</strong>
@@ -241,20 +302,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <p>{user?.email ?? "No email reported"}</p>
                   </div>
                 </div>
-                <dl>
-                  <div><dt>Organization</dt><dd>{organizationName}</dd></div>
-                  <div><dt>Role</dt><dd>{userRole}</dd></div>
-                </dl>
+                <div className="portal-profile-links">
+                  <Link href="/dashboard/profile" onClick={() => setProfileOpen(false)}><User size={16} />Profile settings</Link>
+                </div>
                 <button className="portal-profile-logout" onClick={logout} type="button" role="menuitem">
-                  <LogOut size={15} />
+                  <LogOut size={16} />
                   Sign out
                 </button>
               </div>
             ) : null}
           </div>
         </header>
-        <main className="portal-content">{children}</main>
+        <main className="portal-content" id="main-content" tabIndex={-1}>{children}</main>
       </div>
+
+      {mobileOpen ? <div className="portal-mobile-backdrop" onClick={() => setMobileOpen(false)} /> : null}
+      <div className="portal-mobile-sidebar" data-open={mobileOpen}>{sidebar}</div>
     </div>
   );
 }
