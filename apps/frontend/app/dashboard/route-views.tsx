@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  User,
   Users,
   Wallet
 } from "lucide-react";
@@ -187,7 +188,30 @@ export function OverviewView() {
   const { data: monitoringHealth } = useCloudShieldData<FrontendMonitoringHealth | null>("/api/v1/security-monitoring/health", null, { schema: FrontendMonitoringHealthSchema });
 
   if (error) {
-    return <ErrorAndRefresh error={error} isRefreshing={false} onRetry={refetch} />;
+    const title = error.kind === "CONTRACT_INVALID"
+      ? "Dashboard data contract is out of sync"
+      : error.kind === "FORBIDDEN"
+        ? "Dashboard permission required"
+        : "Command center data is unavailable";
+    return (
+      <>
+        <PageHeader
+          breadcrumbs={["CloudShield", "Enterprise Command Center"]}
+          eyebrow="Enterprise operations command center"
+          title="Security & Governance Posture"
+          description="CloudShield could not load the organization-scoped command-center response."
+        />
+        <div className="cs-command-error">
+          <InlineNotice title={title} tone="warning">{error.safeMessage}</InlineNotice>
+          <p>Backend health can remain green while the database schema, running backend image, and frontend contract are out of sync.</p>
+          <div className="cs-action-grid">
+            {error.retryableRead ? <button className="cs-button" type="button" onClick={refetch}>Retry dashboard</button> : null}
+            <PrimaryLink href="/dashboard/accounts">Review AWS setup</PrimaryLink>
+            <PrimaryLink href="/dashboard/settings">Open workspace settings</PrimaryLink>
+          </div>
+        </div>
+      </>
+    );
   }
 
   if (!data) {
@@ -211,6 +235,7 @@ export function OverviewView() {
 
   const connectorStatus = accountHealth.length > 0 && accountHealth.some(a => a.connectionStatus === "VALIDATION_SUCCEEDED")
     ? "CONNECTED" : "NOT_CONFIGURED";
+  const setupRequired = executiveSummary.totalAccounts === 0;
 
   return (
     <>
@@ -232,6 +257,19 @@ export function OverviewView() {
         }
       />
       <ErrorAndRefresh error={null} isRefreshing={isRefreshing} />
+      {setupRequired ? (
+        <section className="cs-setup-callout">
+          <div>
+            <span>Setup required</span>
+            <h2>Connect a non-production AWS account to activate live posture workflows</h2>
+            <p>No AWS account is registered for this workspace. Current zero values are accurate; CloudShield is not substituting sample cloud data.</p>
+          </div>
+          <div className="cs-action-grid">
+            <PrimaryLink href="/dashboard/accounts">Register AWS account</PrimaryLink>
+            <ConsoleLink href="/dashboard/settings">Review safe runtime settings</ConsoleLink>
+          </div>
+        </section>
+      ) : null}
 
       <StatGroup>
         <MetricTile label="AWS Accounts" value={executiveSummary.totalAccounts} detail={`${executiveSummary.connectedAccounts} connected`} tone="info" icon={<Cloud size={16} />} />
@@ -272,7 +310,14 @@ export function OverviewView() {
 
         <Section title="Priority Actions" description="High-impact actions requiring immediate attention." icon={<Activity size={16} />} variant="warning">
           {priorityActions.length === 0 ? (
-            <EmptyState title="No priority actions" description="All critical items have been addressed." icon={<CheckCircle2 size={32} />} />
+            <EmptyState
+              title={setupRequired ? "No account data to evaluate" : "No priority actions"}
+              description={setupRequired
+                ? "Register and validate an approved sandbox account before CloudShield can calculate cloud priority actions."
+                : "No priority actions were generated from the current organization-scoped records."}
+              icon={<CheckCircle2 size={32} />}
+              action={setupRequired ? <PrimaryLink href="/dashboard/accounts">Set up an account</PrimaryLink> : undefined}
+            />
           ) : (
             <div className="flex flex-col gap-4">
               {priorityActions.map(action => (
@@ -353,7 +398,7 @@ export function OverviewView() {
       </div>
 
       <div className="cs-two-column mt-8 gap-8">
-        <Section title="Account Health & Readiness" description="Validation status and risk levels across registered AWS environments." icon={<Cloud size={16} />} variant="operational">
+      <Section title="Account Health & Readiness" description="Validation status and risk levels across registered AWS environments." icon={<Cloud size={16} />} variant="operational">
           <DataTable
             columns={["Account", "Env", "Connection", "Freshness", "Findings", "Resources"]}
             rows={accountHealth.map(acc => [
@@ -364,6 +409,7 @@ export function OverviewView() {
               <span key="find" className="font-mono text-sm">{acc.findingCount}</span>,
               <span key="res" className="font-mono text-sm">{acc.resourceCount}</span>
             ])}
+            empty={<PrimaryLink href="/dashboard/accounts">Register an AWS account</PrimaryLink>}
           />
         </Section>
 
@@ -422,6 +468,7 @@ export function InventoryView() {
             <StatusBadge key="status" status={resource.status} />,
             <SourceBadge key="source" source={sourceFor(resource, data)} />
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Configure read-only inventory</PrimaryLink>}
         />
       </Section>
     </>
@@ -510,6 +557,7 @@ export function SecurityView() {
             <SourceBadge key="source" source={sourceFor(finding, data)} />,
             formatDate(finding.updatedAt ?? finding.createdAt)
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Connect inventory before evaluation</PrimaryLink>}
         />
       </Section>
     </>
@@ -686,6 +734,7 @@ export function CostView() {
             <StatusBadge key="status" status={finding.status ?? finding.workflowStatus} />,
             <SourceBadge key="source" source={sourceFor(finding, data)} />
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Configure account inventory</PrimaryLink>}
         />
       </Section>
     </>
@@ -710,6 +759,7 @@ export function RecommendationsView() {
             <StatusBadge key="status" status={item.status ?? item.workflowStatus} />,
             <SourceBadge key="source" source={sourceFor(item, data)} />
           ])}
+          empty={<PrimaryLink href="/dashboard/security">Review security findings</PrimaryLink>}
         />
       </Section>
     </>
@@ -739,6 +789,7 @@ export function GraphView() {
             text(node.awsAccountId ?? node.accountId),
             <StatusBadge key="status" status={node.status ?? node.state} />
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Configure inventory ingestion</PrimaryLink>}
         />
       </Section>
     </>
@@ -769,6 +820,7 @@ export function ScansView() {
             formatDate(run.startedAt ?? run.createdAt),
             formatDate(run.completedAt ?? run.finishedAt)
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Review scanner readiness</PrimaryLink>}
         />
       </Section>
     </>
@@ -846,6 +898,7 @@ export function ReportsView() {
             formatDate(report.createdAt ?? report.updatedAt),
             <SourceBadge key="source" source={sourceFor(report, reports.data)} />
           ])}
+          empty={<PrimaryLink href="/dashboard/compliance">Review available evidence</PrimaryLink>}
         />
       </Section>
     </>
@@ -962,6 +1015,7 @@ export function MembersView() {
 export function RouteIcon({ name }: { name: string }) {
   const icons: Record<string, React.ReactNode> = {
     overview: <Activity size={16} />,
+    activity: <RadioTower size={16} />,
     accounts: <Cloud size={16} />,
     inventory: <Boxes size={16} />,
     security: <ShieldAlert size={16} />,
@@ -975,6 +1029,7 @@ export function RouteIcon({ name }: { name: string }) {
     reports: <FileText size={16} />,
     settings: <KeyRound size={16} />,
     members: <Users size={16} />,
+    profile: <User size={16} />,
     metrics: <BarChart3 size={16} />,
     branch: <GitBranch size={16} />
   };

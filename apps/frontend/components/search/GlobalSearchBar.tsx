@@ -1,12 +1,13 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Loader2, X, Command } from "lucide-react";
 import { GlobalSearchResponse, GlobalSearchResult } from "@cloudshield/contracts";
 import { fetchCloudShieldClient } from "../../lib/client-api";
-import { GlobalSearchDropdown } from "./GlobalSearchDropdown";
+import { toApiError } from "../../lib/api-error";
 import { ROUTE_REGISTRY } from "../../lib/route-registry";
+import { GlobalSearchDropdown } from "./GlobalSearchDropdown";
 
 interface SearchRecentItem {
   id: string;
@@ -54,52 +55,51 @@ export function GlobalSearchBar() {
     localStorage.removeItem("cloudshield.search.recent");
   }, []);
 
-  const staticAliases = useMemo(() => {
-    if (!query || query.trim().length < 2) return [];
-    const qLower = query.toLowerCase();
+  const trimmedQuery = query.trim();
+  const routeResults = useMemo<GlobalSearchResult[]>(() => {
+    if (!trimmedQuery) return [];
+    const normalized = trimmedQuery.toLowerCase();
+    return ROUTE_REGISTRY
+      .map((route) => {
+        const searchable = [route.label, route.category, route.description ?? "", ...route.keywords].map((value) => value.toLowerCase());
+        const exact = route.label.toLowerCase() === normalized;
+        const prefix = route.label.toLowerCase().startsWith(normalized);
+        const keywordMatch = searchable.some((value) => value.includes(normalized));
+        return { route, score: exact ? 0 : prefix ? 1 : keywordMatch ? 2 : 99 };
+      })
+      .filter(({ score }) => score < 99)
+      .sort((left, right) => left.score - right.score || left.route.label.localeCompare(right.route.label))
+      .slice(0, 8)
+      .map(({ route }) => ({
+        id: route.id,
+        type: "navigation",
+        title: route.label,
+        subtitle: `${route.category} · ${route.description ?? "CloudShield workspace"}`,
+        href: route.href
+      }));
+  }, [trimmedQuery]);
 
-    const ALIASES = ROUTE_REGISTRY.map(item => ({
-      id: item.id,
-      type: "alias",
-      title: item.label,
-      subtitle: `Platform > ${item.category}`,
-      href: item.href,
-      keywords: [item.label.toLowerCase(), item.category.toLowerCase(), ...(item.keywords || [])]
-    }));
-
-    return ALIASES.filter(a => a.keywords.some(k => k.includes(qLower)) || a.title.toLowerCase().includes(qLower));
-  }, [query]);
-
-  const enhancedResponse = useMemo(() => {
-    if (!response || response.query !== query) {
-      if (loading) return null;
-      if (staticAliases.length > 0) {
-        return {
-          query,
-          total: staticAliases.length,
-          generatedAt: new Date().toISOString(),
-          groups: [{ type: "navigation", label: "Quick Navigation", results: staticAliases, hasMore: false }]
-        } as unknown as GlobalSearchResponse;
-      }
-      return null;
-    }
-
-    if (staticAliases.length === 0) return response;
-
+  const enhancedResponse = useMemo<GlobalSearchResponse | null>(() => {
+    const backendResponse = response?.query === trimmedQuery ? response : null;
+    const backendGroups = backendResponse?.groups.filter((group) => group.type !== "alias" && group.type !== "navigation") ?? [];
+    if (!routeResults.length && !backendResponse) return null;
     return {
-      ...response,
-      total: response.total + staticAliases.length,
+      query: trimmedQuery,
+      generatedAt: backendResponse?.generatedAt ?? new Date().toISOString(),
+      total: routeResults.length + backendGroups.reduce((total, group) => total + group.results.length, 0),
       groups: [
-        { type: "navigation", label: "Quick Navigation", results: staticAliases, hasMore: false },
-        ...response.groups
+        ...(routeResults.length ? [{
+          type: "navigation" as const,
+          label: "Platform modules",
+          results: routeResults,
+          hasMore: false
+        }] : []),
+        ...backendGroups
       ]
-    } as unknown as GlobalSearchResponse;
-  }, [response, query, staticAliases, loading]);
+    };
+  }, [response, routeResults, trimmedQuery]);
 
-  const flatResults = useMemo(() => {
-    if (!enhancedResponse) return [];
-    return enhancedResponse.groups.flatMap(g => g.results);
-  }, [enhancedResponse]);
+  const flatResults = useMemo(() => enhancedResponse?.groups.flatMap((group) => group.results) ?? [], [enhancedResponse]);
 
   // Handle global shortcuts
   useEffect(() => {
@@ -136,7 +136,7 @@ export function GlobalSearchBar() {
 
     if (!open) return;
 
-    if (query.trim().length < 2) {
+    if (trimmedQuery.length < 2) {
       setLoading(false);
       setError(null);
       setSelectedIndex(0);
@@ -151,7 +151,7 @@ export function GlobalSearchBar() {
     debounceTimerRef.current = setTimeout(async () => {
       try {
         const data = await fetchCloudShieldClient<GlobalSearchResponse>(
-          `/api/v1/search?q=${encodeURIComponent(query.trim())}`,
+          `/api/v1/search?q=${encodeURIComponent(trimmedQuery)}`,
           { signal: controller.signal }
         );
 
@@ -161,14 +161,13 @@ export function GlobalSearchBar() {
           setSelectedIndex(0);
           setError(null);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") {
           return;
         }
-        if (err.name === "AbortError") {
-          return;
-        }
-        setError(err instanceof Error ? err.message : "Search is temporarily unavailable.");
+        const normalized = toApiError(err);
+        if (normalized.kind === "CANCELLED") return;
+        setError(normalized.safeMessage);
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -180,7 +179,7 @@ export function GlobalSearchBar() {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [query, open]);
+  }, [trimmedQuery, open]);
 
   const handleSelectResult = (item: GlobalSearchResult | SearchRecentItem) => {
     saveRecent(item);
@@ -229,15 +228,15 @@ export function GlobalSearchBar() {
   const activeDescendant = open && flatResults.length > 0 ? `search-result-${selectedIndex}` : undefined;
 
   return (
-    <div 
-      ref={wrapperRef} 
-      className="relative flex-1 max-w-[680px] w-full mx-4 hidden sm:block z-50"
+    <div
+      ref={wrapperRef}
+      className="global-search relative flex-1 max-w-[680px] w-full mx-4 hidden sm:block z-50"
     >
-      <div 
-        className={`relative flex items-center w-full h-10 border transition-all duration-200 rounded-md overflow-hidden bg-white shadow-sm ${
+      <div
+        className={`global-search-field relative flex items-center w-full h-10 border transition-all duration-200 rounded-lg overflow-hidden bg-white ${
           open
-            ? "border-blue-500 ring-1 ring-blue-500/20"
-            : "border-slate-200 hover:border-slate-300"
+            ? "border-blue-500 ring-2 ring-blue-500/15 shadow-md"
+            : "border-slate-300 hover:border-slate-400 shadow-sm"
         }`}
       >
         <div className="pl-3 pr-2 flex items-center justify-center text-slate-700">
@@ -245,7 +244,6 @@ export function GlobalSearchBar() {
         </div>
 
         <input
-          id="global-search-input"
           ref={inputRef}
           type="text"
           role="combobox"
@@ -253,8 +251,8 @@ export function GlobalSearchBar() {
           aria-controls="search-results-listbox"
           aria-autocomplete="list"
           aria-activedescendant={activeDescendant}
-          className="flex-1 w-full bg-transparent border-none outline-none text-sm text-slate-900 placeholder-slate-500 py-2"
-          placeholder="Search accounts, resources, findings, scans, reports, teams…"
+          className="flex-1 w-full bg-transparent border-none outline-none text-sm font-medium text-slate-950 placeholder:text-slate-600 py-2"
+          placeholder="Search accounts, resources, findings, monitoring, teams..."
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -269,13 +267,13 @@ export function GlobalSearchBar() {
           {loading && <Loader2 size={14} className="text-cyan-500 animate-spin mr-1" />}
 
           {query && !loading && (
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => {
                 setQuery("");
                 inputRef.current?.focus();
               }}
-              className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
               aria-label="Clear search"
             >
               <X size={14} />
@@ -283,7 +281,7 @@ export function GlobalSearchBar() {
           )}
 
           {!query && !open && (
-            <kbd className="hidden lg:flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 border border-slate-200 rounded bg-white">
+            <kbd className="hidden lg:flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-300 rounded bg-slate-50">
               <Command size={10} />K
             </kbd>
           )}
@@ -291,9 +289,8 @@ export function GlobalSearchBar() {
       </div>
 
       {open && (
-        <div className="absolute top-[calc(100%+8px)] left-0 right-0 bg-white border border-slate-200 rounded-md shadow-xl overflow-hidden max-h-[70vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-200 origin-top">
-
-...          <div className="overflow-y-auto overscroll-contain flex-1 custom-scrollbar">
+        <div className="global-search-dropdown absolute top-[calc(100%+8px)] left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-[70vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-200 origin-top">
+          <div className="overflow-y-auto overscroll-contain flex-1 custom-scrollbar">
             <GlobalSearchDropdown
               query={query}
               loading={loading}

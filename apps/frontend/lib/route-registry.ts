@@ -151,6 +151,15 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     requiredCapability: "members.read",
     description: "Manage team members and access.",
     keywords: ["team", "users", "access", "rbac", "roles"]
+  },
+  {
+    id: "nav-profile",
+    label: "Profile",
+    href: "/dashboard/profile",
+    icon: "profile",
+    category: "Administration",
+    description: "Personal details, security context, and workspace access.",
+    keywords: ["profile", "personal", "account", "identity", "security"]
   }
 ];
 
