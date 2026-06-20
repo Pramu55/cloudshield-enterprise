@@ -1150,6 +1150,16 @@ export type AwsInventoryScanStatusResponse = z.infer<
 
 // ── Security Posture Rules ──────────────────────────────────────────────
 
+export const DataSourceClassificationSchema = z.enum([
+  "SAMPLE",
+  "AWS_SYNC",
+  "RULE_ENGINE",
+  "MANUAL",
+  "IMPORT",
+  "SYSTEM"
+]);
+export type DataSourceClassification = z.infer<typeof DataSourceClassificationSchema>;
+
 export const SecurityRuleSeveritySchema = z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]);
 export type SecurityRuleSeverity = z.infer<typeof SecurityRuleSeveritySchema>;
 
@@ -1180,7 +1190,11 @@ export const SecurityRulesResponseSchema = z.object({
 });
 export type SecurityRulesResponse = z.infer<typeof SecurityRulesResponseSchema>;
 
+export const SecurityEvaluationRequestSchema = z.object({}).strict();
+export type SecurityEvaluationRequest = z.infer<typeof SecurityEvaluationRequestSchema>;
+
 export const SecurityEvaluationResponseSchema = z.object({
+  evaluationMode: z.literal("STORED_INVENTORY"),
   evaluatedResourceCount: z.number(),
   findingsCreated: z.number(),
   findingsUpdated: z.number(),
@@ -1210,6 +1224,9 @@ export const SecurityFindingDtoSchema = z.object({
   resourceName: z.string().nullable(),
   resourceType: z.string().nullable(),
   awsAccountName: z.string().nullable(),
+  findingSource: DataSourceClassificationSchema,
+  resourceSource: DataSourceClassificationSchema.nullable(),
+  sampleData: z.boolean(),
   firstSeenAt: z.string(),
   lastSeenAt: z.string()
 });
@@ -1947,7 +1964,7 @@ export const CloudResourceDtoSchema = z.object({
   ownerTeamName: z.string().nullable().optional(),
   tags: z.record(z.string(), z.any()),
   metadata: z.record(z.string(), z.any()),
-  source: z.string(),
+  source: DataSourceClassificationSchema,
   riskCount: z.number().int(),
   firstSeenAt: z.string(),
   lastSeenAt: z.string().nullable(),
