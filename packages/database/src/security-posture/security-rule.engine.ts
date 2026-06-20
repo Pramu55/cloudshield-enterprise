@@ -11,7 +11,7 @@ export type EvaluationSummary = {
 
 export async function evaluateSecurityRules(organizationId: string): Promise<EvaluationSummary> {
   const resources = await prisma.cloudResource.findMany({
-    where: scopeByOrganization(organizationId),
+    where: scopeByOrganization(organizationId, { archivedAt: null }),
     select: {
       id: true,
       organizationId: true,
@@ -23,13 +23,16 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
       status: true,
       tags: true,
       metadata: true,
-      ownerTeamId: true
+      ownerTeamId: true,
+      source: true
     }
   });
 
   let findingsCreated = 0;
   let findingsUpdated = 0;
   const activeFindings = new Set<string>();
+  const evaluatedResourceIds = resources.map((resource) => resource.id);
+  const evaluatedAt = new Date();
 
   for (const resource of resources) {
     const evalResource: ResourceForEvaluation = {
@@ -43,7 +46,8 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
       status: resource.status,
       tags: (resource.tags as Record<string, unknown>) || {},
       metadata: (resource.metadata as Record<string, unknown>) || {},
-      ownerTeamId: resource.ownerTeamId
+      ownerTeamId: resource.ownerTeamId,
+      source: resource.source
     };
 
     for (const rule of SECURITY_RULE_CATALOG) {
@@ -58,17 +62,38 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
             organizationId,
             resourceId: resource.id,
             ruleId: rule.ruleId,
-            status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED"] }
+            source: "RULE_ENGINE",
+            archivedAt: null,
+            status: {
+              in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "RESOLVED", "REOPENED"]
+            }
           }
         });
 
+        const evidence = {
+          ...((result.evidence as Record<string, unknown>) || {}),
+          resourceSource: resource.source,
+          sampleData: resource.source === "SAMPLE",
+          evaluationMode: "STORED_INVENTORY"
+        };
+
         if (existing) {
+          const reopensResolvedFinding = existing.status === "RESOLVED";
           await prisma.securityFinding.update({
             where: { id: existing.id },
             data: {
-              lastSeenAt: new Date(),
-              evidence: (result.evidence as object) || {},
-              updatedAt: new Date()
+              source: "RULE_ENGINE",
+              ...(reopensResolvedFinding
+                ? {
+                    status: "REOPENED" as const,
+                    workflowStatus: "REOPENED" as const,
+                    resolvedAt: null,
+                    reopenedAt: evaluatedAt
+                  }
+                : {}),
+              lastSeenAt: evaluatedAt,
+              lastEvaluatedAt: evaluatedAt,
+              evidence
             }
           });
           findingsUpdated++;
@@ -83,13 +108,16 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
               description: rule.description,
               severity: rule.severity as any,
               status: "OPEN",
-              evidence: (result.evidence as object) || {},
+              workflowStatus: "OPEN",
+              evidence,
+              source: "RULE_ENGINE",
               businessImpact: rule.businessImpact,
               recommendation: rule.recommendation,
               complianceRefs: rule.complianceRefs,
               ownerTeamId: resource.ownerTeamId,
-              firstSeenAt: new Date(),
-              lastSeenAt: new Date()
+              firstSeenAt: evaluatedAt,
+              lastSeenAt: evaluatedAt,
+              lastEvaluatedAt: evaluatedAt
             }
           });
           findingsCreated++;
@@ -113,27 +141,35 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
   }
 
   // Resolve findings that no longer apply
-  const openFindings = await prisma.securityFinding.findMany({
-    where: {
-      organizationId,
-      status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED"] }
-    },
-    select: { id: true, ruleId: true, resourceId: true }
-  });
+  const openFindings = evaluatedResourceIds.length === 0
+    ? []
+    : await prisma.securityFinding.findMany({
+        where: {
+          organizationId,
+          resourceId: { in: evaluatedResourceIds },
+          source: "RULE_ENGINE",
+          archivedAt: null,
+          ruleId: { in: SECURITY_RULE_CATALOG.map((rule) => rule.ruleId) },
+          status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "REOPENED"] }
+        },
+        select: { id: true, ruleId: true, resourceId: true }
+      });
 
   let findingsResolved = 0;
   for (const finding of openFindings) {
     if (finding.resourceId) {
       const key = `${finding.ruleId}::${finding.resourceId}`;
       if (!activeFindings.has(key)) {
-        const isOurRule = SECURITY_RULE_CATALOG.some(r => r.ruleId === finding.ruleId);
-        if (isOurRule) {
-          await prisma.securityFinding.update({
-            where: { id: finding.id },
-            data: { status: "RESOLVED", resolvedAt: new Date() }
-          });
-          findingsResolved++;
-        }
+        await prisma.securityFinding.update({
+          where: { id: finding.id },
+          data: {
+            status: "RESOLVED",
+            workflowStatus: "RESOLVED",
+            resolvedAt: evaluatedAt,
+            lastEvaluatedAt: evaluatedAt
+          }
+        });
+        findingsResolved++;
       }
     }
   }

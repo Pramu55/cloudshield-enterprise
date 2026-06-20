@@ -23,6 +23,7 @@ import {
   SecurityAlertsListResponseSchema,
   SecurityAlertEvidenceDtoSchema,
   SecurityAlertEvidenceListResponseSchema,
+  SecurityFindingsResponseSchema,
   InventoryOrchestrationResponseSchema
 } from "@cloudshield/contracts";
 import { z } from "zod";
@@ -32,6 +33,50 @@ const identifierValue = OrganizationScopedIdSchema.shape.id;
 const emptyObject = AutomationSafetyFlagsSchema.pick({});
 const controlCharacters = /[\u0000-\u001f\u007f]/;
 const providerErrorContent = /\b(?:AccessKeyId|SecretAccessKey|SessionToken|rawResponse|rawError|providerError|stack|credentials|authorization)\b|(?:^|\s)at\s+\S+\s+\([^)]+:\d+:\d+\)/i;
+
+export const FrontendSecurityFindingsResponseSchema = SecurityFindingsResponseSchema
+  .superRefine((data, context) => {
+    data.items.forEach((finding, index) => {
+      if (finding.sampleData !== (finding.resourceSource === "SAMPLE")) {
+        context.addIssue({
+          code: "custom",
+          path: ["items", index, "sampleData"],
+          message: "Finding sample state must match its linked resource source."
+        });
+      }
+    });
+  })
+  .transform((data) => ({
+    sampleData: data.sampleData,
+    sampleDataLabel: data.sampleDataLabel,
+    items: data.items.map((finding) => ({
+      id: finding.id,
+      organizationId: finding.organizationId,
+      awsAccountId: finding.awsAccountId,
+      resourceId: finding.resourceId,
+      ruleId: finding.ruleId,
+      title: finding.title,
+      description: finding.description,
+      severity: finding.severity,
+      status: finding.status,
+      evidence: finding.evidence,
+      businessImpact: finding.businessImpact,
+      recommendation: finding.recommendation,
+      complianceRefs: finding.complianceRefs,
+      ownerTeamId: finding.ownerTeamId,
+      ownerTeamName: finding.ownerTeamName,
+      resourceName: finding.resourceName,
+      resourceType: finding.resourceType,
+      awsAccountName: finding.awsAccountName,
+      findingSource: finding.findingSource,
+      resourceSource: finding.resourceSource,
+      sampleData: finding.sampleData,
+      firstSeenAt: finding.firstSeenAt,
+      lastSeenAt: finding.lastSeenAt
+    })),
+    awsApiCallExecuted: data.awsApiCallExecuted,
+    mutationExecuted: data.mutationExecuted
+  }));
 
 export const FrontendAlertIdentifierSchema = identifierValue
   .max(200)
@@ -744,3 +789,4 @@ export type FrontendCapabilitySession = ReturnType<typeof FrontendCapabilitySess
 export type FrontendInventorySyncResponse = ReturnType<typeof FrontendInventorySyncResponseSchema.parse>;
 export type FrontendSecurityAlertEvidence = ReturnType<typeof FrontendSecurityAlertEvidenceSchema.parse>;
 export type FrontendSecurityAlertEvidenceList = ReturnType<typeof FrontendSecurityAlertEvidenceListSchema.parse>;
+export type FrontendSecurityFindingsResponse = ReturnType<typeof FrontendSecurityFindingsResponseSchema.parse>;

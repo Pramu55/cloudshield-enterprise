@@ -16,6 +16,7 @@ import {
   FrontendMonitoringRunsListSchema,
   FrontendSecurityAlertDetailSchema,
   FrontendSecurityAlertsListSchema,
+  FrontendSecurityFindingsResponseSchema,
   FrontendRemediationPlanListSchema,
   FrontendInventorySyncResponseSchema,
   createFrontendInventoryAccountSyncResponseSchema,
@@ -24,6 +25,65 @@ import {
 import { SecurityAlertLifecycleMutationResponseSchema, EvaluateMonitoringResponseSchema } from "@cloudshield/contracts";
 
 const timestamp = "2026-06-13T12:00:00.000Z";
+
+const securityFinding = {
+  id: "finding-1",
+  organizationId: "org-1",
+  awsAccountId: "account-1",
+  resourceId: "resource-1",
+  ruleId: "SG_OPEN_SSH_TO_WORLD",
+  title: "Open SSH",
+  description: "Stored inventory rule result.",
+  severity: "HIGH",
+  status: "OPEN",
+  evidence: { evaluationMode: "STORED_INVENTORY" },
+  businessImpact: "Internet exposure",
+  recommendation: "Restrict ingress",
+  complianceRefs: [],
+  ownerTeamId: null,
+  ownerTeamName: null,
+  resourceName: "sample-security-group",
+  resourceType: "security-group",
+  awsAccountName: "Sample account",
+  findingSource: "RULE_ENGINE",
+  resourceSource: "SAMPLE",
+  sampleData: true,
+  firstSeenAt: timestamp,
+  lastSeenAt: timestamp
+};
+const securityFindingsResponse = {
+  sampleData: true,
+  sampleDataLabel: "Sample findings are clearly labeled.",
+  items: [securityFinding],
+  awsApiCallExecuted: false,
+  mutationExecuted: false
+};
+assert.equal(
+  FrontendSecurityFindingsResponseSchema.parse(securityFindingsResponse).items[0].resourceSource,
+  "SAMPLE"
+);
+assert.equal(
+  FrontendSecurityFindingsResponseSchema.safeParse({
+    ...securityFindingsResponse,
+    items: [{ ...securityFinding, resourceSource: undefined }]
+  }).success,
+  false
+);
+assert.equal(
+  FrontendSecurityFindingsResponseSchema.safeParse({
+    ...securityFindingsResponse,
+    items: [{ ...securityFinding, resourceSource: "INVALID" }]
+  }).success,
+  false
+);
+assert.equal(
+  FrontendSecurityFindingsResponseSchema.safeParse({
+    ...securityFindingsResponse,
+    items: [{ ...securityFinding, sampleData: false }]
+  }).success,
+  false
+);
+
 assert.deepEqual(SecurityAlertLifecycleMutationResponseSchema.parse({ status: "ok" }), { status: "ok" });
 for (const invalidMutationResponse of [
   {},
