@@ -255,11 +255,12 @@ test("risk finding detail and workflow handoff remain tenant-safe and DB-only", 
         assert.equal(result.remediationExecuted, false);
         const after = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
         assert.equal(after.auditEvents, before.auditEvents + 1, `${status} -> ${action}`);
-        assert.equal(
-          after.riskAcceptances,
-          before.riskAcceptances + (action === "accept-risk" ? 1 : 0),
-          `${status} -> ${action}`
-        );
+          assert.equal(
+            after.riskAcceptances,
+            before.riskAcceptances + (action === "accept-risk" ? 1 : 0),
+            `${status} -> ${action}`
+          );
+          assert.equal(after.evidenceSnapshots, before.evidenceSnapshots, `${status} -> ${action}`);
       }
     }
   });
@@ -527,7 +528,10 @@ async function stateCounts(organizationId: string, findingId: string) {
     status: finding.status,
     workflowStatus: finding.workflowStatus,
     auditEvents: await prisma.auditEvent.count({ where: { organizationId, targetId: findingId } }),
-    riskAcceptances: await prisma.riskAcceptance.count({ where: { organizationId, securityFindingId: findingId } })
+      riskAcceptances: await prisma.riskAcceptance.count({ where: { organizationId, securityFindingId: findingId } }),
+      evidenceSnapshots: await prisma.securityFindingEvidenceSnapshot.count({
+        where: { organizationId, securityFindingId: findingId }
+      })
   };
 }
 

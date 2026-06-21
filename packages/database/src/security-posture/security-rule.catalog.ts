@@ -30,6 +30,7 @@ function hasTag(tags: Record<string, unknown>, keys: string[]) {
 
 const SG_OPEN_SSH_TO_WORLD: SecurityRuleDefinition = {
   ruleId: "SG_OPEN_SSH_TO_WORLD",
+  ruleVersion: "1",
   title: "Security group allows SSH (port 22) from 0.0.0.0/0 or ::/0",
   description: "Detects security groups that allow inbound TCP port 22 (SSH) from any source. This exposes the resource to brute-force and unauthorized access attacks.",
   severity: "HIGH",
@@ -51,6 +52,7 @@ const SG_OPEN_SSH_TO_WORLD: SecurityRuleDefinition = {
 
 const SG_OPEN_RDP_TO_WORLD: SecurityRuleDefinition = {
   ruleId: "SG_OPEN_RDP_TO_WORLD",
+  ruleVersion: "1",
   title: "Security group allows RDP (port 3389) from 0.0.0.0/0 or ::/0",
   description: "Detects security groups that allow inbound TCP port 3389 (RDP) from any source. This exposes Windows workloads to unauthorized remote access.",
   severity: "HIGH",
@@ -72,6 +74,7 @@ const SG_OPEN_RDP_TO_WORLD: SecurityRuleDefinition = {
 
 const EC2_PUBLIC_IP_PRESENT: SecurityRuleDefinition = {
   ruleId: "EC2_PUBLIC_IP_PRESENT",
+  ruleVersion: "1",
   title: "EC2 instance has a public IP address",
   description: "Detects EC2 instances with a public IP address assigned. Public IPs increase the attack surface by making the instance directly reachable from the internet.",
   severity: "MEDIUM",
@@ -95,6 +98,7 @@ const EC2_PUBLIC_IP_PRESENT: SecurityRuleDefinition = {
 
 const EBS_UNENCRYPTED: SecurityRuleDefinition = {
   ruleId: "EBS_UNENCRYPTED",
+  ruleVersion: "1",
   title: "EBS volume is not encrypted",
   description: "Detects EBS volumes where encryption is disabled or not configured. Unencrypted volumes may expose data at rest.",
   severity: "MEDIUM",
@@ -121,6 +125,7 @@ const EBS_UNENCRYPTED: SecurityRuleDefinition = {
 
 const MISSING_OWNER_TAG: SecurityRuleDefinition = {
   ruleId: "MISSING_OWNER_TAG",
+  ruleVersion: "1",
   title: "Resource is missing an owner tag",
   description: "Detects resources that do not have an 'owner' tag. Owner tagging is essential for cost attribution, incident response, and accountability.",
   severity: "LOW",
@@ -141,6 +146,7 @@ const MISSING_OWNER_TAG: SecurityRuleDefinition = {
 
 const MISSING_ENVIRONMENT_TAG: SecurityRuleDefinition = {
   ruleId: "MISSING_ENVIRONMENT_TAG",
+  ruleVersion: "1",
   title: "Resource is missing an environment tag",
   description: "Detects resources that do not have an 'environment' or 'env' tag. Environment tagging is essential for proper access control and deployment governance.",
   severity: "LOW",
@@ -161,6 +167,7 @@ const MISSING_ENVIRONMENT_TAG: SecurityRuleDefinition = {
 
 const EBS_VOLUME_UNATTACHED: SecurityRuleDefinition = {
   ruleId: "EBS_VOLUME_UNATTACHED",
+  ruleVersion: "1",
   title: "EBS volume is unattached",
   description: "Detects EBS volumes that are available or have no active attachments. Unattached volumes can create avoidable cost and data-retention risk.",
   severity: "LOW",
@@ -185,6 +192,7 @@ const EBS_VOLUME_UNATTACHED: SecurityRuleDefinition = {
 
 const PUBLIC_NETWORK_WITH_COMPUTE_ATTACHMENT: SecurityRuleDefinition = {
   ruleId: "PUBLIC_NETWORK_WITH_COMPUTE_ATTACHMENT",
+  ruleVersion: "1",
   title: "EC2 instance is associated with a risky public security group",
   description: "Detects EC2 instances that have a public IP and are associated with a security group allowing unrestricted inbound access.",
   severity: "HIGH",

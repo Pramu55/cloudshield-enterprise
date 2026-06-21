@@ -1,4 +1,8 @@
-import { prisma, scopeByOrganization } from "../index.js";
+import {
+  appendSecurityFindingEvidenceSnapshot,
+  prisma,
+  scopeByOrganization
+} from "../index.js";
 import { SECURITY_RULE_CATALOG } from "./security-rule.catalog.js";
 import type { ResourceForEvaluation } from "./security-rule.types.js";
 
@@ -9,7 +13,10 @@ export type EvaluationSummary = {
   findingsResolved: number;
 };
 
-export async function evaluateSecurityRules(organizationId: string): Promise<EvaluationSummary> {
+export async function evaluateSecurityRules(
+  organizationId: string,
+  correlationId: string | null = null
+): Promise<EvaluationSummary> {
   const resources = await prisma.cloudResource.findMany({
     where: scopeByOrganization(organizationId, { archivedAt: null }),
     select: {
@@ -76,65 +83,104 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
           sampleData: resource.source === "SAMPLE",
           evaluationMode: "STORED_INVENTORY"
         };
+        const snapshotInput = {
+          organizationId,
+          resourceId: resource.id,
+          ruleId: rule.ruleId,
+          ruleVersion: rule.ruleVersion,
+          schemaVersion: 1,
+          evaluationMode: "STORED_INVENTORY" as const,
+          findingSource: "RULE_ENGINE" as const,
+          resourceSource: resource.source,
+          sampleData: resource.source === "SAMPLE",
+          title: rule.title,
+          summary: `Rule ${rule.ruleId} evaluated stored CloudShield inventory and produced a finding.`,
+          resourceSnapshot: {
+            resourceId: resource.resourceId,
+            resourceType: resource.resourceType,
+            name: resource.name,
+            region: resource.region,
+            status: resource.status,
+            tags: evalResource.tags,
+            ownerTeamId: resource.ownerTeamId,
+            source: resource.source
+          },
+          evaluationContext: {
+            resultStatus: result.status,
+            evidence
+          },
+          correlationId,
+          capturedAt: evaluatedAt
+        };
 
         if (existing) {
           const reopensResolvedFinding = existing.status === "RESOLVED";
-          await prisma.securityFinding.update({
-            where: { id: existing.id },
-            data: {
-              source: "RULE_ENGINE",
-              ...(reopensResolvedFinding
-                ? {
-                    status: "REOPENED" as const,
-                    workflowStatus: "REOPENED" as const,
-                    resolvedAt: null,
-                    reopenedAt: evaluatedAt
-                  }
-                : {}),
-              lastSeenAt: evaluatedAt,
-              lastEvaluatedAt: evaluatedAt,
-              evidence
-            }
+          await prisma.$transaction(async (tx) => {
+            await tx.securityFinding.update({
+              where: { id: existing.id },
+              data: {
+                source: "RULE_ENGINE",
+                ...(reopensResolvedFinding
+                  ? {
+                      status: "REOPENED" as const,
+                      workflowStatus: "REOPENED" as const,
+                      resolvedAt: null,
+                      reopenedAt: evaluatedAt
+                    }
+                  : {}),
+                lastSeenAt: evaluatedAt,
+                lastEvaluatedAt: evaluatedAt,
+                evidence
+              }
+            });
+            await appendSecurityFindingEvidenceSnapshot(tx, {
+              ...snapshotInput,
+              securityFindingId: existing.id
+            });
           });
           findingsUpdated++;
         } else {
-          const finding = await prisma.securityFinding.create({
-            data: {
-              organizationId,
-              awsAccountId: resource.awsAccountId,
-              resourceId: resource.id,
-              ruleId: rule.ruleId,
-              title: rule.title,
-              description: rule.description,
-              severity: rule.severity as any,
-              status: "OPEN",
-              workflowStatus: "OPEN",
-              evidence,
-              source: "RULE_ENGINE",
-              businessImpact: rule.businessImpact,
-              recommendation: rule.recommendation,
-              complianceRefs: rule.complianceRefs,
-              ownerTeamId: resource.ownerTeamId,
-              firstSeenAt: evaluatedAt,
-              lastSeenAt: evaluatedAt,
-              lastEvaluatedAt: evaluatedAt
-            }
+          await prisma.$transaction(async (tx) => {
+            const finding = await tx.securityFinding.create({
+              data: {
+                organizationId,
+                awsAccountId: resource.awsAccountId,
+                resourceId: resource.id,
+                ruleId: rule.ruleId,
+                title: rule.title,
+                description: rule.description,
+                severity: rule.severity,
+                status: "OPEN",
+                workflowStatus: "OPEN",
+                evidence,
+                source: "RULE_ENGINE",
+                businessImpact: rule.businessImpact,
+                recommendation: rule.recommendation,
+                complianceRefs: rule.complianceRefs,
+                ownerTeamId: resource.ownerTeamId,
+                firstSeenAt: evaluatedAt,
+                lastSeenAt: evaluatedAt,
+                lastEvaluatedAt: evaluatedAt
+              }
+            });
+            await tx.recommendation.create({
+              data: {
+                organizationId,
+                securityFindingId: finding.id,
+                actionType: "MANUAL_REVIEW",
+                title: `Remediate ${finding.title}`,
+                description: finding.recommendation || "Ensure proper configuration according to security policy.",
+                riskReduction: `Reduces risk for rule ${rule.ruleId} on resource ${resource.resourceId}.`,
+                canExecute: false,
+                blockedReason: "Automatic remediation is disabled in CloudShield v1."
+              }
+            });
+            await appendSecurityFindingEvidenceSnapshot(tx, {
+              ...snapshotInput,
+              securityFindingId: finding.id
+            });
           });
           findingsCreated++;
-
-          // Dynamically produce governance recommendations from findings/resources
-          await prisma.recommendation.create({
-            data: {
-              organizationId,
-              securityFindingId: finding.id,
-              actionType: "MANUAL_REVIEW",
-              title: `Remediate ${finding.title}`,
-              description: finding.recommendation || "Ensure proper configuration according to security policy.",
-              riskReduction: `Reduces risk for rule ${rule.ruleId} on resource ${resource.resourceId}.`,
-              canExecute: false,
-              blockedReason: "Automatic remediation is disabled in CloudShield v1."
-            }
-          });
         }
       }
     }

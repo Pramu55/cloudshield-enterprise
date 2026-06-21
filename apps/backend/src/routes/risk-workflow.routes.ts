@@ -7,6 +7,8 @@ import {
   ArchiveFindingRequestSchema,
   AssignFindingRequestSchema,
   FalsePositiveRequestSchema,
+  EvidenceSnapshotListQuerySchema,
+  EvidenceSnapshotListResponseDtoSchema,
   PlanRemediationRequestSchema,
   ReopenFindingRequestSchema,
   ResolveFindingRequestSchema,
@@ -27,6 +29,7 @@ import {
   reopenFinding,
   resolveFinding
 } from "../modules/risk-workflow/risk-workflow.service.js";
+import { prisma } from "@cloudshield/database";
 
 export async function registerRiskWorkflowRoutes(
   app: FastifyInstance
@@ -63,6 +66,88 @@ export async function registerRiskWorkflowRoutes(
       }
 
       return RiskFindingDetailDtoSchema.parse(finding);
+    }
+  );
+
+  app.get(
+    "/api/v1/risk/findings/:findingId/evidence-snapshots",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.FINDINGS_READ);
+      const { findingId } = paramsSchema.parse(request.params);
+      const finding = await getRiskFindingDetail(auth.organizationId, findingId);
+      if (!finding) {
+        reply.status(404).send({
+          error: "risk_finding_not_found",
+          message: "Security finding was not found for this organization."
+        });
+        return;
+      }
+
+      const query = EvidenceSnapshotListQuerySchema.parse(request.query);
+      const cursor = decodeSnapshotCursor(query.cursor);
+      const where = {
+        organizationId: auth.organizationId,
+        securityFindingId: findingId,
+        ...(cursor
+          ? {
+              OR: [
+                { capturedAt: { lt: cursor.capturedAt } },
+                { capturedAt: cursor.capturedAt, id: { lt: cursor.id } }
+              ]
+            }
+          : {})
+      };
+      const [rows, total] = await Promise.all([
+        prisma.securityFindingEvidenceSnapshot.findMany({
+          where,
+          orderBy: [{ capturedAt: "desc" }, { id: "desc" }],
+          take: query.limit + 1
+        }),
+        prisma.securityFindingEvidenceSnapshot.count({
+          where: {
+            organizationId: auth.organizationId,
+            securityFindingId: findingId
+          }
+        })
+      ]);
+      const hasMore = rows.length > query.limit;
+      const items = rows.slice(0, query.limit);
+      const last = items.at(-1);
+
+      return EvidenceSnapshotListResponseDtoSchema.parse({
+        items: items.map((item) => ({
+          id: item.id,
+          securityFindingId: item.securityFindingId,
+          resourceId: item.resourceId,
+          ruleId: item.ruleId,
+          ruleVersion: item.ruleVersion,
+          schemaVersion: item.schemaVersion,
+          evaluationMode: item.evaluationMode,
+          findingSource: item.findingSource,
+          resourceSource: item.resourceSource,
+          sampleData: item.sampleData,
+          title: item.title,
+          summary: item.summary,
+          resourceSnapshot: item.resourceSnapshot,
+          evaluationContext: item.evaluationContext,
+          correlationId: item.correlationId,
+          capturedAt: item.capturedAt.toISOString(),
+          createdAt: item.createdAt.toISOString()
+        })),
+        total,
+        nextCursor: hasMore && last
+          ? Buffer.from(JSON.stringify({
+              capturedAt: last.capturedAt.toISOString(),
+              id: last.id
+            })).toString("base64url")
+          : null,
+        hasMore,
+        awsApiCallExecuted: false,
+        mutationExecuted: false,
+        remediationExecuted: false
+      });
     }
   );
 
@@ -206,6 +291,25 @@ export async function registerRiskWorkflowRoutes(
 const paramsSchema = z.object({
   findingId: z.string().min(1).max(128)
 });
+
+const snapshotCursorSchema = z.object({
+  capturedAt: z.string().datetime(),
+  id: z.string().min(1).max(128)
+}).strict();
+
+function decodeSnapshotCursor(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = snapshotCursorSchema.parse(
+      JSON.parse(Buffer.from(value, "base64url").toString("utf8"))
+    );
+    return { capturedAt: new Date(parsed.capturedAt), id: parsed.id };
+  } catch {
+    throw Object.assign(new Error("Evidence snapshot cursor is invalid."), {
+      statusCode: 400
+    });
+  }
+}
 
 function sendWorkflowResult(reply: FastifyReply, result: unknown) {
   if (!result) {
