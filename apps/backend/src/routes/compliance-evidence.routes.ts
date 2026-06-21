@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { ComplianceControlsRegistryResponseSchema } from "@cloudshield/contracts";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import {
@@ -27,7 +28,9 @@ export async function registerComplianceEvidenceRoutes(
   app.get("/api/v1/compliance/controls", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.REPORTS_READ);
-    return listComplianceControls(auth.organizationId);
+    return ComplianceControlsRegistryResponseSchema.parse(
+      await listComplianceControls(auth.organizationId)
+    );
   });
 
   app.get(

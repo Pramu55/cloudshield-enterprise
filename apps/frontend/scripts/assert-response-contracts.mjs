@@ -9,6 +9,7 @@ import {
   FrontendAwsAccountDetailSchema,
   FrontendAwsIdentityValidationSchema,
   FrontendComplianceEvidenceCenterSchema,
+  FrontendComplianceControlsRegistrySchema,
   FrontendCapabilitySessionSchema,
   FrontendCommandCenterResponseSchema,
   FrontendGovernanceActivitySchema,
@@ -725,6 +726,92 @@ assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceRes
 assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, controls: [{ ...complianceControl, sampleData: "false" }] }).success, false);
 assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, evidence: [{ ...complianceEvidence, status: "UNKNOWN" }] }).success, false);
 assert.equal(FrontendComplianceEvidenceCenterSchema.safeParse({ ...complianceResponse, evidence: [{ ...complianceEvidence, summary: "providerError: raw failure" }] }).success, false);
+
+const complianceRegistryResponse = {
+  controls: [{
+    controlId: "CIS_INSPIRED_NETWORK_ADMIN_001",
+    framework: "CIS_INSPIRED",
+    controlCode: "NET-ADMIN-001",
+    title: "Administrative network exposure",
+    description: "Maps stored findings for unrestricted administrative access.",
+    severity: "HIGH",
+    status: "FAILING",
+    findingCount: 1,
+    openFindingCount: 1,
+    acceptedRiskCount: 0,
+    resolvedFindingCount: 0,
+    evidenceSnapshotCount: 1,
+    latestEvidenceCapturedAt: timestamp,
+    mappedRuleIds: ["SG_OPEN_SSH_TO_WORLD"],
+    provenance: {
+      findingSources: ["RULE_ENGINE"],
+      resourceSources: ["SAMPLE"],
+      sampleData: true
+    },
+    mappedFindings: [{
+      findingId: "finding-1",
+      title: "Open SSH",
+      severity: "HIGH",
+      workflowStatus: "OPEN",
+      ruleId: "SG_OPEN_SSH_TO_WORLD",
+      latestEvidenceSnapshotId: "snapshot-1",
+      latestEvidenceCapturedAt: timestamp
+    }]
+  }],
+  generatedAt: timestamp,
+  total: 1,
+  safety: {
+    awsApiCallExecuted: false,
+    mutationExecuted: false,
+    remediationExecuted: false,
+    [["raw", "EvidenceIncluded"].join("")]: false
+  }
+};
+const parsedComplianceRegistry =
+  FrontendComplianceControlsRegistrySchema.parse(complianceRegistryResponse);
+assert.equal(parsedComplianceRegistry.controls[0].status, "FAILING");
+assert.equal(parsedComplianceRegistry.controls[0].provenance.sampleData, true);
+assert.equal(FrontendComplianceControlsRegistrySchema.safeParse({
+  ...complianceRegistryResponse,
+  controls: [{ ...complianceRegistryResponse.controls[0], framework: "OFFICIAL_CERTIFIED" }]
+}).success, false);
+assert.equal(FrontendComplianceControlsRegistrySchema.safeParse({
+  ...complianceRegistryResponse,
+  controls: [{ ...complianceRegistryResponse.controls[0], status: "WARNING" }]
+}).success, false);
+assert.equal(FrontendComplianceControlsRegistrySchema.safeParse({
+  ...complianceRegistryResponse,
+  controls: [{ ...complianceRegistryResponse.controls[0], evidenceSnapshotCount: -1 }]
+}).success, false);
+assert.equal(FrontendComplianceControlsRegistrySchema.safeParse({
+  ...complianceRegistryResponse,
+  controls: [{ ...complianceRegistryResponse.controls[0], evidence: { unsafe: "hidden" } }]
+}).success, false);
+assert.equal(FrontendComplianceControlsRegistrySchema.safeParse({
+  ...complianceRegistryResponse,
+  controls: [{
+    ...complianceRegistryResponse.controls[0],
+    latestEvidenceCapturedAt: null,
+    mappedFindings: [{
+      ...complianceRegistryResponse.controls[0].mappedFindings[0],
+      latestEvidenceSnapshotId: null,
+      latestEvidenceCapturedAt: null
+    }]
+  }]
+}).success, true);
+assert.equal(FrontendComplianceControlsRegistrySchema.safeParse({
+  ...complianceRegistryResponse,
+  controls: [{ ...complianceRegistryResponse.controls[0], findingCount: undefined }]
+}).success, false);
+
+const compliancePageSource = await readFile(
+  new URL("../app/dashboard/compliance/page.tsx", import.meta.url),
+  "utf8"
+);
+assert.equal(compliancePageSource.includes("FrontendComplianceControlsRegistrySchema"), true);
+assert.equal(compliancePageSource.includes("/api/v1/compliance/controls"), true);
+assert.equal(compliancePageSource.includes("not certification"), true);
+assert.equal(compliancePageSource.includes("dangerouslySetInnerHTML"), false);
 
 const parsedAccountDetail = FrontendAwsAccountDetailSchema.parse({ item: { ...account, ...unsafeFields }, ...unsafeFields });
 assertUnsafeFieldsRemoved(parsedAccountDetail, "AWS account detail");
