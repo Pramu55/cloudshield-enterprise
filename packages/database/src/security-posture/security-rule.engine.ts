@@ -149,7 +149,7 @@ export async function evaluateSecurityRules(
                 ruleId: rule.ruleId,
                 title: rule.title,
                 description: rule.description,
-                severity: rule.severity as any,
+                severity: rule.severity,
                 status: "OPEN",
                 workflowStatus: "OPEN",
                 evidence,
