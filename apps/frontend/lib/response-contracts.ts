@@ -16,6 +16,7 @@ import {
   MonitoringHealthResponseSchema,
   MonitoringRunDtoSchema,
   MonitoringRunsListResponseSchema,
+  MembersListResponseSchema,
   OrganizationScopedIdSchema,
   RemediationPlanDtoSchema,
   RemediationPlanListResponseSchema,
@@ -24,6 +25,11 @@ import {
   SecurityAlertEvidenceDtoSchema,
   SecurityAlertEvidenceListResponseSchema,
   SecurityFindingsResponseSchema,
+  RiskAuditEventDtoSchema,
+  RiskFindingDetailDtoSchema,
+  RiskFindingDtoSchema,
+  RiskWorkflowActionDtoSchema,
+  TeamDetailsDtoSchema,
   InventoryOrchestrationResponseSchema
 } from "@cloudshield/contracts";
 import { z } from "zod";
@@ -33,6 +39,152 @@ const identifierValue = OrganizationScopedIdSchema.shape.id;
 const emptyObject = AutomationSafetyFlagsSchema.pick({});
 const controlCharacters = /[\u0000-\u001f\u007f]/;
 const providerErrorContent = /\b(?:AccessKeyId|SecretAccessKey|SessionToken|rawResponse|rawError|providerError|stack|credentials|authorization)\b|(?:^|\s)at\s+\S+\s+\([^)]+:\d+:\d+\)/i;
+const unsafeEvidenceKey = /(?:access[_-]?key|secret|session[_-]?token|credential|authorization|raw[_-]?(?:response|error)|provider[_-]?error|stack)/i;
+const MAX_EVIDENCE_DEPTH = 6;
+const MAX_EVIDENCE_NODES = 200;
+const MAX_EVIDENCE_BYTES = 16_384;
+
+function validateSafeEvidence(value: unknown): string | null {
+  let nodes = 0;
+
+  function visit(current: unknown, depth: number): string | null {
+    nodes += 1;
+    if (nodes > MAX_EVIDENCE_NODES) return "Evidence contains too many values.";
+    if (depth > MAX_EVIDENCE_DEPTH) return "Evidence nesting is too deep.";
+    if (current === null || typeof current === "boolean") return null;
+    if (typeof current === "number") return Number.isFinite(current) ? null : "Evidence contains a non-finite number.";
+    if (typeof current === "string") {
+      if (current.length > 2000) return "Evidence text is too long.";
+      if (controlCharacters.test(current) || providerErrorContent.test(current)) {
+        return "Evidence contains unsafe provider or credential details.";
+      }
+      return null;
+    }
+    if (Array.isArray(current)) {
+      if (current.length > 50) return "Evidence arrays are too large.";
+      for (const item of current) {
+        const issue = visit(item, depth + 1);
+        if (issue) return issue;
+      }
+      return null;
+    }
+    if (typeof current === "object") {
+      const entries = Object.entries(current);
+      if (entries.length > 50) return "Evidence objects contain too many fields.";
+      for (const [key, item] of entries) {
+        if (unsafeEvidenceKey.test(key) || controlCharacters.test(key)) {
+          return "Evidence contains an unsafe field name.";
+        }
+        const issue = visit(item, depth + 1);
+        if (issue) return issue;
+      }
+      return null;
+    }
+    return "Evidence contains an unsupported value.";
+  }
+
+  try {
+    if (JSON.stringify(value).length > MAX_EVIDENCE_BYTES) return "Evidence payload is too large.";
+  } catch {
+    return "Evidence could not be serialized safely.";
+  }
+
+  return visit(value, 0);
+}
+
+const SafeEvidenceSchema = z.record(z.string(), z.unknown()).superRefine((value, context) => {
+  const issue = validateSafeEvidence(value);
+  if (issue) context.addIssue({ code: "custom", message: issue });
+});
+
+const safeFindingText = z.string()
+  .max(4000)
+  .refine((value) => !controlCharacters.test(value), "Finding text cannot contain control characters.")
+  .refine((value) => !providerErrorContent.test(value), "Finding text cannot contain provider error details.");
+const safeAuditAction = z.string()
+  .trim()
+  .min(1)
+  .max(120)
+  .refine((value) => !controlCharacters.test(value), "Audit actions cannot contain control characters.");
+
+export const FrontendFindingIdentifierSchema = identifierValue
+  .max(200)
+  .refine((value) => value === value.trim(), "Finding identifiers cannot contain surrounding whitespace.")
+  .refine((value) => !controlCharacters.test(value) && !/[\\/?#]/.test(value), "Finding identifier format is invalid.");
+
+export function resolveFrontendFindingRouteId(value: string | string[] | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const parsed = FrontendFindingIdentifierSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+const FrontendRiskAuditEventSchema = RiskAuditEventDtoSchema.extend({
+  action: safeAuditAction,
+  metadata: SafeEvidenceSchema,
+  createdAt: isoTimestamp
+}).transform((event) => ({
+  id: event.id,
+  action: event.action,
+  metadata: event.metadata,
+  createdAt: event.createdAt
+}));
+
+const FrontendRiskFindingObjectSchema = RiskFindingDtoSchema.extend({
+  title: safeFindingText,
+  description: safeFindingText,
+  businessImpact: safeFindingText.nullable(),
+  remediationPlan: safeFindingText.nullable(),
+  riskAcceptanceReason: safeFindingText.nullable(),
+  recommendation: safeFindingText.nullable(),
+  evidenceSummary: safeFindingText,
+  evidence: SafeEvidenceSchema,
+  firstSeenAt: isoTimestamp,
+  lastSeenAt: isoTimestamp,
+  updatedAt: isoTimestamp,
+  lastWorkflowActionAt: isoTimestamp.nullable(),
+  archivedAt: isoTimestamp.nullable(),
+  targetResolutionDate: isoTimestamp.nullable(),
+  riskAcceptedUntil: isoTimestamp.nullable(),
+  riskAcceptedAt: isoTimestamp.nullable()
+});
+
+const FrontendRiskFindingSchema = FrontendRiskFindingObjectSchema.superRefine((finding, context) => {
+  if (finding.sampleData !== (finding.resourceSource === "SAMPLE")) {
+    context.addIssue({
+      code: "custom",
+      path: ["sampleData"],
+      message: "Finding sample state must match its linked resource source."
+    });
+  }
+});
+
+export const FrontendRiskFindingDetailSchema = RiskFindingDetailDtoSchema
+  .extend({
+    ...FrontendRiskFindingObjectSchema.shape,
+    auditEvents: FrontendRiskAuditEventSchema.array().max(50)
+  })
+  .superRefine((finding, context) => {
+    if (finding.sampleData !== (finding.resourceSource === "SAMPLE")) {
+      context.addIssue({
+        code: "custom",
+        path: ["sampleData"],
+        message: "Finding sample state must match its linked resource source."
+      });
+    }
+  });
+
+export const FrontendRiskWorkflowActionSchema = RiskWorkflowActionDtoSchema.extend({
+  finding: FrontendRiskFindingSchema,
+  auditEvent: FrontendRiskAuditEventSchema
+});
+
+export const FrontendRiskAssignmentTeamsSchema = z.object({
+  teams: TeamDetailsDtoSchema.array()
+}).transform((data) => data.teams.map((team) => ({ id: team.id, name: team.name })));
+
+export const FrontendRiskAssignmentMembersSchema = MembersListResponseSchema.transform((data) =>
+  data.members.map((member) => ({ id: member.userId, name: member.name, email: member.email }))
+);
 
 export const FrontendSecurityFindingsResponseSchema = SecurityFindingsResponseSchema
   .superRefine((data, context) => {
@@ -790,3 +942,7 @@ export type FrontendInventorySyncResponse = ReturnType<typeof FrontendInventoryS
 export type FrontendSecurityAlertEvidence = ReturnType<typeof FrontendSecurityAlertEvidenceSchema.parse>;
 export type FrontendSecurityAlertEvidenceList = ReturnType<typeof FrontendSecurityAlertEvidenceListSchema.parse>;
 export type FrontendSecurityFindingsResponse = ReturnType<typeof FrontendSecurityFindingsResponseSchema.parse>;
+export type FrontendRiskFindingDetail = ReturnType<typeof FrontendRiskFindingDetailSchema.parse>;
+export type FrontendRiskWorkflowAction = ReturnType<typeof FrontendRiskWorkflowActionSchema.parse>;
+export type FrontendRiskAssignmentTeam = ReturnType<typeof FrontendRiskAssignmentTeamsSchema.parse>[number];
+export type FrontendRiskAssignmentMember = ReturnType<typeof FrontendRiskAssignmentMembersSchema.parse>[number];

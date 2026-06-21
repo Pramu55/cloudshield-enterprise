@@ -41,6 +41,7 @@ test("Security Boundary, CSRF, CORS, Rate Limiting, and Cookie Policies", async 
     // Verify _csrf cookie attributes proven by implementation
     assert.strictEqual(csrfCookieObj.sameSite, "Lax", "_csrf cookie SameSite should be Lax");
     assert.strictEqual(csrfCookieObj.httpOnly, true, "_csrf cookie should be HttpOnly");
+    assert.strictEqual(csrfCookieObj.path, "/", "_csrf cookie should be available to every protected API route");
   });
 
   await t.test("CSRF Enforcement: Missing token is rejected with 403", async () => {
