@@ -8,22 +8,44 @@ import type {
   ReopenFindingRequest,
   ResolveFindingRequest,
   RiskFindingDto,
+  RiskWorkflowActionName,
   RiskWorkflowStatus
 } from "@cloudshield/contracts";
-import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
 import { createRiskWorkflowAuditEvent, toRiskAuditEventDto } from "./risk-workflow.audit.js";
 import {
+  availableRiskWorkflowActions,
+  isRiskWorkflowTransitionAllowed,
   RiskWorkflowMessages,
   RiskWorkflowSafety,
   evidenceSummary
 } from "./risk-workflow.policy.js";
+import type { RiskWorkflowAuditActionName } from "./risk-workflow.types.js";
 
 type ActorContext = {
   organizationId: string;
   userId: string;
 };
 
+type WorkflowClient = Pick<
+  Prisma.TransactionClient,
+  "auditEvent" | "riskAcceptance" | "securityFinding" | "team" | "user"
+>;
+
 type FindingWithRelations = Awaited<ReturnType<typeof getFindingRecord>>;
+
+type WorkflowInput = {
+  action: RiskWorkflowActionName;
+  auditAction: RiskWorkflowAuditActionName;
+  status: RiskWorkflowStatus;
+  data: Prisma.SecurityFindingUncheckedUpdateManyInput;
+  metadata: Record<string, unknown>;
+  message: string;
+  riskAcceptance?: {
+    businessJustification: string;
+    expiresAt: Date;
+  };
+};
 
 export async function listRiskFindings(organizationId: string) {
   const findings = await prisma.securityFinding.findMany({
@@ -46,7 +68,7 @@ export async function getRiskFindingDetail(
   organizationId: string,
   findingId: string
 ) {
-  const finding = await getFindingRecord(organizationId, findingId);
+  const finding = await getFindingRecord(prisma, organizationId, findingId);
   if (!finding) {
     return null;
   }
@@ -60,10 +82,12 @@ export async function getRiskFindingDetail(
     orderBy: { createdAt: "desc" },
     take: 50
   });
+  const findingDto = toRiskFindingDto(finding);
 
   return {
-    ...toRiskFindingDto(finding),
-    auditEvents: auditEvents.map(toRiskAuditEventDto)
+    ...findingDto,
+    auditEvents: auditEvents.map(toRiskAuditEventDto),
+    availableActions: availableRiskWorkflowActions(findingDto.workflowStatus)
   };
 }
 
@@ -73,7 +97,8 @@ export async function acknowledgeFinding(
   body: AcknowledgeFindingRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.acknowledged",
+    action: "acknowledge",
+    auditAction: "risk.finding.acknowledged",
     status: "ACKNOWLEDGED",
     data: {},
     metadata: { note: body.note ?? null },
@@ -86,10 +111,9 @@ export async function assignFinding(
   findingId: string,
   body: AssignFindingRequest
 ) {
-  await validateTeamAndUser(actor.organizationId, body.ownerTeamId, body.assignedToUserId);
-
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.assigned",
+    action: "assign",
+    auditAction: "risk.finding.assigned",
     status: "ASSIGNED",
     data: {
       ownerTeamId: body.ownerTeamId,
@@ -117,7 +141,8 @@ export async function planRemediation(
   body: PlanRemediationRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.remediation_planned",
+    action: "plan-remediation",
+    auditAction: "risk.finding.remediation_planned",
     status: "REMEDIATION_PLANNED",
     data: {
       remediationPlan: body.remediationPlan,
@@ -142,8 +167,9 @@ export async function acceptRisk(
 ) {
   const acceptedUntil = new Date(body.riskAcceptedUntil);
 
-  const result = await updateWorkflow(actor, findingId, {
-    action: "risk.finding.risk_accepted",
+  return updateWorkflow(actor, findingId, {
+    action: "accept-risk",
+    auditAction: "risk.finding.risk_accepted",
     status: "RISK_ACCEPTED",
     data: {
       riskAcceptedUntil: acceptedUntil,
@@ -156,30 +182,12 @@ export async function acceptRisk(
       riskAcceptedUntil: body.riskAcceptedUntil,
       riskAcceptanceReason: body.riskAcceptanceReason
     },
+    riskAcceptance: {
+      businessJustification: body.riskAcceptanceReason,
+      expiresAt: acceptedUntil
+    },
     message: RiskWorkflowMessages.acceptRisk
   });
-
-  if (!result) {
-    return null;
-  }
-
-  await prisma.riskAcceptance.create({
-    data: {
-      organizationId: actor.organizationId,
-      securityFindingId: result.finding.id,
-      businessJustification: body.riskAcceptanceReason,
-      approver: actor.userId,
-      owner: result.finding.assignedToUserEmail || result.finding.ownerTeamName || "Unassigned",
-      ownerTeamId: result.finding.ownerTeamId,
-      evidence: {
-        sampleData: result.finding.sampleData,
-        source: "risk workflow action"
-      },
-      expiresAt: acceptedUntil
-    }
-  });
-
-  return result;
 }
 
 export async function markFalsePositive(
@@ -188,7 +196,8 @@ export async function markFalsePositive(
   body: FalsePositiveRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.false_positive_marked",
+    action: "false-positive",
+    auditAction: "risk.finding.false_positive_marked",
     status: "FALSE_POSITIVE",
     data: {},
     metadata: { reason: body.reason },
@@ -202,7 +211,8 @@ export async function resolveFinding(
   body: ResolveFindingRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.resolved",
+    action: "resolve",
+    auditAction: "risk.finding.resolved",
     status: "RESOLVED",
     data: { resolvedAt: new Date() },
     metadata: { resolutionNote: body.resolutionNote ?? null },
@@ -216,7 +226,8 @@ export async function archiveFinding(
   body: ArchiveFindingRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.archived",
+    action: "archive",
+    auditAction: "risk.finding.archived",
     status: "ARCHIVED",
     data: { archivedAt: new Date() },
     metadata: { archiveReason: body.archiveReason ?? null },
@@ -230,12 +241,15 @@ export async function reopenFinding(
   body: ReopenFindingRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.reopened",
+    action: "reopen",
+    auditAction: "risk.finding.reopened",
     status: "REOPENED",
     data: {
+      reopenedAt: new Date(),
       archivedAt: null,
       resolvedAt: null,
       riskAcceptedUntil: null,
+      riskAcceptanceReason: null,
       riskAcceptedAt: null,
       riskAcceptedByUserId: null
     },
@@ -247,56 +261,114 @@ export async function reopenFinding(
 async function updateWorkflow(
   actor: ActorContext,
   findingId: string,
-  input: {
-    action: string;
-    status: RiskWorkflowStatus;
-    data: Record<string, unknown>;
-    metadata: Record<string, unknown>;
-    message: string;
-  }
+  input: WorkflowInput
 ) {
-  const existing = await getFindingRecord(actor.organizationId, findingId);
+  const existing = await getFindingRecord(prisma, actor.organizationId, findingId);
   if (!existing) {
     return null;
   }
 
-  const now = new Date();
-  const finding = await prisma.securityFinding.update({
-    where: { id: existing.id },
-    data: {
-      ...input.data,
-      status: input.status,
-      workflowStatus: input.status,
-      lastWorkflowActionAt: now
-    },
-    include: riskFindingInclude
-  });
+  const fromStatus = normalizeWorkflowStatus(existing.workflowStatus);
+  if (!isRiskWorkflowTransitionAllowed(fromStatus, input.action)) {
+    throw workflowConflict(
+      `The ${input.action} action is not available from ${fromStatus}.`
+    );
+  }
 
-  const auditEvent = await createRiskWorkflowAuditEvent({
-    organizationId: actor.organizationId,
-    actorUserId: actor.userId,
-    findingId: finding.id,
-    action: input.action,
-    metadata: {
-      fromStatus: existing.workflowStatus,
-      toStatus: input.status,
-      ...input.metadata,
-      awsApiCallExecuted: false,
-      mutationExecuted: false,
-      remediationExecuted: false
+  if (input.action === "accept-risk" && !existing.ownerTeamId && !existing.assignedToUserId) {
+    throw workflowConflict("Risk acceptance requires a current owner.");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (input.action === "assign") {
+      await validateTeamAndUser(
+        tx,
+        actor.organizationId,
+        input.data.ownerTeamId as string | undefined,
+        input.data.assignedToUserId as string | undefined
+      );
     }
-  });
 
-  return {
-    finding: toRiskFindingDto(finding),
-    auditEvent: toRiskAuditEventDto(auditEvent),
-    ...RiskWorkflowSafety,
-    message: input.message
-  };
+    const now = new Date();
+    const updateResult = await tx.securityFinding.updateMany({
+      where: {
+        id: existing.id,
+        organizationId: actor.organizationId,
+        status: existing.status,
+        workflowStatus: existing.workflowStatus,
+        updatedAt: existing.updatedAt
+      },
+      data: {
+        ...input.data,
+        status: input.status,
+        workflowStatus: input.status,
+        lastWorkflowActionAt: now
+      }
+    });
+
+    if (updateResult.count !== 1) {
+      throw workflowConflict(
+        "The finding workflow changed before this action could be applied."
+      );
+    }
+
+    const finding = await getFindingRecord(tx, actor.organizationId, existing.id);
+    if (!finding) {
+      throw workflowConflict("The finding is no longer available.");
+    }
+
+    const auditEvent = await createRiskWorkflowAuditEvent(tx, {
+      organizationId: actor.organizationId,
+      actorUserId: actor.userId,
+      findingId: finding.id,
+      action: input.auditAction,
+      metadata: {
+        action: input.action,
+        fromStatus,
+        toStatus: input.status,
+        ...input.metadata,
+        awsApiCallExecuted: false,
+        mutationExecuted: false,
+        remediationExecuted: false
+      }
+    });
+
+    if (input.riskAcceptance) {
+      await tx.riskAcceptance.create({
+        data: {
+          organizationId: actor.organizationId,
+          securityFindingId: finding.id,
+          businessJustification: input.riskAcceptance.businessJustification,
+          approver: actor.userId,
+          owner:
+            finding.assignedToUser?.email ||
+            finding.ownerTeam?.name ||
+            "Unassigned",
+          ownerTeamId: finding.ownerTeamId,
+          evidence: {
+            sampleData: finding.resource?.source === "SAMPLE",
+            source: "risk workflow action"
+          },
+          expiresAt: input.riskAcceptance.expiresAt
+        }
+      });
+    }
+
+    return {
+      finding: toRiskFindingDto(finding),
+      auditEvent: toRiskAuditEventDto(auditEvent),
+      ...RiskWorkflowSafety,
+      message: input.message
+    };
+  });
 }
 
-async function getFindingRecord(organizationId: string, findingId: string) {
-  return prisma.securityFinding.findFirst({
+async function getFindingRecord(
+  client: Pick<WorkflowClient, "securityFinding">,
+  organizationId: string,
+  findingId: string
+) {
+  return client.securityFinding.findFirst({
     where: {
       organizationId,
       id: findingId
@@ -306,12 +378,20 @@ async function getFindingRecord(organizationId: string, findingId: string) {
 }
 
 async function validateTeamAndUser(
+  client: Pick<WorkflowClient, "team" | "user">,
   organizationId: string,
   ownerTeamId: string | undefined,
   assignedToUserId: string | undefined
 ) {
+  if (!ownerTeamId && !assignedToUserId) {
+    throw Object.assign(
+      new Error("Assignment requires an owner team or assigned user."),
+      { statusCode: 400 }
+    );
+  }
+
   if (ownerTeamId) {
-    const team = await prisma.team.findFirst({
+    const team = await client.team.findFirst({
       where: { organizationId, id: ownerTeamId },
       select: { id: true }
     });
@@ -324,7 +404,7 @@ async function validateTeamAndUser(
   }
 
   if (assignedToUserId) {
-    const user = await prisma.user.findFirst({
+    const user = await client.user.findFirst({
       where: { organizationId, id: assignedToUserId },
       select: { id: true }
     });
@@ -337,6 +417,16 @@ async function validateTeamAndUser(
   }
 }
 
+function normalizeWorkflowStatus(status: string): RiskWorkflowStatus {
+  return status === "ACCEPTED_RISK"
+    ? "RISK_ACCEPTED"
+    : (status as RiskWorkflowStatus);
+}
+
+function workflowConflict(message: string) {
+  return Object.assign(new Error(message), { statusCode: 409 });
+}
+
 const riskFindingInclude = {
   awsAccount: { select: { name: true } },
   resource: { select: { name: true, resourceType: true, source: true } },
@@ -347,10 +437,7 @@ const riskFindingInclude = {
 
 function toRiskFindingDto(finding: NonNullable<FindingWithRelations>): RiskFindingDto {
   const evidence = (finding.evidence as Record<string, unknown>) || {};
-  const workflowStatus =
-    finding.workflowStatus === "ACCEPTED_RISK"
-      ? "RISK_ACCEPTED"
-      : finding.workflowStatus;
+  const workflowStatus = normalizeWorkflowStatus(finding.workflowStatus);
 
   return {
     id: finding.id,

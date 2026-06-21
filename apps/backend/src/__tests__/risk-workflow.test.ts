@@ -5,7 +5,9 @@ import { buildApp } from "../app.js";
 import { AwsAccountStatus, Environment, prisma } from "@cloudshield/database";
 import {
   RiskFindingDetailDtoSchema,
-  RiskWorkflowActionDtoSchema
+  RiskWorkflowActionDtoSchema,
+  type RiskWorkflowActionName,
+  type RiskWorkflowStatus
 } from "@cloudshield/contracts";
 import { cloudScanQueue } from "../modules/aws-inventory/aws-inventory.queue.js";
 import { cloudAssessmentQueue } from "../modules/intelligence/assessment.queue.js";
@@ -19,12 +21,35 @@ type Session = {
   userId: string;
 };
 
+const workflowMatrix: Record<RiskWorkflowStatus, RiskWorkflowActionName[]> = {
+  OPEN: ["acknowledge", "assign", "false-positive", "resolve", "archive"],
+  REOPENED: ["acknowledge", "assign", "false-positive", "resolve", "archive"],
+  ACKNOWLEDGED: ["assign", "plan-remediation", "accept-risk", "false-positive", "resolve", "archive"],
+  ASSIGNED: ["assign", "plan-remediation", "accept-risk", "false-positive", "resolve", "archive"],
+  REMEDIATION_PLANNED: ["assign", "plan-remediation", "accept-risk", "resolve", "archive"],
+  RISK_ACCEPTED: ["reopen", "archive"],
+  FALSE_POSITIVE: ["reopen", "archive"],
+  RESOLVED: ["reopen", "archive"],
+  ARCHIVED: ["reopen"]
+};
+const workflowActions: RiskWorkflowActionName[] = [
+  "acknowledge",
+  "assign",
+  "plan-remediation",
+  "accept-risk",
+  "false-positive",
+  "resolve",
+  "archive",
+  "reopen"
+];
+
 test("risk finding detail and workflow handoff remain tenant-safe and DB-only", async (t) => {
   const app = await buildApp();
   const tenantA = await registerTenant(app, "risk-detail-a");
   const tenantB = await registerTenant(app, "risk-detail-b");
   const fixtureA = await createFindingFixture(tenantA, "tenant-a");
   const fixtureB = await createFindingFixture(tenantB, "tenant-b");
+  const matrixFixture = await createFindingFixture(tenantA, "state-matrix");
 
   t.after(async () => {
     await prisma.organization.deleteMany({ where: { id: { in: [tenantA.orgId, tenantB.orgId] } } });
@@ -71,6 +96,7 @@ test("risk finding detail and workflow handoff remain tenant-safe and DB-only", 
     assert.equal(detail.findingSource, "RULE_ENGINE");
     assert.equal(detail.resourceSource, "SAMPLE");
     assert.equal(detail.sampleData, true);
+    assert.deepEqual(detail.availableActions, workflowMatrix.OPEN);
     assert.equal(detail.auditEvents.length, 50);
     assert.equal(detail.auditEvents.some((event) => event.action === "risk.finding.other_tenant"), false);
   });
@@ -188,6 +214,260 @@ test("risk finding detail and workflow handoff remain tenant-safe and DB-only", 
     assert.equal(after.ownerTeamId, before.ownerTeamId);
     assert.equal(after.assignedToUserId, before.assignedToUserId);
   });
+
+  await t.test("authoritative availableActions match every workflow state", async () => {
+    for (const [status, expectedActions] of Object.entries(workflowMatrix) as Array<
+      [RiskWorkflowStatus, RiskWorkflowActionName[]]
+    >) {
+      await resetFinding(matrixFixture.finding.id, status, matrixFixture.team.id);
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/risk/findings/${matrixFixture.finding.id}`,
+        headers: { cookie: tenantA.sessionCookie }
+      });
+      assert.equal(response.statusCode, 200, `${status}: ${response.body}`);
+      assert.deepEqual(
+        RiskFindingDetailDtoSchema.parse(response.json()).availableActions,
+        expectedActions,
+        status
+      );
+    }
+  });
+
+  await t.test("every allowed transition succeeds with atomic audit and false safety flags", async () => {
+    for (const [status, actions] of Object.entries(workflowMatrix) as Array<
+      [RiskWorkflowStatus, RiskWorkflowActionName[]]
+    >) {
+      for (const action of actions) {
+        await resetFinding(matrixFixture.finding.id, status, matrixFixture.team.id);
+        const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+        const response = await invokeWorkflowAction(
+          app,
+          tenantA,
+          matrixFixture.finding.id,
+          action,
+          matrixFixture.team.id
+        );
+        assert.equal(response.statusCode, 200, `${status} -> ${action}: ${response.body}`);
+        const result = RiskWorkflowActionDtoSchema.parse(response.json());
+        assert.equal(result.awsApiCallExecuted, false);
+        assert.equal(result.mutationExecuted, false);
+        assert.equal(result.remediationExecuted, false);
+        const after = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+        assert.equal(after.auditEvents, before.auditEvents + 1, `${status} -> ${action}`);
+        assert.equal(
+          after.riskAcceptances,
+          before.riskAcceptances + (action === "accept-risk" ? 1 : 0),
+          `${status} -> ${action}`
+        );
+      }
+    }
+  });
+
+  await t.test("every disallowed transition returns 409 without side effects", async () => {
+    for (const [status, allowedActions] of Object.entries(workflowMatrix) as Array<
+      [RiskWorkflowStatus, RiskWorkflowActionName[]]
+    >) {
+      for (const action of workflowActions.filter((item) => !allowedActions.includes(item))) {
+        await resetFinding(matrixFixture.finding.id, status, matrixFixture.team.id);
+        const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+        const response = await invokeWorkflowAction(
+          app,
+          tenantA,
+          matrixFixture.finding.id,
+          action,
+          matrixFixture.team.id
+        );
+        assert.equal(response.statusCode, 409, `${status} -> ${action}: ${response.body}`);
+        assert.deepEqual(
+          await stateCounts(tenantA.orgId, matrixFixture.finding.id),
+          before,
+          `${status} -> ${action}`
+        );
+      }
+    }
+  });
+
+  await t.test("concurrent stale transitions allow one winner", async () => {
+    await resetFinding(matrixFixture.finding.id, "OPEN", matrixFixture.team.id);
+    const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    const responses = await Promise.all([
+      invokeWorkflowAction(app, tenantA, matrixFixture.finding.id, "acknowledge", matrixFixture.team.id),
+      invokeWorkflowAction(app, tenantA, matrixFixture.finding.id, "acknowledge", matrixFixture.team.id)
+    ]);
+    assert.deepEqual(responses.map((response) => response.statusCode).sort(), [200, 409]);
+    const after = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    assert.equal(after.workflowStatus, "ACKNOWLEDGED");
+    assert.equal(after.auditEvents, before.auditEvents + 1);
+  });
+
+  await t.test("concurrent same-state actions also allow one winner", async () => {
+    await resetFinding(matrixFixture.finding.id, "ASSIGNED", matrixFixture.team.id);
+    const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    const responses = await Promise.all([
+      invokeWorkflowAction(app, tenantA, matrixFixture.finding.id, "assign", matrixFixture.team.id),
+      invokeWorkflowAction(app, tenantA, matrixFixture.finding.id, "accept-risk", matrixFixture.team.id)
+    ]);
+    assert.deepEqual(responses.map((response) => response.statusCode).sort(), [200, 409]);
+    const after = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    assert.equal(after.auditEvents, before.auditEvents + 1);
+    assert.equal(after.riskAcceptances <= 1, true);
+  });
+
+  await t.test("assignment requires an owner team or assigned user", async () => {
+    await resetFinding(matrixFixture.finding.id, "OPEN", matrixFixture.team.id);
+    const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/risk/findings/${matrixFixture.finding.id}/assign`,
+      headers: unsafeHeaders(tenantA),
+      payload: { priority: "P1" }
+    });
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(await stateCounts(tenantA.orgId, matrixFixture.finding.id), before);
+  });
+
+  await t.test("risk acceptance requires a current owner", async () => {
+    await resetFinding(matrixFixture.finding.id, "ACKNOWLEDGED", null);
+    const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    const response = await invokeWorkflowAction(
+      app,
+      tenantA,
+      matrixFixture.finding.id,
+      "accept-risk",
+      matrixFixture.team.id
+    );
+    assert.equal(response.statusCode, 409);
+    assert.deepEqual(await stateCounts(tenantA.orgId, matrixFixture.finding.id), before);
+  });
+
+  await t.test("risk acceptance requires a future expiration", async () => {
+    await resetFinding(matrixFixture.finding.id, "ACKNOWLEDGED", matrixFixture.team.id);
+    const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/risk/findings/${matrixFixture.finding.id}/accept-risk`,
+      headers: unsafeHeaders(tenantA),
+      payload: {
+        riskAcceptanceReason: "Approved business exception",
+        riskAcceptedUntil: new Date(Date.now() - 86_400_000).toISOString()
+      }
+    });
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(await stateCounts(tenantA.orgId, matrixFixture.finding.id), before);
+  });
+
+  await t.test("repeated risk acceptance is rejected", async () => {
+    await resetFinding(matrixFixture.finding.id, "ACKNOWLEDGED", matrixFixture.team.id);
+    const first = await invokeWorkflowAction(
+      app,
+      tenantA,
+      matrixFixture.finding.id,
+      "accept-risk",
+      matrixFixture.team.id
+    );
+    assert.equal(first.statusCode, 200, first.body);
+    const beforeSecond = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    const second = await invokeWorkflowAction(
+      app,
+      tenantA,
+      matrixFixture.finding.id,
+      "accept-risk",
+      matrixFixture.team.id
+    );
+    assert.equal(second.statusCode, 409);
+    assert.deepEqual(await stateCounts(tenantA.orgId, matrixFixture.finding.id), beforeSecond);
+  });
+
+  await t.test("reopen clears terminal and acceptance fields and records reopenedAt", async () => {
+    const acceptedAt = new Date();
+    await prisma.securityFinding.update({
+      where: { id: matrixFixture.finding.id },
+      data: {
+        status: "RISK_ACCEPTED",
+        workflowStatus: "RISK_ACCEPTED",
+        ownerTeamId: matrixFixture.team.id,
+        resolvedAt: acceptedAt,
+        archivedAt: acceptedAt,
+        riskAcceptedAt: acceptedAt,
+        riskAcceptedUntil: futureDate(),
+        riskAcceptedByUserId: tenantA.userId,
+        riskAcceptanceReason: "Temporary approved exception"
+      }
+    });
+    const response = await invokeWorkflowAction(
+      app,
+      tenantA,
+      matrixFixture.finding.id,
+      "reopen",
+      matrixFixture.team.id
+    );
+    assert.equal(response.statusCode, 200, response.body);
+    const finding = await prisma.securityFinding.findUniqueOrThrow({
+      where: { id: matrixFixture.finding.id }
+    });
+    assert.equal(finding.workflowStatus, "REOPENED");
+    assert.ok(finding.reopenedAt);
+    assert.equal(finding.resolvedAt, null);
+    assert.equal(finding.archivedAt, null);
+    assert.equal(finding.riskAcceptedAt, null);
+    assert.equal(finding.riskAcceptedUntil, null);
+    assert.equal(finding.riskAcceptedByUserId, null);
+    assert.equal(finding.riskAcceptanceReason, null);
+  });
+
+  await t.test("audit metadata is bounded and sanitized", async () => {
+    await resetFinding(matrixFixture.finding.id, "OPEN", matrixFixture.team.id);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/risk/findings/${matrixFixture.finding.id}/acknowledge`,
+      headers: unsafeHeaders(tenantA),
+      payload: { note: "provider error at handler (provider.ts:12:4)" }
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    const result = RiskWorkflowActionDtoSchema.parse(response.json());
+    assert.equal(result.auditEvent.metadata.action, "acknowledge");
+    assert.equal(result.auditEvent.metadata.fromStatus, "OPEN");
+    assert.equal(result.auditEvent.metadata.toStatus, "ACKNOWLEDGED");
+    assert.equal(result.auditEvent.metadata.note, "[redacted]");
+  });
+
+  await t.test("audit write failure rolls back finding update", async () => {
+    await resetFinding(matrixFixture.finding.id, "OPEN", matrixFixture.team.id);
+    const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    await withFailingInsertTrigger("AuditEvent", "targetId", matrixFixture.finding.id, async () => {
+      const response = await invokeWorkflowAction(
+        app,
+        tenantA,
+        matrixFixture.finding.id,
+        "acknowledge",
+        matrixFixture.team.id
+      );
+      assert.equal(response.statusCode, 500);
+    });
+    assert.deepEqual(await stateCounts(tenantA.orgId, matrixFixture.finding.id), before);
+  });
+
+  await t.test("risk acceptance write failure rolls back finding and audit writes", async () => {
+    await resetFinding(matrixFixture.finding.id, "ACKNOWLEDGED", matrixFixture.team.id);
+    const before = await stateCounts(tenantA.orgId, matrixFixture.finding.id);
+    await withFailingInsertTrigger(
+      "RiskAcceptance",
+      "securityFindingId",
+      matrixFixture.finding.id,
+      async () => {
+        const response = await invokeWorkflowAction(
+          app,
+          tenantA,
+          matrixFixture.finding.id,
+          "accept-risk",
+          matrixFixture.team.id
+        );
+        assert.equal(response.statusCode, 500);
+      }
+    );
+    assert.deepEqual(await stateCounts(tenantA.orgId, matrixFixture.finding.id), before);
+  });
 });
 
 async function createFindingFixture(session: Session, label: string) {
@@ -299,6 +579,95 @@ function unsafeHeaders(session: Session) {
 
 function futureDate() {
   return new Date(Date.now() + 86_400_000).toISOString();
+}
+
+async function resetFinding(
+  findingId: string,
+  status: RiskWorkflowStatus,
+  ownerTeamId: string | null
+) {
+  await prisma.auditEvent.deleteMany({ where: { targetId: findingId } });
+  await prisma.riskAcceptance.deleteMany({ where: { securityFindingId: findingId } });
+  await prisma.securityFinding.update({
+    where: { id: findingId },
+    data: {
+      status,
+      workflowStatus: status,
+      ownerTeamId,
+      assignedToUserId: null,
+      remediationPlan: null,
+      resolvedAt: status === "RESOLVED" ? new Date() : null,
+      archivedAt: status === "ARCHIVED" ? new Date() : null,
+      reopenedAt: status === "REOPENED" ? new Date() : null,
+      riskAcceptedAt: status === "RISK_ACCEPTED" ? new Date() : null,
+      riskAcceptedUntil: status === "RISK_ACCEPTED" ? futureDate() : null,
+      riskAcceptedByUserId: null,
+      riskAcceptanceReason: status === "RISK_ACCEPTED" ? "Existing accepted risk" : null
+    }
+  });
+}
+
+function actionPayload(action: RiskWorkflowActionName, teamId: string) {
+  switch (action) {
+    case "acknowledge":
+      return { note: "Reviewed" };
+    case "assign":
+      return { ownerTeamId: teamId, priority: "P1" };
+    case "plan-remediation":
+      return { remediationPlan: "Review and prepare a safe manual change." };
+    case "accept-risk":
+      return {
+        riskAcceptanceReason: "Approved business exception",
+        riskAcceptedUntil: futureDate()
+      };
+    case "false-positive":
+      return { reason: "Reviewed evidence does not apply." };
+    case "resolve":
+      return { resolutionNote: "Verified resolved." };
+    case "archive":
+      return { archiveReason: "Retained for audit." };
+    case "reopen":
+      return { reason: "Renewed review." };
+  }
+}
+
+function invokeWorkflowAction(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  session: Session,
+  findingId: string,
+  action: RiskWorkflowActionName,
+  teamId: string
+) {
+  return app.inject({
+    method: "POST",
+    url: `/api/v1/risk/findings/${findingId}/${action}`,
+    headers: unsafeHeaders(session),
+    payload: actionPayload(action, teamId)
+  });
+}
+
+async function withFailingInsertTrigger(
+  table: "AuditEvent" | "RiskAcceptance",
+  column: "targetId" | "securityFindingId",
+  value: string,
+  operation: () => Promise<void>
+) {
+  const suffix = randomUUID().replaceAll("-", "");
+  const functionName = `cloudshield_test_fail_${suffix}`;
+  const triggerName = `cloudshield_test_trigger_${suffix}`;
+  const safeValue = value.replaceAll("'", "''");
+  await prisma.$executeRawUnsafe(
+    `CREATE FUNCTION "${functionName}"() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'forced workflow persistence failure'; END; $$ LANGUAGE plpgsql`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE TRIGGER "${triggerName}" BEFORE INSERT ON "${table}" FOR EACH ROW WHEN (NEW."${column}" = '${safeValue}') EXECUTE FUNCTION "${functionName}"()`
+  );
+  try {
+    await operation();
+  } finally {
+    await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${triggerName}" ON "${table}"`);
+    await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${functionName}"()`);
+  }
 }
 
 function uniqueAccountId() {

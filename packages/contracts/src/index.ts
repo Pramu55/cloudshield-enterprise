@@ -461,6 +461,35 @@ export const RiskWorkflowStatusSchema = z.enum([
 ]);
 export type RiskWorkflowStatus = z.infer<typeof RiskWorkflowStatusSchema>;
 
+export const RiskWorkflowActionNameSchema = z.enum([
+  "acknowledge",
+  "assign",
+  "plan-remediation",
+  "accept-risk",
+  "false-positive",
+  "resolve",
+  "archive",
+  "reopen"
+]);
+export type RiskWorkflowActionName = z.infer<
+  typeof RiskWorkflowActionNameSchema
+>;
+
+export const RiskWorkflowAvailableActionSchema = z
+  .array(RiskWorkflowActionNameSchema)
+  .max(RiskWorkflowActionNameSchema.options.length)
+  .superRefine((actions, context) => {
+    if (new Set(actions).size !== actions.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Workflow actions must be unique."
+      });
+    }
+  });
+export type RiskWorkflowAvailableAction = z.infer<
+  typeof RiskWorkflowAvailableActionSchema
+>;
+
 export const RiskPrioritySchema = z.enum(["P0", "P1", "P2", "P3", "P4"]);
 export type RiskPriority = z.infer<typeof RiskPrioritySchema>;
 
@@ -1299,7 +1328,8 @@ export const RiskFindingDtoSchema = z.object({
 export type RiskFindingDto = z.infer<typeof RiskFindingDtoSchema>;
 
 export const RiskFindingDetailDtoSchema = RiskFindingDtoSchema.extend({
-  auditEvents: z.array(RiskAuditEventDtoSchema)
+  auditEvents: z.array(RiskAuditEventDtoSchema),
+  availableActions: RiskWorkflowAvailableActionSchema
 });
 export type RiskFindingDetailDto = z.infer<typeof RiskFindingDetailDtoSchema>;
 
@@ -1331,13 +1361,17 @@ export type AcknowledgeFindingRequest = z.infer<
   typeof AcknowledgeFindingRequestSchema
 >;
 
-export const AssignFindingRequestSchema = z.object({
-  ownerTeamId: z.string().trim().min(1).optional(),
-  assignedToUserId: z.string().trim().min(1).optional(),
-  priority: RiskPrioritySchema.optional(),
-  targetResolutionDate: OptionalFutureDateSchema.optional(),
-  businessImpact: z.string().trim().min(1).max(2000).optional()
-});
+export const AssignFindingRequestSchema = z
+  .object({
+    ownerTeamId: z.string().trim().min(1).optional(),
+    assignedToUserId: z.string().trim().min(1).optional(),
+    priority: RiskPrioritySchema.optional(),
+    targetResolutionDate: OptionalFutureDateSchema.optional(),
+    businessImpact: z.string().trim().min(1).max(2000).optional()
+  })
+  .refine((body) => Boolean(body.ownerTeamId || body.assignedToUserId), {
+    message: "Assignment requires an owner team or assigned user."
+  });
 export type AssignFindingRequest = z.infer<typeof AssignFindingRequestSchema>;
 
 export const PlanRemediationRequestSchema = z.object({
@@ -1351,7 +1385,10 @@ export type PlanRemediationRequest = z.infer<
 
 export const AcceptRiskRequestSchema = z.object({
   riskAcceptanceReason: z.string().trim().min(10).max(4000),
-  riskAcceptedUntil: OptionalFutureDateSchema,
+  riskAcceptedUntil: OptionalFutureDateSchema.refine(
+    (value) => new Date(value).getTime() > Date.now(),
+    "Risk acceptance expiration must be in the future."
+  ),
   businessImpact: z.string().trim().min(1).max(2000).optional()
 });
 export type AcceptRiskRequest = z.infer<typeof AcceptRiskRequestSchema>;

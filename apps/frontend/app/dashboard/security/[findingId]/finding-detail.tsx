@@ -19,6 +19,7 @@ import {
   type FrontendRiskFindingDetail,
   type FrontendRiskWorkflowAction
 } from "../../../../lib/response-contracts";
+import type { RiskWorkflowActionName } from "@cloudshield/contracts";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { LoadingState } from "../../../../components/ui/loading-state";
 import {
@@ -30,15 +31,7 @@ import {
   Timeline
 } from "../../shared";
 
-type ActionKey =
-  | "acknowledge"
-  | "assign"
-  | "plan-remediation"
-  | "accept-risk"
-  | "false-positive"
-  | "resolve"
-  | "archive"
-  | "reopen";
+type ActionKey = RiskWorkflowActionName;
 
 const actionLabels: Record<ActionKey, string> = {
   acknowledge: "Acknowledge",
@@ -61,8 +54,6 @@ const expectedStatuses: Record<ActionKey, string> = {
   archive: "ARCHIVED",
   reopen: "REOPENED"
 };
-
-const terminalStatuses = new Set(["RESOLVED", "ARCHIVED", "FALSE_POSITIVE", "RISK_ACCEPTED"]);
 
 function contractInvalidError(): ApiError {
   return {
@@ -90,16 +81,19 @@ function actionPermission(session: FrontendCapabilitySession | null, action: Act
   return authoritativePermission(session, capability) === "ALLOWED";
 }
 
-function availableActions(finding: FrontendRiskFindingDetail, session: FrontendCapabilitySession | null) {
-  const status = finding.workflowStatus;
-  const actions: ActionKey[] = [];
-  if (["OPEN", "REOPENED"].includes(status)) actions.push("acknowledge");
-  if (!terminalStatuses.has(status)) {
-    actions.push("assign", "plan-remediation", "accept-risk", "false-positive", "resolve");
+function capabilityAllowedActions(
+  availableActions: readonly ActionKey[],
+  session: FrontendCapabilitySession | null
+) {
+  return availableActions.filter((action) => actionPermission(session, action));
+}
+
+function actionLabel(action: ActionKey, workflowStatus: string) {
+  if (action === "assign" && workflowStatus === "ASSIGNED") return "Reassign owner";
+  if (action === "plan-remediation" && workflowStatus === "REMEDIATION_PLANNED") {
+    return "Revise remediation plan";
   }
-  if (status !== "ARCHIVED") actions.push("archive");
-  if (terminalStatuses.has(status)) actions.push("reopen");
-  return actions.filter((action) => actionPermission(session, action));
+  return actionLabels[action];
 }
 
 export function FindingDetail({ findingId }: { findingId: string }) {
@@ -245,7 +239,11 @@ export function FindingDetail({ findingId }: { findingId: string }) {
       setFalsePositiveReason("");
       setTargetDate("");
     } catch (error) {
-      setActionError(toApiError(error));
+      const normalized = toApiError(error);
+      if (normalized.kind === "CONFLICT") {
+        await loadDetail();
+      }
+      setActionError(normalized);
     } finally {
       setActionLoading(false);
     }
@@ -276,7 +274,7 @@ export function FindingDetail({ findingId }: { findingId: string }) {
     );
   }
 
-  const actions = availableActions(finding, session);
+  const actions = capabilityAllowedActions(finding.availableActions, session);
 
   return (
     <div className="space-y-6">
@@ -376,7 +374,7 @@ export function FindingDetail({ findingId }: { findingId: string }) {
                     onClick={() => setActiveAction(action)}
                     type="button"
                   >
-                    {actionLabels[action]}
+                    {actionLabel(action, finding.workflowStatus)}
                   </button>
                 ))}
               </div>
@@ -394,6 +392,7 @@ export function FindingDetail({ findingId }: { findingId: string }) {
                   riskReason={riskReason}
                   targetDate={targetDate}
                   teams={teams}
+                  workflowStatus={finding.workflowStatus}
                   loading={actionLoading}
                   canSubmit={canSubmit(activeAction)}
                   onAssignedToUserId={setAssignedToUserId}
@@ -434,6 +433,7 @@ function ActionForm(props: {
   riskReason: string;
   targetDate: string;
   teams: FrontendRiskAssignmentTeam[];
+  workflowStatus: string;
   onAssignedToUserId: (value: string) => void;
   onBusinessImpact: (value: string) => void;
   onCancel: () => void;
@@ -449,7 +449,7 @@ function ActionForm(props: {
   const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
   return (
     <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <h3 className="font-semibold text-slate-900">{actionLabels[props.action]}</h3>
+      <h3 className="font-semibold text-slate-900">{actionLabel(props.action, props.workflowStatus)}</h3>
       {props.action === "assign" ? (
         <>
           <label className="block space-y-1 text-sm"><span>Owner team</span><select className={inputClass} value={props.ownerTeamId} onChange={(event) => props.onOwnerTeamId(event.target.value)}><option value="">Unassigned</option>{props.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
@@ -464,7 +464,7 @@ function ActionForm(props: {
       {["assign", "plan-remediation", "accept-risk"].includes(props.action) ? <label className="block space-y-1 text-sm"><span>{props.action === "accept-risk" ? "Accepted until" : "Target resolution date"}</span><input className={inputClass} min={new Date().toISOString().slice(0, 10)} type="date" value={props.targetDate} onChange={(event) => props.onTargetDate(event.target.value)} /></label> : null}
       {["assign", "plan-remediation", "accept-risk"].includes(props.action) ? <label className="block space-y-1 text-sm"><span>Business impact</span><textarea className={inputClass} maxLength={2000} rows={3} value={props.businessImpact} onChange={(event) => props.onBusinessImpact(event.target.value)} /></label> : null}
       <div className="cs-form-actions">
-        <button className="cs-button" disabled={props.loading || !props.canSubmit} onClick={props.onSubmit} type="button">{props.loading ? "Saving..." : `Confirm ${actionLabels[props.action].toLowerCase()}`}</button>
+        <button className="cs-button" disabled={props.loading || !props.canSubmit} onClick={props.onSubmit} type="button">{props.loading ? "Saving..." : `Confirm ${actionLabel(props.action, props.workflowStatus).toLowerCase()}`}</button>
         <button className="cs-button-secondary" disabled={props.loading} onClick={props.onCancel} type="button">Cancel</button>
       </div>
     </div>
