@@ -72,6 +72,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
     cookieOpts: {
       signed: false,
       httpOnly: true,
+      path: "/",
       sameSite: "lax",
       secure: process.env.AUTH_COOKIE_SECURE === "true"
     },

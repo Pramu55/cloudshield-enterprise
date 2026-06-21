@@ -1263,6 +1263,8 @@ export const RiskFindingDtoSchema = z.object({
   resourceId: z.string().nullable(),
   resourceName: z.string().nullable(),
   resourceType: z.string().nullable(),
+  findingSource: DataSourceClassificationSchema,
+  resourceSource: DataSourceClassificationSchema.nullable(),
   ruleId: z.string(),
   title: z.string(),
   description: z.string(),
@@ -1289,6 +1291,7 @@ export const RiskFindingDtoSchema = z.object({
   complianceRefs: z.array(z.string()),
   firstSeenAt: z.string(),
   lastSeenAt: z.string(),
+  updatedAt: z.string(),
   lastWorkflowActionAt: z.string().nullable(),
   archivedAt: z.string().nullable(),
   sampleData: z.boolean()

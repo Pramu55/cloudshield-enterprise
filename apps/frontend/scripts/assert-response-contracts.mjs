@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import {
   FrontendAutomationLatestSchema,
@@ -20,7 +21,10 @@ import {
   FrontendRemediationPlanListSchema,
   FrontendInventorySyncResponseSchema,
   createFrontendInventoryAccountSyncResponseSchema,
-  FrontendSecurityAlertEvidenceListSchema
+  FrontendSecurityAlertEvidenceListSchema,
+  FrontendRiskFindingDetailSchema,
+  FrontendRiskWorkflowActionSchema,
+  resolveFrontendFindingRouteId
 } from "../lib/response-contracts.ts";
 import { SecurityAlertLifecycleMutationResponseSchema, EvaluateMonitoringResponseSchema } from "@cloudshield/contracts";
 
@@ -58,6 +62,92 @@ const securityFindingsResponse = {
   awsApiCallExecuted: false,
   mutationExecuted: false
 };
+
+const riskFindingDetail = {
+  id: "finding-1",
+  organizationId: "org-1",
+  awsAccountId: "account-1",
+  awsAccountName: "Sample account",
+  resourceId: "resource-1",
+  resourceName: "sample-security-group",
+  resourceType: "security-group",
+  findingSource: "RULE_ENGINE",
+  resourceSource: "SAMPLE",
+  ruleId: "SG_OPEN_SSH_TO_WORLD",
+  title: "Open SSH",
+  description: "Stored inventory rule result.",
+  severity: "HIGH",
+  status: "OPEN",
+  workflowStatus: "OPEN",
+  priority: "P1",
+  ownerTeamId: null,
+  ownerTeamName: null,
+  assignedToUserId: null,
+  assignedToUserEmail: null,
+  assignedToUserName: null,
+  businessImpact: "Internet exposure",
+  remediationPlan: null,
+  targetResolutionDate: null,
+  riskAcceptedUntil: null,
+  riskAcceptanceReason: null,
+  riskAcceptedByUserId: null,
+  riskAcceptedByUserEmail: null,
+  riskAcceptedAt: null,
+  recommendation: "Restrict ingress",
+  evidenceSummary: "Sample/demo evidence",
+  evidence: { checked: true, resourceSource: "SAMPLE", sampleData: true },
+  complianceRefs: ["Internal control"],
+  firstSeenAt: timestamp,
+  lastSeenAt: timestamp,
+  updatedAt: timestamp,
+  lastWorkflowActionAt: null,
+  archivedAt: null,
+  sampleData: true,
+  auditEvents: [{
+    id: "audit-1",
+    action: "risk.finding.acknowledged",
+    targetType: "security_finding",
+    targetId: "finding-1",
+    actorUserId: "user-1",
+    metadata: { fromStatus: "OPEN", toStatus: "ACKNOWLEDGED" },
+    createdAt: timestamp
+  }]
+};
+
+assert.equal(FrontendRiskFindingDetailSchema.parse(riskFindingDetail).resourceSource, "SAMPLE");
+for (const invalidDetail of [
+  { ...riskFindingDetail, findingSource: undefined },
+  { ...riskFindingDetail, resourceSource: undefined },
+  { ...riskFindingDetail, resourceSource: "UNKNOWN" },
+  { ...riskFindingDetail, sampleData: false },
+  { ...riskFindingDetail, updatedAt: "not-a-date" },
+  { ...riskFindingDetail, evidence: { SecretAccessKey: "secret" } },
+  { ...riskFindingDetail, evidence: { nested: { providerError: "raw provider failure" } } },
+  { ...riskFindingDetail, evidence: { message: "Error at handler (provider.ts:12:4)" } }
+]) {
+  assert.equal(FrontendRiskFindingDetailSchema.safeParse(invalidDetail).success, false);
+}
+assert.equal(resolveFrontendFindingRouteId("finding-1"), "finding-1");
+for (const invalidId of [undefined, ["finding-1"], "", " finding-1 ", "finding/1", "finding?x=1", "finding\u0000id"]) {
+  assert.equal(resolveFrontendFindingRouteId(invalidId), null);
+}
+
+const workflowAction = {
+  finding: { ...riskFindingDetail, workflowStatus: "ACKNOWLEDGED", status: "ACKNOWLEDGED", auditEvents: undefined },
+  auditEvent: riskFindingDetail.auditEvents[0],
+  awsApiCallExecuted: false,
+  mutationExecuted: false,
+  remediationExecuted: false,
+  message: "Finding acknowledged."
+};
+assert.equal(FrontendRiskWorkflowActionSchema.parse(workflowAction).finding.workflowStatus, "ACKNOWLEDGED");
+for (const invalidFlags of [
+  { awsApiCallExecuted: true },
+  { mutationExecuted: true },
+  { remediationExecuted: true }
+]) {
+  assert.equal(FrontendRiskWorkflowActionSchema.safeParse({ ...workflowAction, ...invalidFlags }).success, false);
+}
 assert.equal(
   FrontendSecurityFindingsResponseSchema.parse(securityFindingsResponse).items[0].resourceSource,
   "SAMPLE"
@@ -926,5 +1016,15 @@ assert.equal(parsedEvidence.nextCursor, "cursor-123");
 assert.equal(FrontendSecurityAlertEvidenceListSchema.safeParse({ ...evidenceResponse, items: [{ ...evidenceResponse.items[0], ...unsafeFields }] }).success, false);
 assert.equal(FrontendSecurityAlertEvidenceListSchema.safeParse({ ...evidenceResponse, total: -1 }).success, false);
 assert.equal(FrontendSecurityAlertEvidenceListSchema.safeParse({ ...evidenceResponse, total: 1.5 }).success, false);
+
+const findingDetailSource = await readFile(
+  new URL("../app/dashboard/security/[findingId]/finding-detail.tsx", import.meta.url),
+  "utf8"
+);
+assert.equal(findingDetailSource.includes("const confirmed = await loadDetail()"), true);
+assert.equal(findingDetailSource.includes("confirmed?.workflowStatus !== expectedStatuses[action]"), true);
+assert.equal(findingDetailSource.includes("FrontendRiskWorkflowActionSchema"), true);
+assert.equal(/setFinding\(\{[^}]*workflowStatus/s.test(findingDetailSource), false);
+assert.equal(findingDetailSource.includes("dangerouslySetInnerHTML"), false);
 
 console.log("Frontend response-contract assertions passed.");

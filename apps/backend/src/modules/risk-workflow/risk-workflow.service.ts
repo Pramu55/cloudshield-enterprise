@@ -317,7 +317,9 @@ async function validateTeamAndUser(
     });
 
     if (!team) {
-      throw new Error("Owner team must belong to the authenticated organization.");
+      throw Object.assign(new Error("Owner team is unavailable for this workspace."), {
+        statusCode: 400
+      });
     }
   }
 
@@ -328,14 +330,16 @@ async function validateTeamAndUser(
     });
 
     if (!user) {
-      throw new Error("Assigned user must belong to the authenticated organization.");
+      throw Object.assign(new Error("Assigned user is unavailable for this workspace."), {
+        statusCode: 400
+      });
     }
   }
 }
 
 const riskFindingInclude = {
   awsAccount: { select: { name: true } },
-  resource: { select: { name: true, resourceType: true } },
+  resource: { select: { name: true, resourceType: true, source: true } },
   ownerTeam: { select: { name: true } },
   assignedToUser: { select: { email: true, name: true } },
   riskAcceptedByUser: { select: { email: true } }
@@ -356,6 +360,8 @@ function toRiskFindingDto(finding: NonNullable<FindingWithRelations>): RiskFindi
     resourceId: finding.resourceId,
     resourceName: finding.resource?.name ?? null,
     resourceType: finding.resource?.resourceType ?? null,
+    findingSource: finding.source,
+    resourceSource: finding.resource?.source ?? null,
     ruleId: finding.ruleId,
     title: finding.title,
     description: finding.description,
@@ -382,8 +388,9 @@ function toRiskFindingDto(finding: NonNullable<FindingWithRelations>): RiskFindi
     complianceRefs: (finding.complianceRefs as string[]) || [],
     firstSeenAt: finding.firstSeenAt.toISOString(),
     lastSeenAt: finding.lastSeenAt.toISOString(),
+    updatedAt: finding.updatedAt.toISOString(),
     lastWorkflowActionAt: finding.lastWorkflowActionAt?.toISOString() ?? null,
     archivedAt: finding.archivedAt?.toISOString() ?? null,
-    sampleData: Boolean(evidence.sampleData) || finding.title.includes("Sample demo data")
+    sampleData: finding.resource?.source === "SAMPLE"
   };
 }

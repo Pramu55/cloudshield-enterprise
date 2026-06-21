@@ -550,7 +550,7 @@ export function SecurityView() {
         <DataTable
           columns={["Finding", "Severity", "Resource", "Workflow", "Source", "Updated"]}
           rows={findings.map((finding) => [
-            text(finding.title, "Finding"),
+            <ConsoleLink key="finding" href={`/dashboard/security/${encodeURIComponent(finding.id)}`}>{finding.title}</ConsoleLink>,
             <StatusBadge key="severity" status={finding.severity} />,
             text(finding.resourceName ?? finding.resourceId),
             <StatusBadge key="status" status={finding.status} />,

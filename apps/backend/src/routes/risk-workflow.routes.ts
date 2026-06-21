@@ -68,7 +68,7 @@ export async function registerRiskWorkflowRoutes(
 
   app.post(
     "/api/v1/risk/findings/:findingId/acknowledge",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.FINDINGS_MANAGE);
@@ -85,7 +85,7 @@ export async function registerRiskWorkflowRoutes(
 
   app.post(
     "/api/v1/risk/findings/:findingId/assign",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.RISKS_MANAGE);
@@ -102,7 +102,7 @@ export async function registerRiskWorkflowRoutes(
 
   app.post(
     "/api/v1/risk/findings/:findingId/plan-remediation",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.RISKS_MANAGE);
@@ -119,7 +119,7 @@ export async function registerRiskWorkflowRoutes(
 
   app.post(
     "/api/v1/risk/findings/:findingId/accept-risk",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.RISK_ACCEPT);
@@ -136,7 +136,7 @@ export async function registerRiskWorkflowRoutes(
 
   app.post(
     "/api/v1/risk/findings/:findingId/false-positive",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.FINDINGS_MANAGE);
@@ -153,7 +153,7 @@ export async function registerRiskWorkflowRoutes(
 
   app.post(
     "/api/v1/risk/findings/:findingId/resolve",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.FINDINGS_MANAGE);
@@ -170,7 +170,7 @@ export async function registerRiskWorkflowRoutes(
 
   app.post(
     "/api/v1/risk/findings/:findingId/archive",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.RISKS_MANAGE);
@@ -187,7 +187,7 @@ export async function registerRiskWorkflowRoutes(
 
   app.post(
     "/api/v1/risk/findings/:findingId/reopen",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.RISKS_MANAGE);
