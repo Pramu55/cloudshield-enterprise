@@ -28,6 +28,7 @@ import {
   RiskAuditEventDtoSchema,
   RiskFindingDetailDtoSchema,
   RiskFindingDtoSchema,
+  RiskWorkflowAvailableActionSchema,
   RiskWorkflowActionDtoSchema,
   TeamDetailsDtoSchema,
   InventoryOrchestrationResponseSchema
@@ -161,7 +162,8 @@ const FrontendRiskFindingSchema = FrontendRiskFindingObjectSchema.superRefine((f
 export const FrontendRiskFindingDetailSchema = RiskFindingDetailDtoSchema
   .extend({
     ...FrontendRiskFindingObjectSchema.shape,
-    auditEvents: FrontendRiskAuditEventSchema.array().max(50)
+    auditEvents: FrontendRiskAuditEventSchema.array().max(50),
+    availableActions: RiskWorkflowAvailableActionSchema
   })
   .superRefine((finding, context) => {
     if (finding.sampleData !== (finding.resourceSource === "SAMPLE")) {

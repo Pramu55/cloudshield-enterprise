@@ -103,6 +103,7 @@ const riskFindingDetail = {
   lastWorkflowActionAt: null,
   archivedAt: null,
   sampleData: true,
+  availableActions: ["acknowledge", "assign", "false-positive", "resolve", "archive"],
   auditEvents: [{
     id: "audit-1",
     action: "risk.finding.acknowledged",
@@ -121,6 +122,9 @@ for (const invalidDetail of [
   { ...riskFindingDetail, resourceSource: "UNKNOWN" },
   { ...riskFindingDetail, sampleData: false },
   { ...riskFindingDetail, updatedAt: "not-a-date" },
+  { ...riskFindingDetail, availableActions: undefined },
+  { ...riskFindingDetail, availableActions: ["acknowledge", "unknown-action"] },
+  { ...riskFindingDetail, availableActions: ["acknowledge", "acknowledge"] },
   { ...riskFindingDetail, evidence: { SecretAccessKey: "secret" } },
   { ...riskFindingDetail, evidence: { nested: { providerError: "raw provider failure" } } },
   { ...riskFindingDetail, evidence: { message: "Error at handler (provider.ts:12:4)" } }
@@ -1024,6 +1028,11 @@ const findingDetailSource = await readFile(
 assert.equal(findingDetailSource.includes("const confirmed = await loadDetail()"), true);
 assert.equal(findingDetailSource.includes("confirmed?.workflowStatus !== expectedStatuses[action]"), true);
 assert.equal(findingDetailSource.includes("FrontendRiskWorkflowActionSchema"), true);
+assert.equal(findingDetailSource.includes("finding.availableActions"), true);
+assert.equal(findingDetailSource.includes("capabilityAllowedActions"), true);
+assert.equal(findingDetailSource.includes('normalized.kind === "CONFLICT"'), true);
+assert.equal(findingDetailSource.includes("await loadDetail()"), true);
+assert.equal(findingDetailSource.includes("terminalStatuses"), false);
 assert.equal(/setFinding\(\{[^}]*workflowStatus/s.test(findingDetailSource), false);
 assert.equal(findingDetailSource.includes("dangerouslySetInnerHTML"), false);
 
