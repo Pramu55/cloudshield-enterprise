@@ -1426,6 +1426,95 @@ export type EvidenceSnapshotListResponseDto = z.infer<
   typeof EvidenceSnapshotListResponseDtoSchema
 >;
 
+export const RiskAcceptanceExpiryStatusSchema = z.enum([
+  "ACTIVE",
+  "EXPIRING_SOON",
+  "EXPIRED"
+]);
+export type RiskAcceptanceExpiryStatus = z.infer<
+  typeof RiskAcceptanceExpiryStatusSchema
+>;
+
+export const RiskAcceptanceRegistryQuerySchema = z.object({
+  status: z.enum(["active", "expiring-soon", "expired", "all"]).default("all"),
+  severity: FindingSeveritySchema.optional(),
+  cursor: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20)
+}).strict();
+export type RiskAcceptanceRegistryQuery = z.infer<
+  typeof RiskAcceptanceRegistryQuerySchema
+>;
+
+export const RiskAcceptanceRegistryItemSchema = z.object({
+  riskAcceptanceId: z.string().min(1).max(128),
+  findingId: z.string().min(1).max(128),
+  findingTitle: z.string().min(1).max(500),
+  findingDescription: z.string().min(1).max(4000),
+  severity: FindingSeveritySchema,
+  workflowStatus: RiskWorkflowStatusSchema,
+  status: RiskStatusSchema,
+  ownerTeamId: z.string().min(1).max(128).nullable(),
+  ownerTeamName: z.string().max(300).nullable(),
+  assignedToUserId: z.string().min(1).max(128).nullable(),
+  assignedToUserName: z.string().max(300).nullable(),
+  acceptedByUserId: z.string().min(1).max(128),
+  acceptedByName: z.string().max(300).nullable(),
+  acceptedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  expiryStatus: RiskAcceptanceExpiryStatusSchema,
+  daysUntilExpiry: z.number().int(),
+  justification: z.string().min(1).max(4000),
+  evidenceSnapshotId: z.string().min(1).max(128).nullable(),
+  evidenceCapturedAt: z.string().datetime().nullable(),
+  evidenceRuleId: z.string().min(1).max(160).nullable(),
+  evidenceRuleVersion: z.string().min(1).max(40).nullable(),
+  findingSource: DataSourceClassificationSchema,
+  resourceSource: DataSourceClassificationSchema.nullable(),
+  sampleData: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}).strict().superRefine((value, context) => {
+  if (value.sampleData !== (value.resourceSource === "SAMPLE")) {
+    context.addIssue({
+      code: "custom",
+      path: ["sampleData"],
+      message: "Acceptance sample state must match resource provenance."
+    });
+  }
+  const evidenceFields = [
+    value.evidenceCapturedAt,
+    value.evidenceRuleId,
+    value.evidenceRuleVersion
+  ];
+  if (
+    (value.evidenceSnapshotId === null && evidenceFields.some((field) => field !== null)) ||
+    (value.evidenceSnapshotId !== null && evidenceFields.some((field) => field === null))
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["evidenceSnapshotId"],
+      message: "Acceptance evidence metadata must be complete when linked."
+    });
+  }
+});
+export type RiskAcceptanceRegistryItem = z.infer<
+  typeof RiskAcceptanceRegistryItemSchema
+>;
+
+export const RiskAcceptanceRegistryResponseSchema = z.object({
+  items: z.array(RiskAcceptanceRegistryItemSchema),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().max(512).nullable(),
+  hasMore: z.boolean(),
+  generatedAt: z.string().datetime(),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false)
+}).strict();
+export type RiskAcceptanceRegistryResponse = z.infer<
+  typeof RiskAcceptanceRegistryResponseSchema
+>;
+
 export const RiskFindingsResponseSchema = z.object({
   sampleData: z.boolean(),
   sampleDataLabel: z.string(),

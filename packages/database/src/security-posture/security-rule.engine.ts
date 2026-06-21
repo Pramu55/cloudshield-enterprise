@@ -72,7 +72,15 @@ export async function evaluateSecurityRules(
             source: "RULE_ENGINE",
             archivedAt: null,
             status: {
-              in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "RESOLVED", "REOPENED"]
+              in: [
+                "OPEN",
+                "ACKNOWLEDGED",
+                "ASSIGNED",
+                "REMEDIATION_PLANNED",
+                "RISK_ACCEPTED",
+                "RESOLVED",
+                "REOPENED"
+              ]
             }
           }
         });

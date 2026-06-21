@@ -602,6 +602,7 @@ model SecurityFindingEvidenceSnapshot {
   correlationId        String?
   capturedAt           DateTime
   createdAt            DateTime                   @default(now())
+  riskAcceptances      RiskAcceptance[]
 
   @@index([organizationId, securityFindingId, capturedAt(sort: Desc), id(sort: Desc)])
 }
@@ -738,9 +739,11 @@ model RiskAcceptance {
   organizationId        String
   organization          Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   securityFindingId     String?
-  securityFinding       SecurityFinding? @relation(fields: [securityFindingId], references: [id], onDelete: Cascade)
+  securityFinding       SecurityFinding? @relation(fields: [securityFindingId], references: [id], onDelete: SetNull)
   costFindingId         String?
   costFinding           CostFinding?     @relation(fields: [costFindingId], references: [id], onDelete: Cascade)
+  evidenceSnapshotId    String?
+  evidenceSnapshot      SecurityFindingEvidenceSnapshot? @relation(fields: [evidenceSnapshotId], references: [id], onDelete: SetNull)
   businessJustification String
   approver              String
   owner                 String
@@ -753,6 +756,7 @@ model RiskAcceptance {
 
   @@index([organizationId])
   @@index([organizationId, expiresAt])
+  @@index([organizationId, evidenceSnapshotId])
 }
 
 model ScanRun {

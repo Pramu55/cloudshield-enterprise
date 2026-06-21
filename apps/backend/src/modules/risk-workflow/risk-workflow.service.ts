@@ -8,6 +8,8 @@ import type {
   ReopenFindingRequest,
   ResolveFindingRequest,
   RiskFindingDto,
+  RiskAcceptanceRegistryItem,
+  RiskAcceptanceRegistryQuery,
   RiskWorkflowActionName,
   RiskWorkflowStatus
 } from "@cloudshield/contracts";
@@ -29,7 +31,7 @@ type ActorContext = {
 
 type WorkflowClient = Pick<
   Prisma.TransactionClient,
-  "auditEvent" | "riskAcceptance" | "securityFinding" | "team" | "user"
+  "auditEvent" | "riskAcceptance" | "securityFinding" | "securityFindingEvidenceSnapshot" | "team" | "user"
 >;
 
 type FindingWithRelations = Awaited<ReturnType<typeof getFindingRecord>>;
@@ -88,6 +90,130 @@ export async function getRiskFindingDetail(
     ...findingDto,
     auditEvents: auditEvents.map(toRiskAuditEventDto),
     availableActions: availableRiskWorkflowActions(findingDto.workflowStatus)
+  };
+}
+
+export async function listRiskAcceptances(
+  organizationId: string,
+  query: RiskAcceptanceRegistryQuery,
+  now = new Date()
+) {
+  const expiringSoonAt = new Date(now.getTime() + 30 * 86_400_000);
+  const cursor = decodeAcceptanceCursor(query.cursor);
+  const expiryWhere =
+    query.status === "expired"
+      ? { expiresAt: { lt: now } }
+      : query.status === "expiring-soon"
+        ? { expiresAt: { gte: now, lte: expiringSoonAt } }
+        : query.status === "active"
+          ? { expiresAt: { gt: expiringSoonAt } }
+          : {};
+  const where: Prisma.RiskAcceptanceWhereInput = {
+    organizationId,
+    securityFindingId: { not: null },
+    ...expiryWhere,
+    ...(query.severity ? { securityFinding: { severity: query.severity } } : {}),
+    ...(cursor
+      ? {
+          OR: [
+            { createdAt: { lt: cursor.createdAt } },
+            { createdAt: cursor.createdAt, id: { lt: cursor.id } }
+          ]
+        }
+      : {})
+  };
+  const [rows, total] = await Promise.all([
+    prisma.riskAcceptance.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: query.limit + 1,
+      include: {
+        ownerTeam: { select: { name: true } },
+        evidenceSnapshot: {
+          select: {
+            id: true,
+            capturedAt: true,
+            ruleId: true,
+            ruleVersion: true
+          }
+        },
+        securityFinding: {
+          include: {
+            resource: { select: { source: true } },
+            assignedToUser: { select: { name: true, email: true } }
+          }
+        }
+      }
+    }),
+    prisma.riskAcceptance.count({ where })
+  ]);
+  const hasMore = rows.length > query.limit;
+  const page = rows.slice(0, query.limit);
+  const approverIds = [...new Set(page.map((row) => row.approver))];
+  const approvers = approverIds.length
+    ? await prisma.user.findMany({
+        where: { organizationId, id: { in: approverIds } },
+        select: { id: true, name: true, email: true }
+      })
+    : [];
+  const approverNames = new Map(
+    approvers.map((user) => [user.id, user.name ?? user.email])
+  );
+
+  const items = page.flatMap((acceptance): RiskAcceptanceRegistryItem[] => {
+    const finding = acceptance.securityFinding;
+    if (!finding) return [];
+    const expiry = riskAcceptanceExpiry(acceptance.expiresAt, now, expiringSoonAt);
+    return [{
+      riskAcceptanceId: acceptance.id,
+      findingId: finding.id,
+      findingTitle: finding.title,
+      findingDescription: finding.description,
+      severity: finding.severity,
+      workflowStatus: normalizeWorkflowStatus(finding.workflowStatus),
+      status: finding.status,
+      ownerTeamId: acceptance.ownerTeamId,
+      ownerTeamName: acceptance.ownerTeam?.name ?? null,
+      assignedToUserId: finding.assignedToUserId,
+      assignedToUserName:
+        finding.assignedToUser?.name ??
+        finding.assignedToUser?.email ??
+        null,
+      acceptedByUserId: acceptance.approver,
+      acceptedByName: approverNames.get(acceptance.approver) ?? null,
+      acceptedAt: acceptance.createdAt.toISOString(),
+      expiresAt: acceptance.expiresAt.toISOString(),
+      expiryStatus: expiry.status,
+      daysUntilExpiry: expiry.daysUntilExpiry,
+      justification: acceptance.businessJustification,
+      evidenceSnapshotId: acceptance.evidenceSnapshot?.id ?? null,
+      evidenceCapturedAt:
+        acceptance.evidenceSnapshot?.capturedAt.toISOString() ?? null,
+      evidenceRuleId: acceptance.evidenceSnapshot?.ruleId ?? null,
+      evidenceRuleVersion: acceptance.evidenceSnapshot?.ruleVersion ?? null,
+      findingSource: finding.source,
+      resourceSource: finding.resource?.source ?? null,
+      sampleData: finding.resource?.source === "SAMPLE",
+      createdAt: acceptance.createdAt.toISOString(),
+      updatedAt: acceptance.updatedAt.toISOString()
+    }];
+  });
+  const last = page.at(-1);
+
+  return {
+    items,
+    total,
+    nextCursor: hasMore && last
+      ? Buffer.from(JSON.stringify({
+          createdAt: last.createdAt.toISOString(),
+          id: last.id
+        })).toString("base64url")
+      : null,
+    hasMore,
+    generatedAt: now.toISOString(),
+    awsApiCallExecuted: false as const,
+    mutationExecuted: false as const,
+    remediationExecuted: false as const
   };
 }
 
@@ -334,6 +460,14 @@ async function updateWorkflow(
     });
 
     if (input.riskAcceptance) {
+      const evidenceSnapshot = await tx.securityFindingEvidenceSnapshot.findFirst({
+        where: {
+          organizationId: actor.organizationId,
+          securityFindingId: finding.id
+        },
+        orderBy: [{ capturedAt: "desc" }, { id: "desc" }],
+        select: { id: true }
+      });
       await tx.riskAcceptance.create({
         data: {
           organizationId: actor.organizationId,
@@ -345,6 +479,7 @@ async function updateWorkflow(
             finding.ownerTeam?.name ||
             "Unassigned",
           ownerTeamId: finding.ownerTeamId,
+          evidenceSnapshotId: evidenceSnapshot?.id ?? null,
           evidence: {
             sampleData: finding.resource?.source === "SAMPLE",
             source: "risk workflow action"
@@ -361,6 +496,47 @@ async function updateWorkflow(
       message: input.message
     };
   });
+}
+
+function riskAcceptanceExpiry(
+  expiresAt: Date,
+  now: Date,
+  expiringSoonAt: Date
+) {
+  const millisecondsUntilExpiry = expiresAt.getTime() - now.getTime();
+  return {
+    status:
+      expiresAt < now
+        ? "EXPIRED" as const
+        : expiresAt <= expiringSoonAt
+          ? "EXPIRING_SOON" as const
+          : "ACTIVE" as const,
+    daysUntilExpiry: Math.ceil(millisecondsUntilExpiry / 86_400_000)
+  };
+}
+
+function decodeAcceptanceCursor(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.createdAt !== "string" ||
+      typeof parsed.id !== "string" ||
+      parsed.id.length < 1 ||
+      parsed.id.length > 128
+    ) {
+      throw new Error("invalid");
+    }
+    const createdAt = new Date(parsed.createdAt);
+    if (Number.isNaN(createdAt.getTime())) throw new Error("invalid");
+    return { createdAt, id: parsed.id };
+  } catch {
+    throw Object.assign(new Error("Risk acceptance cursor is invalid."), {
+      statusCode: 400
+    });
+  }
 }
 
 async function getFindingRecord(
