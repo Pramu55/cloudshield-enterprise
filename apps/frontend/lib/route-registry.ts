@@ -103,8 +103,9 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     href: "/dashboard/compliance",
     icon: "compliance",
     category: "Security",
-    description: "Compliance frameworks and evidence.",
-    keywords: ["security", "evidence", "frameworks", "audit", "posture"]
+    requiredCapability: "reports.read",
+    description: "Evidence-backed internal control mapping.",
+    keywords: ["security", "evidence", "controls", "audit", "posture", "cis inspired"]
   },
   {
     id: "nav-recommendations",

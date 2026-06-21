@@ -510,6 +510,16 @@ export const ComplianceFrameworkSchema = z.enum([
 ]);
 export type ComplianceFramework = z.infer<typeof ComplianceFrameworkSchema>;
 
+export const ComplianceControlPostureStatusSchema = z.enum([
+  "FAILING",
+  "ACCEPTED_RISK",
+  "PASSING",
+  "UNKNOWN"
+]);
+export type ComplianceControlPostureStatus = z.infer<
+  typeof ComplianceControlPostureStatusSchema
+>;
+
 export const ScanRunStatusSchema = z.enum([
   "REQUESTED",
   "QUEUED",
@@ -1846,6 +1856,102 @@ export type GovernanceActivityResponse = z.infer<
 >;
 
 // Compliance Evidence Center
+
+export const ComplianceControlProvenanceSchema = z.object({
+  findingSources: z.array(DataSourceClassificationSchema).max(10),
+  resourceSources: z.array(DataSourceClassificationSchema).max(10),
+  sampleData: z.boolean()
+}).strict();
+export type ComplianceControlProvenance = z.infer<
+  typeof ComplianceControlProvenanceSchema
+>;
+
+export const ComplianceMappedFindingSchema = z.object({
+  findingId: z.string().min(1).max(128),
+  title: z.string().min(1).max(500),
+  severity: FindingSeveritySchema,
+  workflowStatus: RiskWorkflowStatusSchema,
+  ruleId: z.string().min(1).max(160),
+  latestEvidenceSnapshotId: z.string().min(1).max(128).nullable(),
+  latestEvidenceCapturedAt: z.string().datetime().nullable()
+}).strict().superRefine((value, context) => {
+  if (
+    (value.latestEvidenceSnapshotId === null) !==
+    (value.latestEvidenceCapturedAt === null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["latestEvidenceSnapshotId"],
+      message: "Mapped finding evidence metadata must be complete when linked."
+    });
+  }
+});
+export type ComplianceMappedFinding = z.infer<
+  typeof ComplianceMappedFindingSchema
+>;
+
+export const ComplianceControlSummarySchema = z.object({
+  controlId: z.string().min(1).max(128),
+  framework: ComplianceFrameworkSchema,
+  controlCode: z.string().min(1).max(80),
+  title: z.string().min(1).max(300),
+  description: z.string().min(1).max(2000),
+  severity: FindingSeveritySchema,
+  status: ComplianceControlPostureStatusSchema,
+  findingCount: z.number().int().nonnegative(),
+  openFindingCount: z.number().int().nonnegative(),
+  acceptedRiskCount: z.number().int().nonnegative(),
+  resolvedFindingCount: z.number().int().nonnegative(),
+  evidenceSnapshotCount: z.number().int().nonnegative(),
+  latestEvidenceCapturedAt: z.string().datetime().nullable(),
+  mappedRuleIds: z.array(z.string().min(1).max(160)).min(1).max(20),
+  provenance: ComplianceControlProvenanceSchema,
+  mappedFindings: z.array(ComplianceMappedFindingSchema).max(100)
+}).strict().superRefine((value, context) => {
+  if (value.findingCount !== value.mappedFindings.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["findingCount"],
+      message: "Control finding count must match mapped findings."
+    });
+  }
+  if (
+    value.openFindingCount + value.acceptedRiskCount + value.resolvedFindingCount >
+    value.findingCount
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["findingCount"],
+      message: "Control finding state counts cannot exceed total findings."
+    });
+  }
+});
+export type ComplianceControlSummary = z.infer<
+  typeof ComplianceControlSummarySchema
+>;
+
+export const ComplianceControlsRegistryResponseSchema = z.object({
+  controls: z.array(ComplianceControlSummarySchema).max(50),
+  generatedAt: z.string().datetime(),
+  total: z.number().int().nonnegative(),
+  safety: z.object({
+    awsApiCallExecuted: z.literal(false),
+    mutationExecuted: z.literal(false),
+    remediationExecuted: z.literal(false),
+    rawEvidenceIncluded: z.literal(false)
+  }).strict()
+}).strict().superRefine((value, context) => {
+  if (value.total !== value.controls.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["total"],
+      message: "Compliance control total must match returned controls."
+    });
+  }
+});
+export type ComplianceControlsRegistryResponse = z.infer<
+  typeof ComplianceControlsRegistryResponseSchema
+>;
 
 export const ComplianceEvidenceDtoSchema = z.object({
   id: z.string(),

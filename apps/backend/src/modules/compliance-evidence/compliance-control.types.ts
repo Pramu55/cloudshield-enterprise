@@ -1,4 +1,9 @@
-import type { ComplianceFramework, ComplianceStatus, FindingSeverity } from "@cloudshield/contracts";
+import type {
+  ComplianceControlPostureStatus,
+  ComplianceFramework,
+  ComplianceStatus,
+  FindingSeverity
+} from "@cloudshield/contracts";
 
 export type ComplianceControlDefinition = {
   controlId: string;
@@ -30,4 +35,23 @@ export type ControlEvaluationResult = {
   evidenceCount: number;
   findingCount: number;
   failedResources: number;
+};
+
+export type ComplianceControlProjectionDefinition = {
+  controlId: string;
+  framework: Extract<ComplianceFramework, "CIS_INSPIRED" | "INTERNAL_GOVERNANCE">;
+  controlCode: string;
+  title: string;
+  description: string;
+  severity: FindingSeverity;
+  mappedRuleIds: string[];
+};
+
+export type ComplianceControlProjectionCounts = {
+  findingCount: number;
+  openFindingCount: number;
+  acceptedRiskCount: number;
+  resolvedFindingCount: number;
+  evidenceSnapshotCount: number;
+  status: ComplianceControlPostureStatus;
 };

@@ -8,6 +8,7 @@ import {
   AwsConnectionStatusSchema,
   AwsStsValidationResponseSchema,
   CommandCenterResponseSchema,
+  ComplianceControlsRegistryResponseSchema,
   ComplianceEvidenceCenterResponseSchema,
   CurrentUserResponseSchema,
   GovernanceApprovalsResponseSchema,
@@ -891,6 +892,21 @@ export const FrontendComplianceEvidenceCenterSchema = ComplianceEvidenceCenterRe
   generatedFromCloudShieldRecordsOnly: data.generatedFromCloudShieldRecordsOnly
 }));
 
+export const FrontendComplianceControlsRegistrySchema =
+  ComplianceControlsRegistryResponseSchema.safeExtend({
+    controls: ComplianceControlsRegistryResponseSchema.shape.controls.element.safeExtend({
+      title: safeFindingText,
+      description: safeFindingText,
+      latestEvidenceCapturedAt: isoTimestamp.nullable(),
+      mappedFindings:
+        ComplianceControlsRegistryResponseSchema.shape.controls.element.shape.mappedFindings.element.safeExtend({
+          title: safeFindingText,
+          latestEvidenceCapturedAt: isoTimestamp.nullable()
+        }).array().max(100)
+    }).array().max(50),
+    generatedAt: isoTimestamp
+  });
+
 export const FrontendInventorySyncResponseSchema = InventoryOrchestrationResponseSchema.transform((data) => ({
     status: data.status,
     dryRun: data.dryRun,
@@ -971,6 +987,11 @@ export type FrontendRemediationPlanList = ReturnType<typeof FrontendRemediationP
 export type FrontendGovernanceApprovals = ReturnType<typeof FrontendGovernanceApprovalsSchema.parse>;
 export type FrontendGovernanceActivity = ReturnType<typeof FrontendGovernanceActivitySchema.parse>;
 export type FrontendComplianceEvidenceCenter = ReturnType<typeof FrontendComplianceEvidenceCenterSchema.parse>;
+export type FrontendComplianceControlsRegistry = ReturnType<
+  typeof FrontendComplianceControlsRegistrySchema.parse
+>;
+export type FrontendComplianceControl =
+  FrontendComplianceControlsRegistry["controls"][number];
 export type FrontendAwsIdentityValidation = ReturnType<typeof FrontendAwsIdentityValidationSchema.parse>;
 export type FrontendCapabilitySession = ReturnType<typeof FrontendCapabilitySessionSchema.parse>;
 export type FrontendInventorySyncResponse = ReturnType<typeof FrontendInventorySyncResponseSchema.parse>;
