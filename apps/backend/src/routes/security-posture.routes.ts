@@ -26,7 +26,9 @@ export async function registerSecurityPostureRoutes(app: FastifyInstance): Promi
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.FINDINGS_MANAGE);
       SecurityEvaluationRequestSchema.parse(request.body ?? {});
-      return SecurityEvaluationResponseSchema.parse(await runEvaluation(auth.organizationId));
+      return SecurityEvaluationResponseSchema.parse(
+        await runEvaluation(auth.organizationId, request.id)
+      );
     }
   );
 

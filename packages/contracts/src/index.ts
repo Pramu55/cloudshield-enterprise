@@ -1333,6 +1333,99 @@ export const RiskFindingDetailDtoSchema = RiskFindingDtoSchema.extend({
 });
 export type RiskFindingDetailDto = z.infer<typeof RiskFindingDetailDtoSchema>;
 
+const evidenceSnapshotUnsafeKey =
+  /credential|secret|access.?key|token|authorization|password|private.?key|provider.?error|raw.?response|stack/i;
+const evidenceSnapshotUnsafeText =
+  /secretaccesskey|accesskeyid|authorization:\s*bearer|provider\s*error|providererror|raw\s*provider|-----begin .*private key-----|\bat\s+[\w.$<>]+\s*\([^)\r\n]+:\d+:\d+\)/i;
+const evidenceSnapshotControlCharacters = /[\u0000-\u001f\u007f]/;
+
+const BoundedEvidenceSnapshotJsonSchema = z
+  .record(z.string(), z.unknown())
+  .superRefine((value, context) => {
+    let nodes = 0;
+    const visit = (current: unknown, depth: number): boolean => {
+      nodes++;
+      if (nodes > 200 || depth > 6) return false;
+      if (current === null || typeof current === "boolean") return true;
+      if (typeof current === "number") return Number.isFinite(current);
+      if (typeof current === "string") {
+        return (
+          current.length <= 2000 &&
+          !evidenceSnapshotControlCharacters.test(current) &&
+          !evidenceSnapshotUnsafeText.test(current)
+        );
+      }
+      if (Array.isArray(current)) {
+        return current.length <= 50 && current.every((item) => visit(item, depth + 1));
+      }
+      if (typeof current === "object") {
+        const entries = Object.entries(current);
+        return entries.length <= 50 && entries.every(
+          ([key, item]) =>
+            !evidenceSnapshotUnsafeKey.test(key) &&
+            !evidenceSnapshotControlCharacters.test(key) &&
+            visit(item, depth + 1)
+        );
+      }
+      return false;
+    };
+    if (
+      new TextEncoder().encode(JSON.stringify(value)).length > 8192 ||
+      !visit(value, 0)
+    ) {
+      context.addIssue({ code: "custom", message: "Evidence snapshot JSON is unsafe or oversized." });
+    }
+  });
+
+export const SecurityFindingEvidenceSnapshotDtoSchema = z.object({
+  id: z.string().min(1).max(128),
+  securityFindingId: z.string().min(1).max(128),
+  resourceId: z.string().min(1).max(128).nullable(),
+  ruleId: z.string().min(1).max(160),
+  ruleVersion: z.string().min(1).max(40),
+  schemaVersion: z.number().int().positive(),
+  evaluationMode: z.literal("STORED_INVENTORY"),
+  findingSource: z.literal("RULE_ENGINE"),
+  resourceSource: DataSourceClassificationSchema.nullable(),
+  sampleData: z.boolean(),
+  title: z.string().min(1).max(500),
+  summary: z.string().min(1).max(2000),
+  resourceSnapshot: BoundedEvidenceSnapshotJsonSchema,
+  evaluationContext: BoundedEvidenceSnapshotJsonSchema,
+  correlationId: z.string().uuid().nullable(),
+  capturedAt: z.string().datetime(),
+  createdAt: z.string().datetime()
+}).strict().superRefine((value, context) => {
+  if (value.sampleData !== (value.resourceSource === "SAMPLE")) {
+    context.addIssue({
+      code: "custom",
+      path: ["sampleData"],
+      message: "Snapshot sample state must match resource provenance."
+    });
+  }
+});
+export type SecurityFindingEvidenceSnapshotDto = z.infer<
+  typeof SecurityFindingEvidenceSnapshotDtoSchema
+>;
+
+export const EvidenceSnapshotListQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(10)
+}).strict();
+
+export const EvidenceSnapshotListResponseDtoSchema = z.object({
+  items: z.array(SecurityFindingEvidenceSnapshotDtoSchema),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().max(512).nullable(),
+  hasMore: z.boolean(),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false)
+}).strict();
+export type EvidenceSnapshotListResponseDto = z.infer<
+  typeof EvidenceSnapshotListResponseDtoSchema
+>;
+
 export const RiskFindingsResponseSchema = z.object({
   sampleData: z.boolean(),
   sampleDataLabel: z.string(),

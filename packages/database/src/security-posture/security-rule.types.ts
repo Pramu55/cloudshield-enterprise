@@ -18,6 +18,7 @@ export type RuleEvaluationResult = {
 
 export type SecurityRuleDefinition = {
   ruleId: string;
+  ruleVersion: string;
   title: string;
   description: string;
   severity: SecurityRuleSeverity;

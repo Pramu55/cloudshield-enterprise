@@ -274,6 +274,7 @@ model Organization {
   cloudResources        CloudResource[]
   relationships         ResourceRelationship[]
   securityFindings      SecurityFinding[]
+  findingEvidenceSnapshots SecurityFindingEvidenceSnapshot[]
   costFindings          CostFinding[]
   complianceControls    ComplianceControl[]
   complianceEvidence    ComplianceEvidence[]
@@ -479,6 +480,7 @@ model CloudResource {
   complianceEvidence  ComplianceEvidence[]
   remediationPlans    RemediationPlan[]
   securityAlerts      SecurityAlert[]
+  evidenceSnapshots   SecurityFindingEvidenceSnapshot[]
 
   @@unique([organizationId, awsAccountId, resourceType, resourceId])
   @@index([organizationId])
@@ -564,6 +566,7 @@ model SecurityFinding {
   riskAcceptances  RiskAcceptance[]
   remediationPlans RemediationPlan[]
   securityAlerts   SecurityAlert[]
+  evidenceSnapshots SecurityFindingEvidenceSnapshot[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -575,6 +578,32 @@ model SecurityFinding {
   @@index([organizationId, source])
   @@index([organizationId, awsAccountId])
   @@index([organizationId, resourceId])
+}
+
+model SecurityFindingEvidenceSnapshot {
+  id                   String                     @id @default(cuid())
+  organizationId       String
+  organization         Organization               @relation(fields: [organizationId], references: [id])
+  securityFindingId    String
+  securityFinding      SecurityFinding            @relation(fields: [securityFindingId], references: [id])
+  resourceId           String?
+  resource             CloudResource?             @relation(fields: [resourceId], references: [id])
+  ruleId               String
+  ruleVersion          String
+  schemaVersion        Int                        @default(1)
+  evaluationMode       String
+  findingSource        DataSourceClassification
+  resourceSource       DataSourceClassification?
+  sampleData           Boolean
+  title                String
+  summary              String
+  resourceSnapshot     Json
+  evaluationContext    Json
+  correlationId        String?
+  capturedAt           DateTime
+  createdAt            DateTime                   @default(now())
+
+  @@index([organizationId, securityFindingId, capturedAt(sort: Desc), id(sort: Desc)])
 }
 
 model CostFinding {

@@ -12,6 +12,8 @@ import {
   CurrentUserResponseSchema,
   GovernanceApprovalsResponseSchema,
   GovernanceActivityResponseSchema,
+  EvidenceSnapshotListResponseDtoSchema,
+  SecurityFindingEvidenceSnapshotDtoSchema,
   MonitoringAlertEvidenceSummarySchema,
   MonitoringHealthResponseSchema,
   MonitoringRunDtoSchema,
@@ -173,6 +175,21 @@ export const FrontendRiskFindingDetailSchema = RiskFindingDetailDtoSchema
         message: "Finding sample state must match its linked resource source."
       });
     }
+  });
+
+export const FrontendSecurityFindingEvidenceSnapshotSchema =
+  SecurityFindingEvidenceSnapshotDtoSchema.safeExtend({
+    title: safeFindingText,
+    summary: safeFindingText,
+    resourceSnapshot: SafeEvidenceSchema,
+    evaluationContext: SafeEvidenceSchema,
+    capturedAt: isoTimestamp,
+    createdAt: isoTimestamp
+  });
+
+export const FrontendEvidenceSnapshotListSchema =
+  EvidenceSnapshotListResponseDtoSchema.extend({
+    items: FrontendSecurityFindingEvidenceSnapshotSchema.array().max(50)
   });
 
 export const FrontendRiskWorkflowActionSchema = RiskWorkflowActionDtoSchema.extend({
@@ -945,6 +962,12 @@ export type FrontendSecurityAlertEvidence = ReturnType<typeof FrontendSecurityAl
 export type FrontendSecurityAlertEvidenceList = ReturnType<typeof FrontendSecurityAlertEvidenceListSchema.parse>;
 export type FrontendSecurityFindingsResponse = ReturnType<typeof FrontendSecurityFindingsResponseSchema.parse>;
 export type FrontendRiskFindingDetail = ReturnType<typeof FrontendRiskFindingDetailSchema.parse>;
+export type FrontendSecurityFindingEvidenceSnapshot = ReturnType<
+  typeof FrontendSecurityFindingEvidenceSnapshotSchema.parse
+>;
+export type FrontendEvidenceSnapshotList = ReturnType<
+  typeof FrontendEvidenceSnapshotListSchema.parse
+>;
 export type FrontendRiskWorkflowAction = ReturnType<typeof FrontendRiskWorkflowActionSchema.parse>;
 export type FrontendRiskAssignmentTeam = ReturnType<typeof FrontendRiskAssignmentTeamsSchema.parse>[number];
 export type FrontendRiskAssignmentMember = ReturnType<typeof FrontendRiskAssignmentMembersSchema.parse>[number];

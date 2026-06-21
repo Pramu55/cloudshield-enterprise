@@ -14,8 +14,11 @@ export function getRuleCatalog(): SecurityRuleDto[] {
   }));
 }
 
-export async function runEvaluation(organizationId: string): Promise<SecurityEvaluationResponse> {
-  const summary = await evaluateSecurityRules(organizationId);
+export async function runEvaluation(
+  organizationId: string,
+  correlationId: string | null = null
+): Promise<SecurityEvaluationResponse> {
+  const summary = await evaluateSecurityRules(organizationId, correlationId);
   return {
     evaluationMode: "STORED_INVENTORY",
     evaluatedResourceCount: summary.evaluatedResourceCount,
