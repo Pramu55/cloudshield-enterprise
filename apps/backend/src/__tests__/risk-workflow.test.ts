@@ -4,11 +4,13 @@ import { randomUUID } from "node:crypto";
 import { buildApp } from "../app.js";
 import { AwsAccountStatus, Environment, prisma } from "@cloudshield/database";
 import {
+  RiskAcceptanceRegistryResponseSchema,
   RiskFindingDetailDtoSchema,
   RiskWorkflowActionDtoSchema,
   type RiskWorkflowActionName,
   type RiskWorkflowStatus
 } from "@cloudshield/contracts";
+import { listRiskAcceptances } from "../modules/risk-workflow/risk-workflow.service.js";
 import { cloudScanQueue } from "../modules/aws-inventory/aws-inventory.queue.js";
 import { cloudAssessmentQueue } from "../modules/intelligence/assessment.queue.js";
 import { governedAwsChangeQueue } from "../modules/governance/aws-change-execution.queue.js";
@@ -52,6 +54,9 @@ test("risk finding detail and workflow handoff remain tenant-safe and DB-only", 
   const matrixFixture = await createFindingFixture(tenantA, "state-matrix");
 
   t.after(async () => {
+    await prisma.securityFindingEvidenceSnapshot.deleteMany({
+      where: { organizationId: { in: [tenantA.orgId, tenantB.orgId] } }
+    });
     await prisma.organization.deleteMany({ where: { id: { in: [tenantA.orgId, tenantB.orgId] } } });
     await app.close();
     await Promise.allSettled([
@@ -358,6 +363,214 @@ test("risk finding detail and workflow handoff remain tenant-safe and DB-only", 
     assert.deepEqual(await stateCounts(tenantA.orgId, matrixFixture.finding.id), before);
   });
 
+  await t.test("risk acceptance links latest evidence and registry remains tenant-safe", async () => {
+    await resetFinding(fixtureA.finding.id, "ACKNOWLEDGED", fixtureA.team.id);
+    const older = await createEvidenceSnapshot(
+      tenantA.orgId,
+      fixtureA.finding.id,
+      fixtureA.resource.id,
+      new Date("2026-01-01T00:00:00.000Z")
+    );
+    const current = await createEvidenceSnapshot(
+      tenantA.orgId,
+      fixtureA.finding.id,
+      fixtureA.resource.id,
+      new Date("2026-02-01T00:00:00.000Z")
+    );
+
+    const accepted = await invokeWorkflowAction(
+      app,
+      tenantA,
+      fixtureA.finding.id,
+      "accept-risk",
+      fixtureA.team.id
+    );
+    assert.equal(accepted.statusCode, 200, accepted.body);
+    const acceptance = await prisma.riskAcceptance.findFirstOrThrow({
+      where: {
+        organizationId: tenantA.orgId,
+        securityFindingId: fixtureA.finding.id
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    assert.equal(acceptance.evidenceSnapshotId, current.id);
+    assert.notEqual(acceptance.evidenceSnapshotId, older.id);
+
+    const later = await createEvidenceSnapshot(
+      tenantA.orgId,
+      fixtureA.finding.id,
+      fixtureA.resource.id,
+      new Date("2026-03-01T00:00:00.000Z")
+    );
+    assert.notEqual(later.id, current.id);
+    assert.equal(
+      (await prisma.riskAcceptance.findUniqueOrThrow({
+        where: { id: acceptance.id }
+      })).evidenceSnapshotId,
+      current.id
+    );
+
+    const registryResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/risk/acceptances?limit=1",
+      headers: { cookie: tenantA.sessionCookie }
+    });
+    assert.equal(registryResponse.statusCode, 200, registryResponse.body);
+    const registry = RiskAcceptanceRegistryResponseSchema.parse(
+      registryResponse.json()
+    );
+    const item = registry.items.find(
+      (entry) => entry.riskAcceptanceId === acceptance.id
+    );
+    assert.equal(item?.evidenceSnapshotId, current.id);
+    assert.equal(item?.evidenceRuleId, "SG_OPEN_SSH_TO_WORLD");
+    assert.equal(item?.evidenceRuleVersion, "1");
+    assert.equal(item?.findingSource, "RULE_ENGINE");
+    assert.equal(item?.resourceSource, "SAMPLE");
+    assert.equal(item?.sampleData, true);
+    assert.equal("evidence" in (item ?? {}), false);
+    assert.equal("resourceSnapshot" in (item ?? {}), false);
+    assert.equal("evaluationContext" in (item ?? {}), false);
+
+    const unauthenticated = await app.inject({
+      method: "GET",
+      url: "/api/v1/risk/acceptances"
+    });
+    assert.equal(unauthenticated.statusCode, 401);
+
+    const tenantBRegistry = await app.inject({
+      method: "GET",
+      url: "/api/v1/risk/acceptances",
+      headers: { cookie: tenantB.sessionCookie }
+    });
+    assert.equal(tenantBRegistry.statusCode, 200, tenantBRegistry.body);
+    assert.equal(
+      RiskAcceptanceRegistryResponseSchema.parse(tenantBRegistry.json()).items
+        .some((entry) => entry.riskAcceptanceId === acceptance.id),
+      false
+    );
+
+    await setRole(tenantA, "NO_ACCESS");
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/api/v1/risk/acceptances",
+      headers: { cookie: tenantA.sessionCookie }
+    });
+    assert.equal(forbidden.statusCode, 403);
+    await setRole(tenantA, "OWNER");
+
+    const acceptanceCount = await prisma.riskAcceptance.count({
+      where: { id: acceptance.id }
+    });
+    const reopened = await invokeWorkflowAction(
+      app,
+      tenantA,
+      fixtureA.finding.id,
+      "reopen",
+      fixtureA.team.id
+    );
+    assert.equal(reopened.statusCode, 200, reopened.body);
+    assert.equal(
+      await prisma.riskAcceptance.count({ where: { id: acceptance.id } }),
+      acceptanceCount
+    );
+  });
+
+  await t.test("registry expiry classification and filters are deterministic", async () => {
+    const now = new Date("2026-06-21T12:00:00.000Z");
+    await prisma.riskAcceptance.createMany({
+      data: [
+        {
+          organizationId: tenantA.orgId,
+          securityFindingId: matrixFixture.finding.id,
+          businessJustification: "Expired exception",
+          approver: tenantA.userId,
+          owner: fixtureA.team.name,
+          ownerTeamId: fixtureA.team.id,
+          expiresAt: new Date("2026-06-20T12:00:00.000Z")
+        },
+        {
+          organizationId: tenantA.orgId,
+          securityFindingId: matrixFixture.finding.id,
+          businessJustification: "Expiring exception",
+          approver: tenantA.userId,
+          owner: fixtureA.team.name,
+          ownerTeamId: fixtureA.team.id,
+          expiresAt: new Date("2026-07-01T12:00:00.000Z")
+        },
+        {
+          organizationId: tenantA.orgId,
+          securityFindingId: matrixFixture.finding.id,
+          businessJustification: "Active exception",
+          approver: tenantA.userId,
+          owner: fixtureA.team.name,
+          ownerTeamId: fixtureA.team.id,
+          expiresAt: new Date("2026-08-21T12:00:00.000Z")
+        }
+      ]
+    });
+
+    const all = await listRiskAcceptances(
+      tenantA.orgId,
+      { status: "all", limit: 50 },
+      now
+    );
+    const byJustification = new Map(
+      all.items.map((item) => [item.justification, item])
+    );
+    assert.equal(byJustification.get("Expired exception")?.expiryStatus, "EXPIRED");
+    assert.equal(byJustification.get("Expiring exception")?.expiryStatus, "EXPIRING_SOON");
+    assert.equal(byJustification.get("Active exception")?.expiryStatus, "ACTIVE");
+    assert.equal(byJustification.get("Expired exception")?.daysUntilExpiry, -1);
+    assert.equal(byJustification.get("Expiring exception")?.daysUntilExpiry, 10);
+    assert.equal(byJustification.get("Active exception")?.daysUntilExpiry, 61);
+
+    const firstPage = await listRiskAcceptances(
+      tenantA.orgId,
+      { status: "all", limit: 1 },
+      now
+    );
+    assert.equal(firstPage.items.length, 1);
+    assert.equal(firstPage.hasMore, true);
+    assert.ok(firstPage.nextCursor);
+    const secondPage = await listRiskAcceptances(
+      tenantA.orgId,
+      { status: "all", cursor: firstPage.nextCursor ?? undefined, limit: 1 },
+      now
+    );
+    assert.equal(secondPage.items.length, 1);
+    assert.notEqual(
+      secondPage.items[0]?.riskAcceptanceId,
+      firstPage.items[0]?.riskAcceptanceId
+    );
+
+    for (const [status, expected] of [
+      ["expired", "Expired exception"],
+      ["expiring-soon", "Expiring exception"],
+      ["active", "Active exception"]
+    ] as const) {
+      const filtered = await listRiskAcceptances(
+        tenantA.orgId,
+        { status, severity: "HIGH", limit: 50 },
+        now
+      );
+      assert.equal(
+        filtered.items.some((item) => item.justification === expected),
+        true
+      );
+      assert.equal(
+        filtered.items.every((item) => item.expiryStatus === (
+          status === "expired"
+            ? "EXPIRED"
+            : status === "active"
+              ? "ACTIVE"
+              : "EXPIRING_SOON"
+        )),
+        true
+      );
+    }
+  });
+
   await t.test("repeated risk acceptance is rejected", async () => {
     await resetFinding(matrixFixture.finding.id, "ACKNOWLEDGED", matrixFixture.team.id);
     const first = await invokeWorkflowAction(
@@ -533,6 +746,33 @@ async function stateCounts(organizationId: string, findingId: string) {
         where: { organizationId, securityFindingId: findingId }
       })
   };
+}
+
+async function createEvidenceSnapshot(
+  organizationId: string,
+  securityFindingId: string,
+  resourceId: string,
+  capturedAt: Date
+) {
+  return prisma.securityFindingEvidenceSnapshot.create({
+    data: {
+      organizationId,
+      securityFindingId,
+      resourceId,
+      ruleId: "SG_OPEN_SSH_TO_WORLD",
+      ruleVersion: "1",
+      schemaVersion: 1,
+      evaluationMode: "STORED_INVENTORY",
+      findingSource: "RULE_ENGINE",
+      resourceSource: "SAMPLE",
+      sampleData: true,
+      title: "Stored inventory finding",
+      summary: "Immutable test evidence.",
+      resourceSnapshot: { resourceId, source: "SAMPLE" },
+      evaluationContext: { resultStatus: "finding_updated" },
+      capturedAt
+    }
+  });
 }
 
 async function registerTenant(app: Awaited<ReturnType<typeof buildApp>>, label: string): Promise<Session> {

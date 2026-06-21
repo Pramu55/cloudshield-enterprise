@@ -208,6 +208,53 @@ test("security posture evaluates stored inventory with scoped provenance", async
     assert.equal(snapshotAfter.some((item) => item.id === snapshotBefore[0]?.id), true);
   });
 
+  await t.test("accepted findings receive new evidence without changing governance state", async () => {
+    const finding = await prisma.securityFinding.findFirstOrThrow({
+      where: {
+        organizationId: owner.orgId,
+        resourceId: sampleResource.id,
+        ruleId: "SG_OPEN_SSH_TO_WORLD",
+        source: "RULE_ENGINE"
+      }
+    });
+    await prisma.securityFinding.update({
+      where: { id: finding.id },
+      data: {
+        status: "RISK_ACCEPTED",
+        workflowStatus: "RISK_ACCEPTED",
+        riskAcceptanceReason: "Approved test exception",
+        riskAcceptedUntil: new Date("2027-01-01T00:00:00.000Z")
+      }
+    });
+    const snapshotCountBefore = await prisma.securityFindingEvidenceSnapshot.count({
+      where: { organizationId: owner.orgId, securityFindingId: finding.id }
+    });
+
+    await evaluateSecurityRules(owner.orgId, randomUUID());
+
+    const updated = await prisma.securityFinding.findUniqueOrThrow({
+      where: { id: finding.id }
+    });
+    assert.equal(updated.status, "RISK_ACCEPTED");
+    assert.equal(updated.workflowStatus, "RISK_ACCEPTED");
+    assert.equal(
+      await prisma.securityFindingEvidenceSnapshot.count({
+        where: { organizationId: owner.orgId, securityFindingId: finding.id }
+      }),
+      snapshotCountBefore + 1
+    );
+
+    await prisma.securityFinding.update({
+      where: { id: finding.id },
+      data: {
+        status: "OPEN",
+        workflowStatus: "OPEN",
+        riskAcceptanceReason: null,
+        riskAcceptedUntil: null
+      }
+    });
+  });
+
   await t.test("rejects unsafe and oversized snapshot payloads without persistence", async () => {
     const finding = await prisma.securityFinding.findFirstOrThrow({
       where: { organizationId: owner.orgId, resourceId: sampleResource.id }

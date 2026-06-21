@@ -88,6 +88,16 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     keywords: ["security", "policies", "remediation", "workflows"]
   },
   {
+    id: "nav-risk-acceptances",
+    label: "Risk Acceptances",
+    href: "/dashboard/risk-acceptances",
+    icon: "governance",
+    category: "Security",
+    requiredCapability: "risks.read",
+    description: "Accepted risk governance, expiry, and evidence linkage.",
+    keywords: ["risk acceptance", "accepted risks", "exceptions", "expiry", "governance"]
+  },
+  {
     id: "nav-compliance",
     label: "Compliance",
     href: "/dashboard/compliance",

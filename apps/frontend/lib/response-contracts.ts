@@ -28,6 +28,7 @@ import {
   SecurityAlertEvidenceListResponseSchema,
   SecurityFindingsResponseSchema,
   RiskAuditEventDtoSchema,
+  RiskAcceptanceRegistryResponseSchema,
   RiskFindingDetailDtoSchema,
   RiskFindingDtoSchema,
   RiskWorkflowAvailableActionSchema,
@@ -190,6 +191,21 @@ export const FrontendSecurityFindingEvidenceSnapshotSchema =
 export const FrontendEvidenceSnapshotListSchema =
   EvidenceSnapshotListResponseDtoSchema.extend({
     items: FrontendSecurityFindingEvidenceSnapshotSchema.array().max(50)
+  });
+
+export const FrontendRiskAcceptanceRegistrySchema =
+  RiskAcceptanceRegistryResponseSchema.extend({
+    items: RiskAcceptanceRegistryResponseSchema.shape.items.element.safeExtend({
+      findingTitle: safeFindingText,
+      findingDescription: safeFindingText,
+      justification: safeFindingText,
+      acceptedAt: isoTimestamp,
+      expiresAt: isoTimestamp,
+      evidenceCapturedAt: isoTimestamp.nullable(),
+      createdAt: isoTimestamp,
+      updatedAt: isoTimestamp
+    }).array().max(50),
+    generatedAt: isoTimestamp
   });
 
 export const FrontendRiskWorkflowActionSchema = RiskWorkflowActionDtoSchema.extend({
@@ -962,6 +978,10 @@ export type FrontendSecurityAlertEvidence = ReturnType<typeof FrontendSecurityAl
 export type FrontendSecurityAlertEvidenceList = ReturnType<typeof FrontendSecurityAlertEvidenceListSchema.parse>;
 export type FrontendSecurityFindingsResponse = ReturnType<typeof FrontendSecurityFindingsResponseSchema.parse>;
 export type FrontendRiskFindingDetail = ReturnType<typeof FrontendRiskFindingDetailSchema.parse>;
+export type FrontendRiskAcceptanceRegistry = ReturnType<
+  typeof FrontendRiskAcceptanceRegistrySchema.parse
+>;
+export type FrontendRiskAcceptance = FrontendRiskAcceptanceRegistry["items"][number];
 export type FrontendSecurityFindingEvidenceSnapshot = ReturnType<
   typeof FrontendSecurityFindingEvidenceSnapshotSchema.parse
 >;

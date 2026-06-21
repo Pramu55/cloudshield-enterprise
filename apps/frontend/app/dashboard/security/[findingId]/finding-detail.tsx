@@ -347,7 +347,9 @@ export function FindingDetail({ findingId }: { findingId: string }) {
           <Section title="Current evidence" description={finding.evidenceSummary}>
             <pre className="max-h-[32rem] overflow-auto rounded-xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">{JSON.stringify(finding.evidence, null, 2)}</pre>
           </Section>
-          <FindingEvidenceHistory findingId={finding.id} />
+          <div id="evidence-history">
+            <FindingEvidenceHistory findingId={finding.id} />
+          </div>
           <Section title="Compliance references">
             {finding.complianceRefs.length ? (
               <ul className="list-disc space-y-2 pl-5 text-sm text-slate-700">

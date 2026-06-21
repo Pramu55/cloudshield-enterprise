@@ -14,6 +14,8 @@ import {
   ResolveFindingRequestSchema,
   RiskFindingDetailDtoSchema,
   RiskFindingsResponseSchema,
+  RiskAcceptanceRegistryQuerySchema,
+  RiskAcceptanceRegistryResponseSchema,
   RiskWorkflowActionDtoSchema
 } from "@cloudshield/contracts";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
@@ -24,6 +26,7 @@ import {
   assignFinding,
   getRiskFindingDetail,
   listRiskFindings,
+  listRiskAcceptances,
   markFalsePositive,
   planRemediation,
   reopenFinding,
@@ -46,6 +49,15 @@ export async function registerRiskWorkflowRoutes(
       mutationExecuted: false,
       remediationExecuted: false
     });
+  });
+
+  app.get("/api/v1/risk/acceptances", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RISKS_READ);
+    const query = RiskAcceptanceRegistryQuerySchema.parse(request.query);
+    return RiskAcceptanceRegistryResponseSchema.parse(
+      await listRiskAcceptances(auth.organizationId, query)
+    );
   });
 
   app.get(
