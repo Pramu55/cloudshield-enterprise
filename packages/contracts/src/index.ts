@@ -941,7 +941,7 @@ const AwsAccountWriteBaseSchema = z.object({
   description: z.string().trim().max(1000).nullable().optional(),
   roleArnPlaceholder: z.string().trim().max(300).nullable().optional(),
   externalIdConfigured: z.boolean().optional()
-});
+}).strict();
 
 export const CreateAwsAccountRequestSchema = AwsAccountWriteBaseSchema
   .refine(

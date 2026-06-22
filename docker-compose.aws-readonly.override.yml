@@ -1,0 +1,40 @@
+services:
+  backend:
+    environment:
+      AWS_CONNECTOR_MODE: ${AWS_CONNECTOR_MODE:?Set AWS_CONNECTOR_MODE to readonly-validation}
+      AWS_INVENTORY_SCANNER_MODE: ${AWS_INVENTORY_SCANNER_MODE:?Set AWS_INVENTORY_SCANNER_MODE to readonly}
+      AWS_REGION_DEFAULT: ${AWS_REGION_DEFAULT:?Set an approved AWS region}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:?Set the sandbox scanner role ARN}
+      AWS_EXTERNAL_ID: ${AWS_EXTERNAL_ID:?Set the scanner External ID in the secure local environment}
+      AWS_ALLOWED_ACCOUNT_IDS: ${AWS_ALLOWED_ACCOUNT_IDS:?Allowlist the sandbox AWS account ID}
+      AWS_ALLOWED_REGIONS: ${AWS_ALLOWED_REGIONS:?Allowlist approved AWS regions}
+      AWS_PROFILE: ${AWS_PROFILE:?Set a temporary bootstrap AWS profile}
+      AWS_SDK_LOAD_CONFIG: "1"
+      AWS_CHANGE_EXECUTION_MODE: disabled
+      AWS_EXECUTOR_ROLE_ARN: ""
+      AWS_EXECUTOR_EXTERNAL_ID: ""
+    volumes:
+      - type: bind
+        source: ${AWS_SHARED_CONFIG_DIR:?Set the absolute path to a temporary AWS profile directory}
+        target: /root/.aws
+        read_only: true
+
+  worker:
+    environment:
+      AWS_CONNECTOR_MODE: ${AWS_CONNECTOR_MODE:?Set AWS_CONNECTOR_MODE to readonly-validation}
+      AWS_INVENTORY_SCANNER_MODE: ${AWS_INVENTORY_SCANNER_MODE:?Set AWS_INVENTORY_SCANNER_MODE to readonly}
+      AWS_REGION_DEFAULT: ${AWS_REGION_DEFAULT:?Set an approved AWS region}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:?Set the sandbox scanner role ARN}
+      AWS_EXTERNAL_ID: ${AWS_EXTERNAL_ID:?Set the scanner External ID in the secure local environment}
+      AWS_ALLOWED_ACCOUNT_IDS: ${AWS_ALLOWED_ACCOUNT_IDS:?Allowlist the sandbox AWS account ID}
+      AWS_ALLOWED_REGIONS: ${AWS_ALLOWED_REGIONS:?Allowlist approved AWS regions}
+      AWS_PROFILE: ${AWS_PROFILE:?Set a temporary bootstrap AWS profile}
+      AWS_SDK_LOAD_CONFIG: "1"
+      AWS_CHANGE_EXECUTION_MODE: disabled
+      AWS_EXECUTOR_ROLE_ARN: ""
+      AWS_EXECUTOR_EXTERNAL_ID: ""
+    volumes:
+      - type: bind
+        source: ${AWS_SHARED_CONFIG_DIR:?Set the absolute path to a temporary AWS profile directory}
+        target: /root/.aws
+        read_only: true
