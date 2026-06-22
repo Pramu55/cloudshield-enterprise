@@ -92,10 +92,14 @@ test("executive dashboard is tenant-scoped, read-only, and evidence-backed", asy
     assert.equal(summary.evidence.snapshotsLast7d, 2);
     assert.equal(summary.evidence.evidenceBackedFindings, 2);
     assert.equal(summary.evidence.evidenceCoveragePercent, 40);
-    assert.equal(summary.provenance.sampleDataPresent, true);
+    assert.equal(summary.provenance.sampleDataPresent, false);
     assert.equal(summary.provenance.ruleEnginePresent, true);
     assert.equal(summary.posture.overallStatus, "CRITICAL");
-    assert.ok(summary.posture.executiveScore < 100);
+    assert.equal(summary.posture.scoreStatus, "SCORED");
+    assert.equal(typeof summary.posture.executiveScore, "number");
+    assert.ok((summary.posture.executiveScore ?? 100) < 100);
+    assert.equal(summary.posture.awsSyncedResourceCount, 1);
+    assert.equal(summary.posture.completedScanCount, 1);
     assert.equal(Object.values(summary.safety).every((value) => value === false), true);
     const serialized = JSON.stringify(summary);
     for (const forbidden of [
@@ -131,6 +135,8 @@ test("executive dashboard is tenant-scoped, read-only, and evidence-backed", asy
         await getExecutiveDashboardSummary(empty.organizationId, now)
       );
       assert.equal(summary.posture.overallStatus, "UNKNOWN");
+      assert.equal(summary.posture.scoreStatus, "NOT_CONNECTED");
+      assert.equal(summary.posture.executiveScore, null);
       assert.equal(summary.security.totalFindings, 0);
       assert.equal(summary.risk.totalAcceptedRisks, 0);
       assert.equal(summary.evidence.totalSnapshots, 0);
@@ -138,6 +144,55 @@ test("executive dashboard is tenant-scoped, read-only, and evidence-backed", asy
       assert.equal(summary.compliance.unknownControls, 6);
     } finally {
       await prisma.organization.delete({ where: { id: empty.organizationId } });
+    }
+  });
+
+  await t.test("sample-only records do not produce a numeric executive score", async () => {
+    const sample = await registerTenant(app, "executive-sample");
+    try {
+      const account = await prisma.awsAccount.create({
+        data: {
+          organizationId: sample.organizationId,
+          name: "Sample executive account",
+          accountId: uniqueAccountId(),
+          environment: Environment.sandbox,
+          status: AwsAccountStatus.CONNECTED,
+          connectionStatus: "VALIDATION_SUCCEEDED",
+          regions: ["us-east-1"]
+        }
+      });
+      const resource = await prisma.cloudResource.create({
+        data: {
+          organizationId: sample.organizationId,
+          awsAccountId: account.id,
+          resourceType: "security-group",
+          resourceId: `sg-${randomUUID()}`,
+          source: "SAMPLE"
+        }
+      });
+      await prisma.securityFinding.create({
+        data: {
+          organizationId: sample.organizationId,
+          awsAccountId: account.id,
+          resourceId: resource.id,
+          ruleId: "SAMPLE_EXECUTIVE_RULE",
+          title: "Sample executive finding",
+          description: "Sample-only executive posture.",
+          severity: "HIGH",
+          workflowStatus: "OPEN",
+          source: "RULE_ENGINE",
+          lastEvaluatedAt: now
+        }
+      });
+
+      const summary = ExecutiveDashboardSummaryResponseSchema.parse(
+        await getExecutiveDashboardSummary(sample.organizationId, now)
+      );
+      assert.equal(summary.posture.scoreStatus, "SAMPLE_ONLY");
+      assert.equal(summary.posture.executiveScore, null);
+      assert.equal(summary.posture.isSampleOnly, true);
+    } finally {
+      await prisma.organization.delete({ where: { id: sample.organizationId } });
     }
   });
 });
@@ -160,10 +215,20 @@ async function createExecutiveFixture(organizationId: string, now: Date) {
       awsAccountId: account.id,
       resourceType: "security-group",
       resourceId: `sg-${randomUUID()}`,
-      name: "Sample executive resource",
-      source: "SAMPLE",
+      name: "AWS-synchronized executive resource",
+      source: "AWS_SYNC",
       metadata: {},
       tags: {}
+    }
+  });
+  await prisma.scanRun.create({
+    data: {
+      organizationId,
+      awsAccountId: account.id,
+      jobType: "AWS_EC2_INVENTORY_SCAN",
+      status: "SUCCEEDED",
+      source: "AWS_SYNC",
+      completedAt: now
     }
   });
   const definitions = [
@@ -248,11 +313,11 @@ function createSnapshot(
       schemaVersion: 1,
       evaluationMode: "STORED_INVENTORY",
       findingSource: "RULE_ENGINE",
-      resourceSource: "SAMPLE",
-      sampleData: true,
+      resourceSource: "AWS_SYNC",
+      sampleData: false,
       title: "Executive evidence",
       summary: "Immutable executive dashboard evidence.",
-      resourceSnapshot: { source: "SAMPLE" },
+      resourceSnapshot: { source: "AWS_SYNC" },
       evaluationContext: { resultStatus: "finding_updated" },
       capturedAt
     }

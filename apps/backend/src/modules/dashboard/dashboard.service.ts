@@ -7,6 +7,7 @@ import type {
   InventoryFreshness, 
   InventoryFreshnessStatus, 
   PostureScoreComponent,
+  ExecutiveScoreStatus,
   DataSourceLabel
 } from "@cloudshield/contracts";
 
@@ -235,8 +236,42 @@ export async function getCommandCenterData(organizationId: string): Promise<Comm
   };
 
   // Governance Score (Deterministic Coverage)
-  const totalControls = await prisma.complianceControl.count({ where: { organizationId } });
-  const controlsWithEvidence = await prisma.complianceControl.count({ where: { organizationId, evidenceCount: { gt: 0 } } });
+  const [
+    totalControls,
+    controlsWithEvidence,
+    passedControls,
+    awsSyncedResourceCount,
+    sampleResourceCount,
+    realComplianceEvidenceCount,
+    sampleComplianceEvidenceCount,
+    latestComplianceEvaluation,
+    latestFindingEvaluation
+  ] = await Promise.all([
+    prisma.complianceControl.count({ where: { organizationId } }),
+    prisma.complianceControl.count({ where: { organizationId, evidenceCount: { gt: 0 } } }),
+    prisma.complianceControl.count({ where: { organizationId, status: "PASS" } }),
+    prisma.cloudResource.count({ where: { organizationId, archivedAt: null, source: "AWS_SYNC" } }),
+    prisma.cloudResource.count({ where: { organizationId, archivedAt: null, source: "SAMPLE" } }),
+    prisma.complianceEvidence.count({
+      where: { organizationId, sampleData: false, sourceClassification: "AWS_SYNC" }
+    }),
+    prisma.complianceEvidence.count({
+      where: {
+        organizationId,
+        OR: [{ sampleData: true }, { sourceClassification: "SAMPLE" }]
+      }
+    }),
+    prisma.complianceControl.findFirst({
+      where: { organizationId, lastEvaluatedAt: { not: null } },
+      orderBy: { lastEvaluatedAt: "desc" },
+      select: { lastEvaluatedAt: true }
+    }),
+    prisma.securityFinding.findFirst({
+      where: { organizationId, archivedAt: null, lastEvaluatedAt: { not: null } },
+      orderBy: { lastEvaluatedAt: "desc" },
+      select: { lastEvaluatedAt: true }
+    })
+  ]);
   const controlsWithoutEvidence = totalControls - controlsWithEvidence;
   const coveragePercent = totalControls > 0 ? (controlsWithEvidence / totalControls) : 0;
   
@@ -256,6 +291,22 @@ export async function getCommandCenterData(organizationId: string): Promise<Comm
 
   const allAuditEvents = await prisma.auditEvent.count({ where: { organizationId } });
   const auditPercent = allAuditEvents > 0 ? 1 : 0;
+  const successfulAwsSyncScans = scanRuns.filter(
+    (scan) =>
+      scan.source === "AWS_SYNC" &&
+      (scan.status === "SUCCEEDED" || scan.status === "COMPLETED")
+  );
+  const latestSuccessfulAwsSyncAt = successfulAwsSyncScans
+    .map((scan) => scan.completedAt ?? scan.startedAt)
+    .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
+  const latestBlockedScan = scanRuns.find(
+    (scan) => scan.status === "BLOCKED" || scan.status === "BLOCKED_DISABLED"
+  );
+  const sampleOnlyInventory = awsSyncedResourceCount === 0 && sampleResourceCount > 0;
+  const hasRealInventory = awsSyncedResourceCount > 0 && successfulAwsSyncScans.length > 0;
+  const hasSecurityFindings = activeFindingsCount > 0;
+  const sampleOnlySecurity =
+    hasSecurityFindings && awsSyncedResourceCount === 0 && sampleResourceCount > 0;
 
   const governanceScoreVal = Math.round(
     (coveragePercent * 50) + 
@@ -265,97 +316,199 @@ export async function getCommandCenterData(organizationId: string): Promise<Comm
   );
 
   const components: PostureScoreComponent[] = [];
+
+  function component(input: {
+    key: string;
+    label: string;
+    status: ExecutiveScoreStatus;
+    score: number;
+    weight: number;
+    supportingCounts: Record<string, number>;
+    explanation: string;
+    reason: string;
+    dataSource: DataSourceLabel;
+    lastEvaluatedAt: Date | null;
+  }): PostureScoreComponent {
+    const numeric = input.status === "SCORED" || input.status === "STALE";
+    return {
+      key: input.key,
+      label: input.label,
+      scoreStatus: input.status,
+      score: numeric ? input.score : null,
+      weight: input.weight,
+      weightedContribution: numeric ? (input.score * input.weight) / 100 : null,
+      supportingCounts: input.supportingCounts,
+      explanation: input.explanation,
+      reason: input.reason,
+      dataSource: input.dataSource,
+      lastEvaluatedAt: input.lastEvaluatedAt?.toISOString() ?? null
+    };
+  }
   
   // Security Posture (30%)
   let securityScoreVal = 100 - (criticalFindings * 5) - (highFindings * 2);
   if (securityScoreVal < 0) securityScoreVal = 0;
-  if (!hasData) securityScoreVal = 0;
-  components.push({
+  const securityStatus: ExecutiveScoreStatus = !hasSecurityFindings
+    ? "NOT_EVALUATED"
+    : sampleOnlySecurity
+      ? "SAMPLE_ONLY"
+      : latestFindingEvaluation?.lastEvaluatedAt
+        ? "SCORED"
+        : "NOT_EVALUATED";
+  components.push(component({
     key: "SECURITY",
     label: "Security Posture",
+    status: securityStatus,
     score: securityScoreVal,
     weight: 30,
-    weightedContribution: (securityScoreVal * 30) / 100,
     supportingCounts: { critical: criticalFindings, high: highFindings },
     explanation: "Base 100, penalized for critical and high findings.",
-    missingDataReason: hasData ? null : "No data available.",
-    dataTimestamp: generatedAt
-  });
+    reason: securityStatus === "SAMPLE_ONLY"
+      ? "Findings are derived from demo/sample inventory, not a completed AWS sync."
+      : securityStatus === "NOT_EVALUATED"
+        ? "No completed security evaluation is available."
+        : "Calculated from current findings backed by AWS-synchronized inventory.",
+    dataSource: securityStatus === "SAMPLE_ONLY" ? "SAMPLE" : hasRealInventory ? "AWS_SYNC" : dataSource,
+    lastEvaluatedAt: latestFindingEvaluation?.lastEvaluatedAt ?? null
+  }));
 
   // Compliance Posture (20%)
-  const passedControls = await prisma.complianceControl.count({ where: { organizationId, status: "PASS" } });
   const complianceScoreVal = totalControls > 0 ? Math.round((passedControls / totalControls) * 100) : 0;
-  components.push({
+  const complianceStatus: ExecutiveScoreStatus =
+    realComplianceEvidenceCount > 0 && latestComplianceEvaluation?.lastEvaluatedAt
+      ? "SCORED"
+      : sampleComplianceEvidenceCount > 0
+        ? "SAMPLE_ONLY"
+        : "NOT_EVALUATED";
+  components.push(component({
     key: "COMPLIANCE",
     label: "Compliance Posture",
+    status: complianceStatus,
     score: complianceScoreVal,
     weight: 20,
-    weightedContribution: (complianceScoreVal * 20) / 100,
     supportingCounts: { passed: passedControls, total: totalControls },
     explanation: "Percentage of passed compliance controls.",
-    missingDataReason: totalControls > 0 ? null : "No compliance controls evaluated.",
-    dataTimestamp: generatedAt
-  });
+    reason: complianceStatus === "SAMPLE_ONLY"
+      ? "Only demo/sample compliance evidence is available."
+      : complianceStatus === "NOT_EVALUATED"
+        ? "No completed compliance evaluation with real applicable evidence is available."
+        : "Calculated from evaluated controls backed by AWS-synchronized evidence.",
+    dataSource: complianceStatus === "SAMPLE_ONLY" ? "SAMPLE" : complianceStatus === "SCORED" ? "AWS_SYNC" : dataSource,
+    lastEvaluatedAt: latestComplianceEvaluation?.lastEvaluatedAt ?? null
+  }));
 
   // Inventory Freshness Score (15%)
   let freshnessScoreVal = 100;
   if (overallFreshnessStatus === "AGING") freshnessScoreVal = 50;
   if (overallFreshnessStatus === "STALE") freshnessScoreVal = 0;
-  if (overallFreshnessStatus === "NEVER_SYNCHRONIZED" || overallFreshnessStatus === "CONNECTOR_DISABLED") freshnessScoreVal = 0;
-  components.push({
+  const freshnessStatus: ExecutiveScoreStatus = sampleOnlyInventory
+    ? "SAMPLE_ONLY"
+    : !hasRealInventory
+      ? latestBlockedScan
+        ? "BLOCKED"
+        : "NOT_EVALUATED"
+      : overallFreshnessStatus === "STALE"
+        ? "STALE"
+        : "SCORED";
+  components.push(component({
     key: "FRESHNESS",
     label: "Inventory Freshness",
+    status: freshnessStatus,
     score: freshnessScoreVal,
     weight: 15,
-    weightedContribution: (freshnessScoreVal * 15) / 100,
-    supportingCounts: { ageHours: maxAgeHours ? Math.round(maxAgeHours) : 0 },
-    explanation: "Fresh (100), Aging (50), Stale/Disabled (0).",
-    missingDataReason: oldestAccountSyncAt ? null : "No sync data.",
-    dataTimestamp: generatedAt
-  });
+    supportingCounts: {
+      ageHours: maxAgeHours ? Math.round(maxAgeHours) : 0,
+      awsSyncedResources: awsSyncedResourceCount,
+      completedScans: successfulAwsSyncScans.length
+    },
+    explanation: "Fresh (100), Aging (50), Stale (0).",
+    reason: freshnessStatus === "SAMPLE_ONLY"
+      ? "Demo/sample inventory is present, but no AWS_SYNC inventory exists."
+      : freshnessStatus === "BLOCKED"
+        ? latestBlockedScan?.errorMessage ?? "The latest inventory sync was blocked."
+        : freshnessStatus === "NOT_EVALUATED"
+          ? "No successful AWS_SYNC inventory run is available."
+          : freshnessStatus === "STALE"
+            ? "The latest successful AWS inventory is older than the freshness threshold."
+            : freshnessReason,
+    dataSource: freshnessStatus === "SAMPLE_ONLY" ? "SAMPLE" : hasRealInventory ? "AWS_SYNC" : dataSource,
+    lastEvaluatedAt: latestSuccessfulAwsSyncAt
+  }));
 
   // Account Readiness Score (15%)
   const readinessScoreVal = totalAccounts > 0 ? Math.round((connectedAccounts / totalAccounts) * 100) : 0;
-  components.push({
+  const readinessStatus: ExecutiveScoreStatus =
+    totalAccounts === 0
+      ? "NOT_CONNECTED"
+      : connectedAccounts === 0
+        ? "BLOCKED"
+        : "SCORED";
+  components.push(component({
     key: "READINESS",
     label: "Account Readiness",
+    status: readinessStatus,
     score: readinessScoreVal,
     weight: 15,
-    weightedContribution: (readinessScoreVal * 15) / 100,
     supportingCounts: { connected: connectedAccounts, total: totalAccounts },
     explanation: "Percentage of successfully connected accounts.",
-    missingDataReason: totalAccounts > 0 ? null : "No accounts configured.",
-    dataTimestamp: generatedAt
-  });
+    reason: readinessStatus === "NOT_CONNECTED"
+      ? "No AWS account is registered and successfully validated."
+      : readinessStatus === "BLOCKED"
+        ? latestBlockedScan?.errorMessage ?? "Registered accounts have not completed STS validation."
+        : `${connectedAccounts} of ${totalAccounts} registered accounts completed validation.`,
+    dataSource,
+    lastEvaluatedAt: validationAuditEvents[0]?.createdAt ?? null
+  }));
 
   // Governance Score (20%)
-  components.push({
+  const governanceStatus: ExecutiveScoreStatus =
+    realComplianceEvidenceCount > 0 && allAuditEvents > 0
+      ? "SCORED"
+      : sampleComplianceEvidenceCount > 0
+        ? "SAMPLE_ONLY"
+        : "NOT_EVALUATED";
+  components.push(component({
     key: "GOVERNANCE",
     label: "Governance Readiness",
+    status: governanceStatus,
     score: governanceScoreVal,
     weight: 20,
-    weightedContribution: (governanceScoreVal * 20) / 100,
     supportingCounts: { evidenceRecords: controlsWithEvidence, ownership: ownedHighRiskRecords },
     explanation: "Evidence coverage, ownership mapping, and audit presence.",
-    missingDataReason: totalControls > 0 || totalHighRisk > 0 ? null : "No controls or high-risk records.",
-    dataTimestamp: generatedAt
-  });
+    reason: governanceStatus === "SAMPLE_ONLY"
+      ? "Governance records are backed only by demo/sample evidence."
+      : governanceStatus === "NOT_EVALUATED"
+        ? "No real evidence-backed governance assessment is available."
+        : "Calculated from real evidence coverage, ownership, and audit records.",
+    dataSource: governanceStatus === "SAMPLE_ONLY" ? "SAMPLE" : governanceStatus === "SCORED" ? "AWS_SYNC" : dataSource,
+    lastEvaluatedAt: latestComplianceEvaluation?.lastEvaluatedAt ?? null
+  }));
 
-  const totalScore = components.reduce((acc, c) => acc + c.weightedContribution, 0);
+  const allComponentsScored = components.every(
+    (item) => item.scoreStatus === "SCORED" || item.scoreStatus === "STALE"
+  );
+  const totalScore = allComponentsScored
+    ? Math.round(components.reduce(
+        (total, item) => total + (item.weightedContribution ?? 0),
+        0
+      ))
+    : null;
 
   let assessmentState: "HEALTHY" | "CALCULATED" | "SETUP_INCOMPLETE" | "INSUFFICIENT_DATA" | "NOT_CALCULATED" | "STALE_DATA" = "CALCULATED";
   if (totalAccounts === 0) {
     assessmentState = "SETUP_INCOMPLETE";
   } else if (!hasData || !oldestAccountSyncAt) {
     assessmentState = "INSUFFICIENT_DATA";
+  } else if (!allComponentsScored) {
+    assessmentState = "INSUFFICIENT_DATA";
   } else if (overallFreshnessStatus === "STALE") {
     assessmentState = "STALE_DATA";
-  } else if (totalScore >= 80) {
+  } else if (totalScore !== null && totalScore >= 80) {
     assessmentState = "HEALTHY";
   }
 
   const postureScore = {
-    totalScore: Math.round(totalScore),
+    totalScore,
     assessmentState,
     components,
     dataSource

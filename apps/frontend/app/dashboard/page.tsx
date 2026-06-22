@@ -21,6 +21,18 @@ function formatTimestamp(value: string | null) {
   }).format(new Date(value));
 }
 
+function scoreStatusLabel(status: FrontendExecutiveDashboardSummary["posture"]["scoreStatus"]) {
+  const labels = {
+    SCORED: "Scored",
+    NOT_EVALUATED: "Not evaluated",
+    NOT_CONNECTED: "Not connected",
+    SAMPLE_ONLY: "Demo/sample data",
+    STALE: "Stale score",
+    BLOCKED: "Blocked"
+  };
+  return labels[status];
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<FrontendExecutiveDashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,13 +90,20 @@ export default function DashboardPage() {
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-sm text-slate-500">Deterministic governance score</p>
-              <strong className="mt-2 block text-6xl font-black text-slate-950">{posture.executiveScore}</strong>
-              <p className="mt-2 text-xs text-slate-500">Non-certified score based only on stored CloudShield records.</p>
+              <strong className="mt-2 block text-5xl font-black text-slate-950">
+                {posture.executiveScore === null ? scoreStatusLabel(posture.scoreStatus) : posture.executiveScore}
+              </strong>
+              <p className="mt-2 text-sm text-slate-600">{posture.reason}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <SourceBadge source={posture.dataSource} />
+                {posture.scoreStatus === "STALE" ? <StatusBadge status="STALE" /> : null}
+              </div>
             </div>
             <div className="text-right">
               <StatusBadge status={posture.overallStatus} />
               <p className="mt-3 text-sm font-semibold text-slate-700">{posture.criticalAttentionCount} critical attention items</p>
               <p className="text-xs text-slate-500">Evidence freshness: {posture.dataFreshnessStatus}</p>
+              <p className="text-xs text-slate-500">Last evaluated: {formatTimestamp(posture.lastEvaluatedAt)}</p>
             </div>
           </div>
           <div className="mt-6 space-y-2 border-t border-slate-200 pt-4">

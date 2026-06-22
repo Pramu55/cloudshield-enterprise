@@ -56,21 +56,47 @@ export const ExecutiveSummarySchema = z.object({
 });
 export type ExecutiveSummary = z.infer<typeof ExecutiveSummarySchema>;
 
+export const ExecutiveScoreStatusSchema = z.enum([
+  "SCORED",
+  "NOT_EVALUATED",
+  "NOT_CONNECTED",
+  "SAMPLE_ONLY",
+  "STALE",
+  "BLOCKED"
+]);
+export type ExecutiveScoreStatus = z.infer<typeof ExecutiveScoreStatusSchema>;
+
 export const PostureScoreComponentSchema = z.object({
   key: z.string(),
   label: z.string(),
-  score: z.number().int(),
+  scoreStatus: ExecutiveScoreStatusSchema,
+  score: z.number().int().min(0).max(100).nullable(),
   weight: z.number().int(),
-  weightedContribution: z.number(),
+  weightedContribution: z.number().min(0).max(100).nullable(),
   supportingCounts: z.record(z.string(), z.number()),
   explanation: z.string(),
-  missingDataReason: z.string().nullable(),
-  dataTimestamp: z.string()
+  reason: z.string(),
+  dataSource: DataSourceLabelSchema,
+  lastEvaluatedAt: z.string().nullable()
+}).strict().superRefine((value, context) => {
+  const numericScoreRequired = value.scoreStatus === "SCORED" || value.scoreStatus === "STALE";
+  if (numericScoreRequired && (value.score === null || value.weightedContribution === null)) {
+    context.addIssue({
+      code: "custom",
+      message: "Scored and stale components require numeric score values."
+    });
+  }
+  if (!numericScoreRequired && (value.score !== null || value.weightedContribution !== null)) {
+    context.addIssue({
+      code: "custom",
+      message: "Unavailable score states must not expose numeric score values."
+    });
+  }
 });
 export type PostureScoreComponent = z.infer<typeof PostureScoreComponentSchema>;
 
 export const PostureScoreSchema = z.object({
-  totalScore: z.number().int(),
+  totalScore: z.number().int().min(0).max(100).nullable(),
   assessmentState: z.enum([
     "HEALTHY",
     "CALCULATED",
@@ -81,7 +107,7 @@ export const PostureScoreSchema = z.object({
   ]),
   components: z.array(PostureScoreComponentSchema),
   dataSource: DataSourceLabelSchema
-});
+}).strict();
 export type PostureScore = z.infer<typeof PostureScoreSchema>;
 
 export const AccountHealthClassificationSchema = z.enum([
@@ -360,11 +386,27 @@ export const ExecutiveDashboardSummaryResponseSchema = z.object({
   }).strict(),
   posture: z.object({
     overallStatus: ExecutivePostureStatusSchema,
-    executiveScore: z.number().int().min(0).max(100),
+    scoreStatus: ExecutiveScoreStatusSchema,
+    executiveScore: z.number().int().min(0).max(100).nullable(),
+    dataSource: DataSourceLabelSchema,
+    reason: z.string().trim().min(1).max(500),
+    lastEvaluatedAt: z.string().datetime().nullable(),
+    isSampleOnly: z.boolean(),
+    connectedAccountCount: z.number().int().nonnegative(),
+    awsSyncedResourceCount: z.number().int().nonnegative(),
+    completedScanCount: z.number().int().nonnegative(),
     criticalAttentionCount: z.number().int().nonnegative(),
     dataFreshnessStatus: ExecutiveDataFreshnessStatusSchema,
     scoreFactors: z.array(ExecutiveScoreFactorSchema).max(10)
-  }).strict(),
+  }).strict().superRefine((value, context) => {
+    const numericScoreRequired = value.scoreStatus === "SCORED" || value.scoreStatus === "STALE";
+    if (numericScoreRequired && value.executiveScore === null) {
+      context.addIssue({ code: "custom", message: "Scored executive posture requires a numeric score." });
+    }
+    if (!numericScoreRequired && value.executiveScore !== null) {
+      context.addIssue({ code: "custom", message: "Unavailable executive posture must not expose a numeric score." });
+    }
+  }),
   security: ExecutiveSecuritySummarySchema,
   risk: ExecutiveRiskSummarySchema,
   compliance: ExecutiveComplianceSummarySchema,

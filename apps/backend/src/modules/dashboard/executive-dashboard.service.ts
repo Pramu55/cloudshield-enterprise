@@ -32,7 +32,11 @@ export async function getExecutiveDashboardSummary(
     snapshotsLast7d,
     evidenceBackedFindingGroups,
     latestEvaluation,
-    complianceRegistry
+    complianceRegistry,
+    connectedAccountCount,
+    awsSyncedResourceCount,
+    sampleResourceCount,
+    completedScanCount
   ] = await Promise.all([
     prisma.organization.findUniqueOrThrow({
       where: { id: organizationId },
@@ -85,7 +89,27 @@ export async function getExecutiveDashboardSummary(
       orderBy: { lastEvaluatedAt: "desc" },
       select: { lastEvaluatedAt: true }
     }),
-    listComplianceControls(organizationId)
+    listComplianceControls(organizationId),
+    prisma.awsAccount.count({
+      where: {
+        organizationId,
+        archivedAt: null,
+        connectionStatus: "VALIDATION_SUCCEEDED"
+      }
+    }),
+    prisma.cloudResource.count({
+      where: { organizationId, archivedAt: null, source: "AWS_SYNC" }
+    }),
+    prisma.cloudResource.count({
+      where: { organizationId, archivedAt: null, source: "SAMPLE" }
+    }),
+    prisma.scanRun.count({
+      where: {
+        organizationId,
+        source: "AWS_SYNC",
+        status: { in: ["SUCCEEDED", "COMPLETED"] }
+      }
+    })
   ]);
 
   const statusCounts = countBy(findings, (finding) => finding.workflowStatus);
@@ -138,7 +162,7 @@ export async function getExecutiveDashboardSummary(
       "Each failing internal control deducts 8 points."
     )
   ].filter((factor) => factor.impact !== 0);
-  const executiveScore = clampScore(
+  const calculatedExecutiveScore = clampScore(
     100 + scoreFactors.reduce((total, factor) => total + factor.impact, 0)
   );
   const observedControlCount = complianceRegistry.controls.filter(
@@ -153,9 +177,9 @@ export async function getExecutiveDashboardSummary(
   const overallStatus =
     !hasObservedData
       ? "UNKNOWN"
-      : (unresolvedSeverity.CRITICAL ?? 0) > 0 || executiveScore < 40
+      : (unresolvedSeverity.CRITICAL ?? 0) > 0 || calculatedExecutiveScore < 40
         ? "CRITICAL"
-        : executiveScore < 75 ||
+        : calculatedExecutiveScore < 75 ||
             unresolvedFindings.length > 0 ||
             expiredAcceptedRisks.length > 0 ||
             (complianceCounts.FAILING ?? 0) > 0
@@ -181,13 +205,48 @@ export async function getExecutiveDashboardSummary(
         .filter((source) => source !== null && source !== undefined)
     )
   ].sort();
+  const isSampleOnly =
+    awsSyncedResourceCount === 0 &&
+    (sampleResourceCount > 0 || resourceSources.includes("SAMPLE"));
+  const scoreStatus =
+    connectedAccountCount === 0
+      ? "NOT_CONNECTED"
+      : isSampleOnly
+        ? "SAMPLE_ONLY"
+        : !latestObservedAt
+          ? "NOT_EVALUATED"
+          : dataFreshnessStatus === "STALE"
+            ? "STALE"
+            : "SCORED";
+  const executiveScore =
+    scoreStatus === "SCORED" || scoreStatus === "STALE"
+      ? calculatedExecutiveScore
+      : null;
+  const scoreReason =
+    scoreStatus === "NOT_CONNECTED"
+      ? "No AWS account has completed STS validation."
+      : scoreStatus === "SAMPLE_ONLY"
+        ? "Current posture is based only on demo/sample records."
+        : scoreStatus === "NOT_EVALUATED"
+          ? "No completed security or evidence evaluation is available."
+          : scoreStatus === "STALE"
+            ? "The score is calculated, but its latest supporting evidence is stale."
+            : "Calculated from current AWS-synchronized findings, evidence, and governance records.";
 
   return {
     generatedAt: now.toISOString(),
     organization,
     posture: {
       overallStatus,
+      scoreStatus,
       executiveScore,
+      dataSource: isSampleOnly ? "SAMPLE" : awsSyncedResourceCount > 0 ? "AWS_SYNC" : "DATABASE",
+      reason: scoreReason,
+      lastEvaluatedAt: latestObservedAt?.toISOString() ?? null,
+      isSampleOnly,
+      connectedAccountCount,
+      awsSyncedResourceCount,
+      completedScanCount,
       criticalAttentionCount,
       dataFreshnessStatus,
       scoreFactors
