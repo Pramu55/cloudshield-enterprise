@@ -8,6 +8,7 @@ import {
   AwsConnectionStatusSchema,
   AwsStsValidationResponseSchema,
   CommandCenterResponseSchema,
+  ExecutiveDashboardSummaryResponseSchema,
   ComplianceControlsRegistryResponseSchema,
   ComplianceEvidenceCenterResponseSchema,
   CurrentUserResponseSchema,
@@ -425,6 +426,38 @@ export const FrontendCommandCenterResponseSchema = CommandCenterResponseSchema.r
   graphSummary: data.graphSummary,
   generatedAt: data.generatedAt
 }));
+
+export const FrontendExecutiveDashboardSummarySchema =
+  ExecutiveDashboardSummaryResponseSchema.safeExtend({
+    generatedAt: isoTimestamp,
+    organization: ExecutiveDashboardSummaryResponseSchema.shape.organization.safeExtend({
+      name: safeFindingText
+    }),
+    security: ExecutiveDashboardSummaryResponseSchema.shape.security.safeExtend({
+      topFindings:
+        ExecutiveDashboardSummaryResponseSchema.shape.security.shape.topFindings.element.safeExtend({
+          title: safeFindingText
+        }).array().max(5)
+    }),
+    risk: ExecutiveDashboardSummaryResponseSchema.shape.risk.safeExtend({
+      nextExpiringRisks:
+        ExecutiveDashboardSummaryResponseSchema.shape.risk.shape.nextExpiringRisks.element.safeExtend({
+          title: safeFindingText,
+          expiresAt: isoTimestamp
+        }).array().max(5)
+    }),
+    evidence: ExecutiveDashboardSummaryResponseSchema.shape.evidence.safeExtend({
+      latestSnapshotAt: isoTimestamp.nullable()
+    }),
+    operations: ExecutiveDashboardSummaryResponseSchema.shape.operations.safeExtend({
+      lastEvaluationAt: isoTimestamp.nullable()
+    }),
+    recommendations:
+      ExecutiveDashboardSummaryResponseSchema.shape.recommendations.element.safeExtend({
+        title: safeFindingText,
+        description: safeFindingText
+      }).array().max(8)
+  });
 
 export const FrontendMonitoringHealthSchema = MonitoringHealthResponseSchema.refine((data) => {
   return [data.openCriticalAlerts, data.openHighAlerts, data.staleAccounts, data.monitoredAccounts, data.degradedAccounts].every(isNonNegativeInteger)
@@ -977,6 +1010,9 @@ export function createFrontendInventoryAccountSyncResponseSchema(accountRecordId
 }
 
 export type FrontendCommandCenterResponse = ReturnType<typeof FrontendCommandCenterResponseSchema.parse>;
+export type FrontendExecutiveDashboardSummary = ReturnType<
+  typeof FrontendExecutiveDashboardSummarySchema.parse
+>;
 export type FrontendMonitoringHealth = ReturnType<typeof FrontendMonitoringHealthSchema.parse>;
 export type FrontendSecurityAlertsList = ReturnType<typeof FrontendSecurityAlertsListSchema.parse>;
 export type FrontendSecurityAlertDetail = ReturnType<typeof FrontendSecurityAlertDetailSchema.parse>;

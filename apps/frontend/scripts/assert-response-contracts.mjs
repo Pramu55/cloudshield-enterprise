@@ -12,6 +12,7 @@ import {
   FrontendComplianceControlsRegistrySchema,
   FrontendCapabilitySessionSchema,
   FrontendCommandCenterResponseSchema,
+  FrontendExecutiveDashboardSummarySchema,
   FrontendGovernanceActivitySchema,
   FrontendGovernanceApprovalsSchema,
   FrontendMonitoringHealthSchema,
@@ -470,6 +471,142 @@ const parsedResults = [
   [FrontendAwsAccountListSchema.parse({ sampleData: false, sampleDataLabel: "Live data", items: [account], ...unsafeFields }), "AWS account list"],
   [FrontendAwsAccountMutationSchema.parse({ item: account, message: "Account updated.", ...unsafeFields }), "AWS account mutation"]
 ];
+
+const executiveDashboardResponse = {
+  generatedAt: timestamp,
+  organization: { id: "org-1", name: "CloudShield Demo Organization" },
+  posture: {
+    overallStatus: "NEEDS_ATTENTION",
+    executiveScore: 72,
+    criticalAttentionCount: 2,
+    dataFreshnessStatus: "FRESH",
+    scoreFactors: [{
+      label: "High findings",
+      impact: -7,
+      explanation: "Each unresolved high finding deducts 7 points."
+    }]
+  },
+  security: {
+    totalFindings: 3,
+    openFindings: 1,
+    acknowledgedFindings: 0,
+    assignedFindings: 0,
+    riskAcceptedFindings: 1,
+    resolvedFindings: 1,
+    bySeverity: { critical: 0, high: 1, medium: 0, low: 0 },
+    topFindings: [{
+      findingId: "finding-1",
+      title: "Open SSH",
+      severity: "HIGH",
+      workflowStatus: "OPEN",
+      source: "RULE_ENGINE",
+      sampleData: true
+    }]
+  },
+  risk: {
+    totalAcceptedRisks: 1,
+    activeAcceptedRisks: 1,
+    expiringSoonAcceptedRisks: 0,
+    expiredAcceptedRisks: 0,
+    nextExpiringRisks: [{
+      riskAcceptanceId: "acceptance-1",
+      findingId: "finding-1",
+      title: "Open SSH",
+      expiresAt: "2026-08-01T12:00:00.000Z",
+      daysUntilExpiry: 40,
+      evidenceSnapshotId: "snapshot-1"
+    }]
+  },
+  compliance: {
+    totalControls: 6,
+    failingControls: 1,
+    acceptedRiskControls: 0,
+    passingControls: 3,
+    unknownControls: 2,
+    topFailingControls: [{
+      controlId: "control-1",
+      controlCode: "NET-001",
+      title: "Administrative network exposure",
+      status: "FAILING",
+      severity: "HIGH",
+      openFindingCount: 1,
+      evidenceSnapshotCount: 1
+    }]
+  },
+  evidence: {
+    totalSnapshots: 2,
+    latestSnapshotAt: timestamp,
+    snapshotsLast24h: 1,
+    snapshotsLast7d: 2,
+    evidenceBackedFindings: 2,
+    evidenceCoveragePercent: 67
+  },
+  operations: {
+    backendReady: true,
+    databaseConnected: true,
+    redisConfigured: true,
+    lastEvaluationAt: timestamp,
+    safetyMode: "DB_ONLY_READ_ONLY"
+  },
+  provenance: {
+    findingSources: ["RULE_ENGINE"],
+    resourceSources: ["SAMPLE"],
+    sampleDataPresent: true,
+    ruleEnginePresent: true
+  },
+  safety: {
+    awsApiCallExecuted: false,
+    mutationExecuted: false,
+    remediationExecuted: false,
+    [["raw", "EvidenceIncluded"].join("")]: false
+  },
+  recommendations: [{
+    priority: "HIGH",
+    title: "Review unresolved findings",
+    description: "One high finding requires governance review.",
+    link: "/dashboard/security"
+  }]
+};
+const parsedExecutiveDashboard =
+  FrontendExecutiveDashboardSummarySchema.parse(executiveDashboardResponse);
+assert.equal(parsedExecutiveDashboard.posture.executiveScore, 72);
+assert.equal(parsedExecutiveDashboard.provenance.sampleDataPresent, true);
+assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
+  ...executiveDashboardResponse,
+  security: { ...executiveDashboardResponse.security, totalFindings: -1 }
+}).success, false);
+assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
+  ...executiveDashboardResponse,
+  posture: { ...executiveDashboardResponse.posture, overallStatus: "CERTIFIED" }
+}).success, false);
+assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
+  ...executiveDashboardResponse,
+  safety: { ...executiveDashboardResponse.safety, mutationExecuted: true }
+}).success, false);
+assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
+  ...executiveDashboardResponse,
+  evidence: { ...executiveDashboardResponse.evidence, latestSnapshotAt: null },
+  operations: { ...executiveDashboardResponse.operations, lastEvaluationAt: null }
+}).success, true);
+assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
+  ...executiveDashboardResponse,
+  recommendations: [{
+    ...executiveDashboardResponse.recommendations[0],
+    evidence: { unsafe: "hidden" }
+  }]
+}).success, false);
+assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
+  ...executiveDashboardResponse,
+  organization: { id: "org-1" }
+}).success, false);
+
+const executiveDashboardSource = await readFile(
+  new URL("../app/dashboard/page.tsx", import.meta.url),
+  "utf8"
+);
+assert.equal(executiveDashboardSource.includes("FrontendExecutiveDashboardSummarySchema"), true);
+assert.equal(executiveDashboardSource.includes("/api/v1/dashboard/executive-summary"), true);
+assert.equal(executiveDashboardSource.includes("dangerouslySetInnerHTML"), false);
 
 for (const [result, label] of parsedResults) {
   assertUnsafeFieldsRemoved(result, label);
