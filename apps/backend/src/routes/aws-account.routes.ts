@@ -64,72 +64,76 @@ export async function registerAwsAccountRoutes(
     };
   });
 
-  app.post("/api/v1/aws/accounts", { preHandler: requireAuth }, async (request, reply) => {
-    const auth = getAuthContext(request);
-    requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
-    const body = CreateAwsAccountRequestSchema.parse(request.body);
+  app.post(
+    "/api/v1/aws/accounts",
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
+      const body = CreateAwsAccountRequestSchema.parse(request.body);
 
-    const existing = await prisma.awsAccount.findFirst({
-      where: {
-        organizationId: auth.organizationId,
-        accountId: body.accountId
-      },
-      select: {
-        id: true
+      const existing = await prisma.awsAccount.findFirst({
+        where: {
+          organizationId: auth.organizationId,
+          accountId: body.accountId
+        },
+        select: {
+          id: true
+        }
+      });
+
+      if (existing) {
+        reply.status(409).send({
+          error: "aws_account_exists",
+          message: "An AWS account registry record already exists for this organization."
+        });
+        return;
       }
-    });
 
-    if (existing) {
-      reply.status(409).send({
-        error: "aws_account_exists",
-        message: "An AWS account registry record already exists for this organization."
-      });
-      return;
-    }
+      const ownerTeamIsAllowed = await ownerTeamBelongsToOrganization(
+        auth.organizationId,
+        body.ownerTeamId
+      );
 
-    const ownerTeamIsAllowed = await ownerTeamBelongsToOrganization(
-      auth.organizationId,
-      body.ownerTeamId
-    );
+      if (!ownerTeamIsAllowed) {
+        reply.status(400).send({
+          error: "invalid_owner_team",
+          message: "Owner team must belong to the authenticated organization."
+        });
+        return;
+      }
 
-    if (!ownerTeamIsAllowed) {
-      reply.status(400).send({
-        error: "invalid_owner_team",
-        message: "Owner team must belong to the authenticated organization."
-      });
-      return;
-    }
-
-    const account = await prisma.awsAccount.create({
-      data: {
-        organizationId: auth.organizationId,
-        name: body.name,
-        accountId: body.accountId,
-        environment: EnvironmentToPrisma[body.environment],
-        ownerTeamId: body.ownerTeamId || null,
-        regions: body.regions,
-        status: "NOT_CONFIGURED",
-        connectionStatus: "READY_FOR_VALIDATION",
-        description: body.description || null,
-        roleArnPlaceholder: body.roleArnPlaceholder || null,
-        externalIdPlaceholder: body.externalIdConfigured
-          ? "configured-outside-cloudshield"
-          : null
-      },
-      include: {
-        ownerTeam: {
-          select: {
-            name: true
+      const account = await prisma.awsAccount.create({
+        data: {
+          organizationId: auth.organizationId,
+          name: body.name,
+          accountId: body.accountId,
+          environment: EnvironmentToPrisma[body.environment],
+          ownerTeamId: body.ownerTeamId || null,
+          regions: body.regions,
+          status: "NOT_CONFIGURED",
+          connectionStatus: "READY_FOR_VALIDATION",
+          description: body.description || null,
+          roleArnPlaceholder: body.roleArnPlaceholder || null,
+          externalIdPlaceholder: body.externalIdConfigured
+            ? "configured-outside-cloudshield"
+            : null
+        },
+        include: {
+          ownerTeam: {
+            select: {
+              name: true
+            }
           }
         }
-      }
-    });
+      });
 
-    reply.status(201).send({
-      item: toAwsAccountDto(account),
-      message: "AWS account registry metadata was created. No AWS API calls were executed."
-    });
-  });
+      reply.status(201).send({
+        item: toAwsAccountDto(account),
+        message: "AWS account registry metadata was created. No AWS API calls were executed."
+      });
+    }
+  );
 
   app.get(
     "/api/v1/aws/accounts/:accountId",

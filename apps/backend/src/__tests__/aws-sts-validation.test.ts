@@ -89,6 +89,16 @@ test("tenant-scoped STS validation route", async (t) => {
     assert.equal(response.statusCode, 401);
   });
 
+  await t.test("authenticated request without CSRF is rejected before STS", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/aws/accounts/${account.id}/validate-identity`,
+      headers: { cookie: owner.cookie }
+    });
+    assert.equal(response.statusCode, 403);
+    assert.equal(calls.length, 0);
+  });
+
   await t.test("cross-tenant account is hidden", async () => {
     const response = await validate(app, owner, otherAccount.id);
     assert.equal(response.statusCode, 404);

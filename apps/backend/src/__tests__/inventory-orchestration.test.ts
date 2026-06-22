@@ -125,6 +125,32 @@ test("inventory orchestration", async (t) => {
     }
   });
 
+  await t.test("account sync requires authentication", async () => {
+    const csrfRes = await app.inject({ method: "GET", url: "/api/v1/auth/csrf" });
+    const csrfCookie = csrfRes.cookies.find((cookie) => cookie.name === "_csrf")?.value;
+    assert.ok(csrfCookie);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/aws/accounts/${account1.id}/inventory/sync`,
+      headers: {
+        cookie: `_csrf=${csrfCookie}`,
+        "x-csrf-token": csrfRes.json().token
+      },
+      payload: {}
+    });
+    assert.equal(response.statusCode, 401);
+  });
+
+  await t.test("account sync rejects an authenticated request without CSRF", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/aws/accounts/${account1.id}/inventory/sync`,
+      headers: { cookie: tenant.sessionCookie },
+      payload: {}
+    });
+    assert.equal(response.statusCode, 403);
+  });
+
   await t.test("queue test mock is used within one test", async () => {
     setTestQueueAddMock(async () => ({ id: "one-test-only" }));
     const job = await cloudScanQueue.add("test", {});
