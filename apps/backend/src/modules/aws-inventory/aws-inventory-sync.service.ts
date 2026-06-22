@@ -1,4 +1,4 @@
-﻿import {
+import {
   DescribeInstancesCommand,
   DescribeRegionsCommand,
   DescribeSecurityGroupsCommand,
@@ -47,6 +47,20 @@ const Lifecycle = {
   failed: "FAILED",
   blockedDisabled: "BLOCKED_DISABLED"
 } as const;
+
+const SAFE_ERROR_MESSAGES = {
+  DISABLED_CONNECTOR: "Read-only inventory synchronization is blocked by configuration.",
+  PRODUCTION_BLOCKED: "Read-only inventory synchronization is blocked by production safeguards.",
+  REGION_NOT_ALLOWED: "AWS inventory synchronization was requested for a non-allowlisted region.",
+  INVALID_ROLE_CONFIGURATION: "AWS authentication for inventory synchronization failed.",
+  ACCESS_DENIED: "AWS denied the read-only inventory request.",
+  RATE_LIMITED: "AWS temporarily throttled the inventory request.",
+  TRANSIENT_NETWORK: "AWS inventory synchronization hit a transient network failure.",
+  INVENTORY_SCAN_BLOCKED: "Read-only inventory synchronization is blocked by configuration.",
+  UNKNOWN: "Inventory synchronization failed."
+} as const;
+
+type SafeInventoryFailureCategory = keyof typeof SAFE_ERROR_MESSAGES;
 
 type InventorySyncInput = {
   organizationId: string;
@@ -262,18 +276,18 @@ export class AwsInventorySyncService {
         }
       });
     } catch (error) {
-      const sanitized = sanitizeAwsError(error);
+      const sanitized = sanitizeAwsInventoryError(error);
       await this.updateScan(scanRun.id, "FAILED", Lifecycle.failed, {
         errorCode: sanitized.category,
-        errorMessage: sanitized.safeMessage,
+        errorMessage: sanitized.message,
         failureClassification: sanitized.category,
-        completedAt: new Date()
+        failureCount: 1,
+        retryCount: sanitized.attemptCount ?? 0,
+        completedAt: new Date(),
+        metadata: sanitized as Prisma.InputJsonValue
       });
       await this.audit(input, "aws.inventory.sync.failed", "ScanRun", scanRun.id, {
-        errorCode: sanitized.category,
-        message: sanitized.safeMessage,
-        requestId: sanitized.requestId,
-        retryable: sanitized.retryable,
+        ...sanitized,
         awsApiCallExecuted: true,
         scannerRun: true,
         mutationExecuted: false
@@ -285,9 +299,10 @@ export class AwsInventorySyncService {
         awsApiCallExecuted: true,
         scannerRun: true,
         scanRunId: scanRun.id,
-        message: sanitized.safeMessage,
+        message: sanitized.message,
         readiness,
-        allowedApis: AllowedApis
+        allowedApis: AllowedApis,
+        summary: sanitized
       });
     }
   }
@@ -586,25 +601,151 @@ function maskArn(arn: string | null) {
   return arn ? arn.replace(/(arn:aws:iam::\d{12}:[^/]+\/).+/, "$1***") : null;
 }
 
-function sanitizeAwsError(error: unknown) {
-  const isAwsError = error && typeof error === "object" && "name" in error;
-  const rawMessage = error instanceof Error ? error.message : "Unknown error";
-
-  const category = classifyInventoryFailure(rawMessage);
-
-  const safeMessage = category !== "INVENTORY_SCAN_BLOCKED"
-    ? `AWS API Error: ${category}`
-    : "Read-only inventory sync failed.";
+function sanitizeAwsInventoryError(error: unknown) {
+  const category = classifyAwsInventoryError(error);
+  const message = SAFE_ERROR_MESSAGES[category];
+  const metadata = getRecord(getRecord(error)?.$metadata);
+  const providerCode = getSafeProviderCode(error);
+  const providerRequestId = getSafeProviderRequestId(metadata);
+  const httpStatusCode = getSafeHttpStatus(metadata);
+  const attemptCount = getSafeAttemptCount(metadata);
+  const operationName = getSafeOperationName(error);
+  const region = getSafeRegion(error);
 
   return {
     category,
-    safeMessage,
-    requestId: isAwsError ? (error as any).$metadata?.requestId ?? "unknown" : "unknown",
-    retryable: isAwsError ? !!(error as any).$fault && (error as any).$fault === "server" : false,
-    operation: isAwsError ? (error as any).$metadata?.operationName ?? "unknown" : "unknown",
-    region: "unknown",
-    safeName: isAwsError ? (error as any).name : "UnknownError",
-    httpStatus: isAwsError ? (error as any).$metadata?.httpStatusCode : 500,
-    attemptCount: isAwsError ? (error as any).$metadata?.attempts ?? 1 : 1
+    message,
+    retryable: isRetryableInventoryFailure(category),
+    ...(providerRequestId ? { providerRequestId } : {}),
+    ...(providerCode ? { providerCode } : {}),
+    ...(httpStatusCode ? { httpStatusCode } : {}),
+    ...(attemptCount !== null ? { attemptCount } : {}),
+    ...(operationName ? { operationName } : {}),
+    ...(region ? { region } : {})
   };
+}
+
+function classifyAwsInventoryError(error: unknown): SafeInventoryFailureCategory {
+  const codes = getSafeProviderCodeTokens(error);
+  if (!codes.length) return "UNKNOWN";
+
+  if (codes.some((code) => ACCESS_DENIED_CODES.has(code))) {
+    return classifyInventoryFailure("access denied") as SafeInventoryFailureCategory;
+  }
+  if (codes.some((code) => AUTHENTICATION_FAILURE_CODES.has(code))) {
+    return classifyInventoryFailure("role") as SafeInventoryFailureCategory;
+  }
+  if (codes.some((code) => THROTTLE_CODES.has(code))) {
+    return classifyInventoryFailure("throttling") as SafeInventoryFailureCategory;
+  }
+  if (codes.some((code) => NETWORK_FAILURE_CODES.has(code))) {
+    return classifyInventoryFailure("network timeout") as SafeInventoryFailureCategory;
+  }
+  return "UNKNOWN";
+}
+
+const ACCESS_DENIED_CODES = new Set([
+  "accessdenied",
+  "accessdeniedexception",
+  "accessdeniedfault",
+  "unauthorizedoperation",
+  "unauthorizedexception",
+  "authorizationerror",
+  "authorizationerrorexception"
+]);
+
+const AUTHENTICATION_FAILURE_CODES = new Set([
+  "expiredtoken",
+  "expiredtokenexception",
+  "invalidclienttokenid",
+  "unrecognizedclientexception",
+  "invalidaccesskeyid",
+  "signaturedoesnotmatch",
+  "incompletesignature",
+  "invalidsecuritytoken",
+  "invalidtoken",
+  "missingauthenticationtoken"
+]);
+
+const THROTTLE_CODES = new Set([
+  "throttling",
+  "throttlingexception",
+  "toomanyrequestsexception",
+  "requestlimitexceeded",
+  "requestthrottled",
+  "requestthrottledexception",
+  "provisionedthroughputexceededexception",
+  "slowdown"
+]);
+
+const NETWORK_FAILURE_CODES = new Set([
+  "timeout",
+  "timeouterror",
+  "networkerror",
+  "networkingerror",
+  "econnreset",
+  "etimedout",
+  "sockettimeouterror"
+]);
+
+function isRetryableInventoryFailure(category: SafeInventoryFailureCategory) {
+  return category === "RATE_LIMITED" || category === "TRANSIENT_NETWORK" || category === "UNKNOWN";
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function getSafeString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function getSafeProviderCodeTokens(error: unknown) {
+  const record = getRecord(error);
+  return [
+    getSafeString(record?.name),
+    getSafeString(record?.code),
+    getSafeString(record?.Code),
+    getSafeString(record?.__type)
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.split("#").pop() ?? value)
+    .map((value) => value.replace(/[^A-Za-z0-9]/g, "").toLowerCase())
+    .filter(Boolean);
+}
+
+function getSafeProviderCode(error: unknown) {
+  const record = getRecord(error);
+  const value = getSafeString(record?.name) ?? getSafeString(record?.code) ?? getSafeString(record?.Code);
+  return value && /^[A-Za-z0-9_.:-]{1,80}$/.test(value) ? value : null;
+}
+
+function getSafeProviderRequestId(metadata: Record<string, unknown> | null) {
+  const value =
+    getSafeString(metadata?.requestId) ??
+    getSafeString(metadata?.requestID) ??
+    getSafeString(metadata?.extendedRequestId);
+  return value && /^[A-Za-z0-9:_-]{1,128}$/.test(value) ? value : null;
+}
+
+function getSafeHttpStatus(metadata: Record<string, unknown> | null) {
+  const value = metadata?.httpStatusCode;
+  return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599 ? value : null;
+}
+
+function getSafeAttemptCount(metadata: Record<string, unknown> | null) {
+  const value = metadata?.attempts;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100 ? value : null;
+}
+
+function getSafeOperationName(error: unknown) {
+  const record = getRecord(error);
+  const value = getSafeString(record?.operationName);
+  return value && /^[A-Za-z0-9:_.-]{1,120}$/.test(value) ? value : null;
+}
+
+function getSafeRegion(error: unknown) {
+  const record = getRecord(error);
+  const value = getSafeString(record?.region);
+  return value && /^[a-z]{2}-[a-z-]+-\d{1}$/.test(value) ? value : null;
 }

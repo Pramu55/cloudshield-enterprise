@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { prisma } from "@cloudshield/database";
 import { requireAuth, getAuthContext } from "../plugins/auth.js";
 import {
@@ -156,7 +156,7 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
       }
     });
 
-    if (result.count === 0) {
+    if (result.count !== 1) {
       reply.status(404).send({ error: "not_found", message: "Invitation not found or already accepted." });
       return;
     }
@@ -190,7 +190,7 @@ export async function registerMembersRoutes(app: FastifyInstance): Promise<void>
       data: { revokedAt: new Date() }
     });
 
-    if (result.count === 0) {
+    if (result.count !== 1) {
       reply.status(404).send({ error: "not_found", message: "Invitation not found or already accepted." });
       return;
     }

@@ -14,9 +14,13 @@ export function getRuleCatalog(): SecurityRuleDto[] {
   }));
 }
 
-export async function runEvaluation(organizationId: string): Promise<SecurityEvaluationResponse> {
-  const summary = await evaluateSecurityRules(organizationId);
+export async function runEvaluation(
+  organizationId: string,
+  correlationId: string | null = null
+): Promise<SecurityEvaluationResponse> {
+  const summary = await evaluateSecurityRules(organizationId, correlationId);
   return {
+    evaluationMode: "STORED_INVENTORY",
     evaluatedResourceCount: summary.evaluatedResourceCount,
     findingsCreated: summary.findingsCreated,
     findingsUpdated: summary.findingsUpdated,
@@ -33,7 +37,7 @@ export async function getFindings(organizationId: string): Promise<SecurityFindi
     take: 100,
     orderBy: [{ severity: "asc" }, { lastSeenAt: "desc" }],
     include: {
-      resource: { select: { name: true, resourceType: true } },
+      resource: { select: { name: true, resourceType: true, source: true } },
       ownerTeam: { select: { name: true } },
       awsAccount: { select: { name: true } }
     }
@@ -58,6 +62,9 @@ export async function getFindings(organizationId: string): Promise<SecurityFindi
     resourceName: f.resource?.name ?? null,
     resourceType: f.resource?.resourceType ?? null,
     awsAccountName: f.awsAccount?.name ?? null,
+    findingSource: f.source,
+    resourceSource: f.resource?.source ?? null,
+    sampleData: f.resource?.source === "SAMPLE",
     firstSeenAt: f.firstSeenAt.toISOString(),
     lastSeenAt: f.lastSeenAt.toISOString()
   }));

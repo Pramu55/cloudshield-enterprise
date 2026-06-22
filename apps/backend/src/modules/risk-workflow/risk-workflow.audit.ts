@@ -1,22 +1,33 @@
-import { prisma } from "@cloudshield/database";
+import type { Prisma } from "@cloudshield/database";
+import type { RiskWorkflowAuditActionName } from "./risk-workflow.types.js";
+
+type AuditClient = Pick<Prisma.TransactionClient, "auditEvent">;
 
 type AuditInput = {
   organizationId: string;
   actorUserId: string;
   findingId: string;
-  action: string;
+  action: RiskWorkflowAuditActionName;
   metadata: Record<string, unknown>;
 };
 
-export async function createRiskWorkflowAuditEvent(input: AuditInput) {
-  return prisma.auditEvent.create({
+const unsafeMetadataKey =
+  /(?:access[_-]?key|secret|session[_-]?token|credential|authorization|raw[_-]?(?:response|error)|provider[_-]?error|stack)/i;
+const unsafeMetadataValue =
+  /(AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|aws_secret_access_key|secret_access_key|session_token|raw provider|provider error|(?:^|\s)at\s+\S+\s+\([^)]+:\d+:\d+\))/i;
+
+export async function createRiskWorkflowAuditEvent(
+  client: AuditClient,
+  input: AuditInput
+) {
+  return client.auditEvent.create({
     data: {
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
       action: input.action,
       targetType: "security_finding",
       targetId: input.findingId,
-      metadata: sanitizeMetadata(input.metadata) as any
+      metadata: sanitizeMetadata(input.metadata) as Prisma.InputJsonObject
     }
   });
 }
@@ -42,21 +53,25 @@ export function toRiskAuditEventDto(event: {
 }
 
 function sanitizeMetadata(metadata: Record<string, unknown>) {
-  return JSON.parse(
-    JSON.stringify(metadata, (_key, value) => {
-      if (typeof value !== "string") {
-        return value;
-      }
+  return sanitizeValue(metadata) as Record<string, unknown>;
+}
 
-      if (
-        /(AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|aws_secret_access_key|secret_access_key|session_token)/i.test(
-          value
-        )
-      ) {
-        return "[redacted]";
-      }
+function sanitizeValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return unsafeMetadataValue.test(value) ? "[redacted]" : value;
+  }
 
-      return value;
-    })
-  ) as Record<string, unknown>;
+  if (Array.isArray(value)) {
+    return value.map(sanitizeValue);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !unsafeMetadataKey.test(key))
+        .map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)])
+    );
+  }
+
+  return value;
 }

@@ -14,6 +14,7 @@ import {
 } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import { resolveCurrentUserCapabilities } from "@cloudshield/security";
 
 const DUMMY_PASSWORD_HASH = "$2b$12$2Sp35sNA7RT0pIqHOAqQOecgoVVdRw1YAdHbbmepaeTX9o6LLEFH6";
 
@@ -172,8 +173,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return CurrentUserResponseSchema.parse({
-        user: { id: user.id, email: user.email, name: user.name, role: "OWNER", organizationId: user.organizationId }, // Role will be pulled from membership dynamically later if needed, or we query membership
-        organization: user.organization
+        user: { id: user.id, email: user.email, name: user.name, role: auth.role, organizationId: user.organizationId },
+        organization: user.organization,
+        capabilities: resolveCurrentUserCapabilities(auth.role)
       });
     }
   );

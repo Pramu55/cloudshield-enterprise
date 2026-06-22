@@ -1,10 +1,25 @@
 import test, { mock } from "node:test";
 import assert from "node:assert";
 import { prisma } from "@cloudshield/database";
-import { processGovernedAwsChangeJob } from "../index.js";
+import {
+  buildCorrelationPersistenceWarning,
+  buildGovernedAwsWorkerLogFields,
+  buildSafeWorkerErrorLog,
+  getPersistedGovernedCorrelationId,
+  processGovernedAwsChangeJob
+} from "../index.js";
 import { randomUUID } from "node:crypto";
 import { EC2Client } from "@aws-sdk/client-ec2";
 import { STSClient } from "@aws-sdk/client-sts";
+import {
+  buildCanonicalApprovalPayload,
+  buildCanonicalEc2TagSafetyState,
+  computeEc2TagSafetyFingerprint,
+  computeApprovalPayloadHash,
+  isValidCorrelationId,
+  RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+  RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION
+} from "@cloudshield/utils";
 
 const originalEc2Send = EC2Client.prototype.send;
 const originalStsSend = STSClient.prototype.send;
@@ -21,6 +36,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
   let findingId = "";
   let resourceIdDb = "";
   let userIdDb = "";
+  let approverIdDb = "";
 
   t.before(async () => {
     const org = await prisma.organization.create({
@@ -69,7 +85,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
         organizationId: orgId,
         awsAccountId: accountId,
         resourceType: "EC2_INSTANCE",
-        resourceId: "i-12345",
+        resourceId: "i-12345678",
         region: "us-east-1",
         environment: "sandbox",
         source: "AWS_SYNC",
@@ -87,6 +103,15 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
       }
     });
     userIdDb = user.id;
+    const approver = await prisma.user.create({
+      data: {
+        id: randomUUID(),
+        email: `approver-${randomUUID()}@example.com`,
+        name: "Test Approver",
+        organizationId: orgId
+      }
+    });
+    approverIdDb = approver.id;
   });
 
   const createPlan = async (overrides: any = {}) => {
@@ -105,18 +130,51 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
         allowlistedOperation: "EC2_APPLY_GOVERNANCE_TAGS",
         lifecycleState: "QUEUED",
         approvalStatus: "APPROVED",
+        mutationOutcome: "NOT_ATTEMPTED",
+        reconciliationStatus: "NOT_REQUIRED",
         idempotencyKey: randomUUID(),
         normalizedPayload: {
           operation: "EC2_APPLY_GOVERNANCE_TAGS",
           region: "us-east-1",
-          resourceId: "i-12345",
+          resourceId: "i-12345678",
           tags: [{ key: "CloudShieldOwner", value: "test" }]
         },
         resource: { connect: { id: resourceIdDb } },
+        approvedBy: { connect: { id: approverIdDb } },
         ...overrides
       }
     });
-    return plan;
+    const safetyState = buildCanonicalEc2TagSafetyState({
+      resourceId: "i-12345678",
+      accountId: "111122223333",
+      region: "us-east-1",
+      tags: ec2MockTags
+    });
+    const approval = await prisma.approvalRequest.create({
+      data: {
+        organizationId: orgId,
+        remediationPlanId: plan.id,
+        requestedById: userIdDb,
+        approvedById: approverIdDb,
+        status: "APPROVED",
+        decidedAt: new Date(),
+        payloadHash: approvalPayloadHash(plan),
+        resourceStateFingerprint: computeEc2TagSafetyFingerprint({
+          resourceId: safetyState.resourceId,
+          accountId: safetyState.accountId,
+          region: safetyState.region,
+          tags: ec2MockTags
+        }),
+        resourceStateFingerprintSchemaVersion: RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION,
+        resourceStateFingerprintPolicyVersion: RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+        resourceStateCapturedAt: new Date(),
+        resourceStateEvidence: safetyState
+      }
+    });
+    return prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: { approvedByRequestId: approval.id }
+    });
   };
 
   let assumeRoleCount = 0;
@@ -127,8 +185,14 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
   let stsMockAccount = "111122223333";
   let stsMockArn = "arn:aws:sts::111122223333:assumed-role/CloudShieldExecutor/session";
   let ec2MockTags: Record<string, string> = {};
+  let ec2MockInstanceId = "i-12345678";
   let simulateDescribeError = false;
+  let simulateAfterMutationDescribeError = false;
   let preventTagSave = false;
+  let createTagsError: Error | null = null;
+  let missingCreateTagsResponse = false;
+  let mutationOutcomeAtCreateTags: string | null = null;
+  let requestIdPersistedBeforeResponse: string | null = null;
 
   t.beforeEach(() => {
     assumeRoleCount = 0;
@@ -142,8 +206,14 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
       CloudShieldManaged: "true",
       CloudShieldOwner: "old"
     };
+    ec2MockInstanceId = "i-12345678";
     simulateDescribeError = false;
+    simulateAfterMutationDescribeError = false;
     preventTagSave = false;
+    createTagsError = null;
+    missingCreateTagsResponse = false;
+    mutationOutcomeAtCreateTags = null;
+    requestIdPersistedBeforeResponse = null;
 
     process.env.AWS_CHANGE_EXECUTION_MODE = "staging";
     process.env.AWS_ALLOWED_ACCOUNT_IDS = "111122223333";
@@ -168,7 +238,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
   EC2Client.prototype.send = (async (command: any) => {
     if (command.constructor.name === "DescribeInstancesCommand") {
       describeInstancesCount++;
-      if (simulateDescribeError) {
+      if (simulateDescribeError || (simulateAfterMutationDescribeError && createTagsCount > 0)) {
         const error = new Error("Not found");
         error.name = "NotFound";
         throw error;
@@ -176,7 +246,7 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
       return {
         Reservations: [{
           Instances: [{
-            InstanceId: "i-12345",
+            InstanceId: ec2MockInstanceId,
             Tags: Object.entries(ec2MockTags).map(([Key, Value]) => ({ Key, Value }))
           }]
         }]
@@ -184,21 +254,67 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     }
     if (command.constructor.name === "CreateTagsCommand") {
       createTagsCount++;
+      mutationOutcomeAtCreateTags = (await prisma.remediationPlan.findFirst())?.mutationOutcome ?? null;
+      if (createTagsError) throw createTagsError;
+      if (missingCreateTagsResponse) return undefined as any;
       if (!preventTagSave) {
         for (const tag of command.input.Tags) {
           ec2MockTags[tag.Key] = tag.Value;
         }
+      }
+      if (requestIdPersistedBeforeResponse) {
+        const current = await prisma.remediationPlan.findFirstOrThrow();
+        await prisma.remediationPlan.update({
+          where: { id: current.id },
+          data: {
+            mutationProviderRequestId: requestIdPersistedBeforeResponse,
+            awsRequestId: requestIdPersistedBeforeResponse
+          }
+        });
       }
       return { $metadata: { requestId: "req-1" } };
     }
     return {};
   }) as any;
 
-  const runJob = async (plan: any) => {
+  const runJob = async (
+    plan: any,
+    options: {
+      correlationId?: string;
+      jobId?: string;
+      updateData?: (data: Record<string, unknown>) => Promise<void>;
+    } = {}
+  ) => {
+    const data: Record<string, unknown> = {
+      planId: plan.id,
+      organizationId: orgId,
+      requestedById: "u1",
+      idempotencyKey: plan.idempotencyKey
+    };
+    if (Object.prototype.hasOwnProperty.call(options, "correlationId")) {
+      data.correlationId = options.correlationId;
+    }
     return await processGovernedAwsChangeJob({
-      id: randomUUID(),
-      data: { planId: plan.id, organizationId: orgId, requestedById: "u1", idempotencyKey: plan.idempotencyKey }
+      id: options.jobId ?? randomUUID(),
+      data,
+      ...(options.updateData ? { updateData: options.updateData } : {})
     } as any);
+  };
+
+  const assertNoAwsSdkCalls = () => {
+    assert.strictEqual(assumeRoleCount, 0);
+    assert.strictEqual(getCallerIdentityCount, 0);
+    assert.strictEqual(describeInstancesCount, 0);
+    assert.strictEqual(createTagsCount, 0);
+  };
+
+  const assertFailureEvidence = async (
+    planId: string,
+    expected: { awsApiCallExecuted: boolean; mutationExecuted: boolean }
+  ) => {
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: planId } });
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.awsApiCallExecuted, expected.awsApiCallExecuted);
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.mutationExecuted, expected.mutationExecuted);
   };
 
   await t.test("1. mutations disabled by default", async () => {
@@ -223,7 +339,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ALLOWLIST_NOT_CONFIGURED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("4. empty region allowlist blocks", async () => {
@@ -232,7 +349,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ALLOWLIST_NOT_CONFIGURED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("5. empty tag-key allowlist blocks", async () => {
@@ -241,7 +359,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "TAG_ALLOWLIST_NOT_CONFIGURED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("6. account outside allowlist blocks", async () => {
@@ -250,7 +369,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ACCOUNT_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("7. region outside allowlist blocks", async () => {
@@ -259,7 +379,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "REGION_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("8. executor identity account mismatch blocks", async () => {
@@ -269,7 +390,11 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "IDENTITY_MISMATCH");
+    assert.strictEqual(assumeRoleCount, 1);
+    assert.strictEqual(getCallerIdentityCount, 1);
+    assert.strictEqual(describeInstancesCount, 0);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("9. executor assumed-role ARN mismatch blocks", async () => {
@@ -278,7 +403,28 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ROLE_PRINCIPAL_MISMATCH");
+    assert.strictEqual(assumeRoleCount, 1);
+    assert.strictEqual(getCallerIdentityCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
+  });
+
+  await t.test("10a. invalid approval records no AWS execution evidence", async () => {
+    const plan = await createPlan({ approvalStatus: "PENDING_APPROVAL" });
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_INVALID");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
+  });
+
+  await t.test("10b. expired approval records no AWS execution evidence", async () => {
+    const plan = await createPlan({ approvalExpiresAt: new Date(Date.now() - 60_000) });
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_EXPIRED");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("10. missing executor role configuration blocks", async () => {
@@ -295,7 +441,11 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "RESOURCE_NOT_MANAGED");
+    assert.strictEqual(assumeRoleCount, 1);
+    assert.strictEqual(getCallerIdentityCount, 1);
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("12. Environment=prod blocks", async () => {
@@ -304,7 +454,9 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "PRODUCTION_TARGET");
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("13. CloudShieldProtected=true blocks", async () => {
@@ -313,7 +465,9 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "PROTECTED_TARGET");
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("14. staging environment mismatch blocks", async () => {
@@ -322,7 +476,9 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "ENVIRONMENT_MISMATCH");
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("15. aws: tag key blocks", async () => {
@@ -330,7 +486,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "TAG_KEY_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("16. control-tag modification blocks", async () => {
@@ -338,7 +495,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "TAG_KEY_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("17. non-allowlisted tag key blocks", async () => {
@@ -346,7 +504,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "TAG_KEY_NOT_ALLOWLISTED");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("18. empty tag key blocks", async () => {
@@ -354,7 +513,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "MALFORMED_TAG_PAYLOAD");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("19. duplicate tag keys block", async () => {
@@ -362,7 +522,8 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
     assert.strictEqual((result as any).failureClassification, "MALFORMED_TAG_PAYLOAD");
-    assert.strictEqual(createTagsCount, 0);
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
   });
 
   await t.test("20. already-present tags produce an idempotent no-op", async () => {
@@ -373,6 +534,10 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     assert.strictEqual((result as any).mutationExecuted, false);
     assert.strictEqual(createTagsCount, 0);
     assert.strictEqual(describeInstancesCount, 2);
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationOutcome, "NOT_ATTEMPTED");
+    assert.strictEqual(stored.reconciliationStatus, "NOT_REQUIRED");
+    assert.strictEqual((stored.executionEvidence as any).mutationExecuted, false);
   });
 
   await t.test("21. duplicate job delivery calls CreateTags exactly once", async () => {
@@ -391,17 +556,151 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
 
     const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
     assert.strictEqual(dbPlan?.awsRequestId, "req-1");
+    assert.strictEqual(dbPlan?.mutationProviderRequestId, "req-1");
+    assert.strictEqual(dbPlan?.mutationOutcome, "CONFIRMED_SUCCEEDED");
+    assert.strictEqual(mutationOutcomeAtCreateTags, "ATTEMPTED");
   });
 
-  await t.test("23. after-state verification failure marks the plan failed", async () => {
+  await t.test("23. after-state verification failure records unknown outcome", async () => {
     const originalCreateTagsCount = createTagsCount;
     preventTagSave = true;
 
     const plan = await createPlan();
     const result = await runJob(plan);
-    assert.strictEqual(result.status, "FAILED");
-    assert.strictEqual((result as any).failureClassification, "AFTER_STATE_VERIFICATION_FAILED");
+    assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+    assert.strictEqual((result as any).failureClassification, "MUTATION_OUTCOME_UNKNOWN");
     assert.strictEqual(createTagsCount, originalCreateTagsCount + 1);
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationOutcome, "OUTCOME_UNKNOWN");
+    assert.strictEqual((stored.executionEvidence as any).mutationMayHaveExecuted, true);
+    assert.match((stored.executionEvidence as any).operatorGuidance, /may have executed/i);
+    assert.match((stored.executionEvidence as any).operatorGuidance, /must not be retried/i);
+    assert.doesNotMatch((stored.executionEvidence as any).operatorGuidance, /confirmed success/i);
+    assert.strictEqual((result as any).mutationOutcome, "OUTCOME_UNKNOWN");
+    assert.strictEqual((result as any).mutationMayHaveExecuted, true);
+    assert.match((result as any).operatorGuidance, /must not be retried/i);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: true });
+  });
+
+  await t.test("23a. mutation persistence barrier failure makes zero mutation calls", async () => {
+    const originalTransaction = prisma.$transaction.bind(prisma);
+    (prisma as any).$transaction = async () => { throw new Error("LOCAL_BARRIER_FAILURE"); };
+    try {
+      const plan = await createPlan();
+      const result = await runJob(plan);
+      assert.strictEqual((result as any).failureClassification, "MUTATION_ATTEMPT_PERSISTENCE_FAILED");
+      assert.strictEqual(createTagsCount, 0);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual(stored.mutationOutcome, "NOT_ATTEMPTED");
+    } finally {
+      (prisma as any).$transaction = originalTransaction;
+    }
+  });
+
+  await t.test("23b. definitive provider rejection is confirmed failed", async () => {
+    createTagsError = Object.assign(new Error("RAW_DENIED"), { name: "AccessDeniedException" });
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "CONFIRMED_FAILED");
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationOutcome, "CONFIRMED_FAILED");
+    assert.strictEqual((stored.executionEvidence as any).mutationExecuted, false);
+    assert.strictEqual(JSON.stringify(stored.executionEvidence).includes("RAW_DENIED"), false);
+  });
+
+  await t.test("23c. timeout and missing response are outcome unknown", async () => {
+    for (const setup of [
+      () => { createTagsError = Object.assign(new Error("RAW_TIMEOUT"), { name: "TimeoutError" }); },
+      () => { missingCreateTagsResponse = true; }
+    ]) {
+      const plan = await createPlan();
+      setup();
+      const result = await runJob(plan);
+      assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual(stored.mutationOutcome, "OUTCOME_UNKNOWN");
+      assert.strictEqual((stored.executionEvidence as any).mutationExecuted, true);
+      createTagsError = null;
+      missingCreateTagsResponse = false;
+    }
+  });
+
+  await t.test("23d. after-state read failure is outcome unknown", async () => {
+    simulateAfterMutationDescribeError = true;
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+    assert.strictEqual((result as any).failureClassification, "MUTATION_CONFIRMATION_READ_FAILED");
+    assert.strictEqual(createTagsCount, 1);
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationOutcome, "OUTCOME_UNKNOWN");
+  });
+
+  await t.test("23e. final confirmation persistence failure is outcome unknown", async () => {
+    const plan = await createPlan();
+    const originalTransaction = prisma.$transaction.bind(prisma);
+    let calls = 0;
+    (prisma as any).$transaction = async (...args: any[]) => {
+      calls++;
+      if (calls === 2) throw new Error("FINAL_PERSISTENCE_FAILURE");
+      return (originalTransaction as any)(...args);
+    };
+    try {
+      const result = await runJob(plan);
+      assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+      assert.strictEqual((result as any).failureClassification, "MUTATION_CONFIRMATION_PERSISTENCE_FAILED");
+      assert.strictEqual(createTagsCount, 1);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual(stored.mutationOutcome, "OUTCOME_UNKNOWN");
+    } finally {
+      (prisma as any).$transaction = originalTransaction;
+    }
+  });
+
+  await t.test("23f. terminal and uncertain outcomes never replay mutation", async () => {
+    for (const mutationOutcome of ["ATTEMPTED", "CONFIRMED_FAILED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"] as const) {
+      const plan = await createPlan({ mutationOutcome });
+      const result = await runJob(plan);
+      assert.strictEqual(result.status, mutationOutcome);
+      assert.strictEqual(createTagsCount, 0);
+    }
+  });
+
+  await t.test("23g. provider request IDs are immutable after the first persisted value", async () => {
+    requestIdPersistedBeforeResponse = "req-first";
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "OUTCOME_UNKNOWN");
+    assert.strictEqual((result as any).failureClassification, "PROVIDER_REQUEST_ID_CONFLICT");
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.mutationProviderRequestId, "req-first");
+    assert.strictEqual(stored.awsRequestId, "req-first");
+    assert.notStrictEqual(stored.mutationProviderRequestId, "req-1");
+  });
+
+  await t.test("23h. duplicate uncertain outcomes return authoritative guidance without replay", async () => {
+    for (const mutationOutcome of ["ATTEMPTED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"] as const) {
+      const plan = await createPlan({
+        mutationOutcome,
+        reconciliationStatus: mutationOutcome === "ATTEMPTED"
+          ? "NOT_REQUIRED"
+          : mutationOutcome === "MANUAL_REVIEW_REQUIRED" ? "MANUAL_REVIEW_REQUIRED" : "PENDING"
+      });
+      const result = await runJob(plan);
+      assert.strictEqual(result.status, mutationOutcome);
+      assert.strictEqual((result as any).mutationOutcome, mutationOutcome);
+      assert.strictEqual((result as any).mutationMayHaveExecuted, true);
+      assert.strictEqual((result as any).mutationExecuted, true);
+      assert.match((result as any).operatorGuidance, /not confirmed/i);
+      assert.match((result as any).operatorGuidance, /must not be retried/i);
+      assert.strictEqual((result as any).reconciliationRequired, mutationOutcome !== "MANUAL_REVIEW_REQUIRED");
+      assert.strictEqual(createTagsCount, 0);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual(
+        stored.reconciliationStatus,
+        mutationOutcome === "ATTEMPTED" ? "PENDING" : mutationOutcome === "OUTCOME_UNKNOWN" ? "PENDING" : "MANUAL_REVIEW_REQUIRED"
+      );
+    }
   });
 
   await t.test("24. missing instance returns safe TARGET_NOT_FOUND", async () => {
@@ -409,8 +708,10 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     const plan = await createPlan();
     const result = await runJob(plan);
     assert.strictEqual(result.status, "FAILED");
-    assert.strictEqual((result as any).failureClassification, "RESOURCE_NOT_FOUND");
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_STATE_READ_FAILED");
+    assert.strictEqual(describeInstancesCount, 1);
     assert.strictEqual(createTagsCount, 0);
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: true, mutationExecuted: false });
   });
 
   await t.test("25. no secret credentials or external IDs are persisted in execution evidence", async () => {
@@ -425,4 +726,587 @@ test("Governed AWS Change Worker Execution Tests", async (t) => {
     assert.strictEqual(assumeRoleCount, 1);
     assert.strictEqual(getCallerIdentityCount, 1);
   });
+
+  await t.test("26. unchanged approved payload passes approval hash verification", async () => {
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual(createTagsCount, 1);
+  });
+
+  await t.test("27. mutated plan payload is rejected before AWS execution", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        normalizedPayload: {
+          operation: "EC2_APPLY_GOVERNANCE_TAGS",
+          region: "us-east-1",
+          resourceId: "i-12345",
+          tags: [{ key: "CloudShieldOwner", value: "tampered" }]
+        }
+      }
+    });
+
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_PAYLOAD_MISMATCH");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
+  });
+
+  await t.test("28. mutated expected after-state is rejected before AWS execution", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: { expectedAfterState: { tags: { CloudShieldOwner: "tampered" }, idempotent: true } }
+    });
+
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_PAYLOAD_MISMATCH");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
+  });
+
+  await t.test("29. mutated target account or region is rejected before AWS execution", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        normalizedPayload: {
+          operation: "EC2_APPLY_GOVERNANCE_TAGS",
+          region: "us-west-2",
+          resourceId: "i-12345",
+          tags: [{ key: "CloudShieldOwner", value: "test" }]
+        }
+      }
+    });
+
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_PAYLOAD_MISMATCH");
+    assertNoAwsSdkCalls();
+    await assertFailureEvidence(plan.id, { awsApiCallExecuted: false, mutationExecuted: false });
+  });
+
+  await t.test("30. valid queue correlationId reaches structured logs and evidence", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const correlationId = "550e8400-e29b-41d4-a716-446655440000";
+    const jobId = "job-valid-correlation";
+    const plan = await createPlan();
+    const result = await runJob(plan, { correlationId, jobId });
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+    const logPayload = buildGovernedAwsWorkerLogFields(
+      { jobId, correlationId },
+      { organizationId: orgId, planId: plan.id }
+    );
+
+    assert.strictEqual(result.status, "SUCCEEDED");
+    assert.strictEqual((result as any).correlationId, correlationId);
+    assert.strictEqual((dbPlan?.preflightEvidence as any)?.correlationId, correlationId);
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.correlationId, correlationId);
+    assert.strictEqual((logPayload as any).jobId, jobId);
+    assert.strictEqual((logPayload as any).correlationId, correlationId);
+  });
+
+  await t.test("31. missing queue correlationId generates a safe UUID", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const plan = await createPlan();
+    const result = await runJob(plan);
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+    const correlationId = (result as any).correlationId;
+
+    assert.ok(isValidCorrelationId(correlationId));
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.correlationId, correlationId);
+  });
+
+  await t.test("32. malformed queue correlationId is replaced and never logged", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const malformed = "malformed-queue-correlation";
+    const plan = await createPlan();
+    const result = await runJob(plan, { correlationId: malformed, jobId: "job-malformed-correlation" });
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+    const correlationId = (result as any).correlationId;
+    const logPayload = buildGovernedAwsWorkerLogFields(
+      { jobId: "job-malformed-correlation", correlationId },
+      { organizationId: orgId, planId: plan.id }
+    );
+    const serialized = JSON.stringify(logPayload);
+
+    assert.ok(isValidCorrelationId(correlationId));
+    assert.notStrictEqual(correlationId, malformed);
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.correlationId, correlationId);
+    assert.strictEqual(serialized.includes(malformed), false);
+  });
+
+  await t.test("33. jobId remains separate from correlationId", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const correlationId = "550e8400-e29b-41d4-a716-446655440000";
+    const jobId = "job-separate-from-correlation";
+    const plan = await createPlan();
+    const result = await runJob(plan, { correlationId, jobId });
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+
+    assert.strictEqual((result as any).correlationId, correlationId);
+    assert.strictEqual((dbPlan?.preflightEvidence as any)?.workerJobId, jobId);
+    assert.strictEqual((dbPlan?.preflightEvidence as any)?.correlationId, correlationId);
+    assert.notStrictEqual((dbPlan?.preflightEvidence as any)?.workerJobId, correlationId);
+  });
+
+  await t.test("34. duplicate processing preserves the same normalized job correlationId", async () => {
+    const correlationId = "550e8400-e29b-41d4-a716-446655440000";
+    const plan = await createPlan();
+    const result1 = await runJob(plan, { correlationId, jobId: "job-duplicate-1" });
+    const result2 = await runJob(plan, { correlationId, jobId: "job-duplicate-2" });
+
+    assert.strictEqual(result1.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual(result2.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual((result1 as any).correlationId, correlationId);
+    assert.strictEqual((result2 as any).correlationId, correlationId);
+  });
+
+  await t.test("35. correlationId does not change approval hash verification", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        normalizedPayload: {
+          operation: "EC2_APPLY_GOVERNANCE_TAGS",
+          region: "us-east-1",
+          resourceId: "i-12345",
+          tags: [{ key: "CloudShieldOwner", value: "tampered" }]
+        }
+      }
+    });
+
+    const result = await runJob(plan, {
+      correlationId: "550e8400-e29b-41d4-a716-446655440000"
+    });
+    assert.strictEqual(result.status, "FAILED");
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_PAYLOAD_MISMATCH");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("36. updateData failure does not block execution or change the attempt correlationId", async () => {
+    process.env.AWS_CHANGE_EXECUTION_MODE = "simulation";
+    const rawErrorMarker = "RAW_UPDATE_DATA_ERROR_MUST_NOT_BE_LOGGED";
+    const updateData = mock.fn(async () => {
+      throw new Error(rawErrorMarker);
+    });
+    const plan = await createPlan();
+    const result = await runJob(plan, {
+      correlationId: "malformed-correlation",
+      jobId: "job-update-data-failure",
+      updateData
+    });
+    const dbPlan = await prisma.remediationPlan.findUnique({ where: { id: plan.id } });
+    const correlationId = (result as any).correlationId;
+    const warning = buildCorrelationPersistenceWarning({
+      jobId: "job-update-data-failure",
+      correlationId
+    });
+
+    assert.strictEqual(result.status, "SUCCEEDED");
+    assert.strictEqual(updateData.mock.callCount(), 1);
+    assert.ok(isValidCorrelationId(correlationId));
+    assert.strictEqual((dbPlan?.preflightEvidence as any)?.correlationId, correlationId);
+    assert.strictEqual((dbPlan?.executionEvidence as any)?.correlationId, correlationId);
+    assert.deepStrictEqual(warning, {
+      component: "governed-aws-change-worker",
+      jobId: "job-update-data-failure",
+      correlationId,
+      reason: "correlation_persistence_failed"
+    });
+    assert.strictEqual(JSON.stringify(warning).includes(rawErrorMarker), false);
+  });
+
+  await t.test("37. missing exact approval binding fails before AWS", async () => {
+    const plan = await createPlan();
+    await prisma.remediationPlan.update({ where: { id: plan.id }, data: { approvedByRequestId: null } });
+    const result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_REQUEST_BINDING_MISSING");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("38. historical null fingerprint fails before AWS", async () => {
+    const plan = await createPlan();
+    await prisma.approvalRequest.update({
+      where: { id: plan.approvedByRequestId! },
+      data: { resourceStateFingerprint: null }
+    });
+    const result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_FINGERPRINT_MISSING");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("39. malformed and unsupported fingerprints fail before AWS", async () => {
+    let plan = await createPlan();
+    await prisma.approvalRequest.update({
+      where: { id: plan.approvedByRequestId! },
+      data: { resourceStateFingerprint: "malformed" }
+    });
+    let result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_FINGERPRINT_INVALID");
+    assertNoAwsSdkCalls();
+
+    plan = await createPlan();
+    await prisma.approvalRequest.update({
+      where: { id: plan.approvedByRequestId! },
+      data: { resourceStateFingerprintSchemaVersion: 99 }
+    });
+    result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("39a. malformed exact approval records fail before AWS", async () => {
+    for (const [name, data, classification] of [
+      ["pending", { status: "PENDING" as const, approvedById: null }, "APPROVAL_INVALID"],
+      ["rejected", { status: "REJECTED" as const }, "APPROVAL_INVALID"],
+      ["self-approved", { approvedById: userIdDb }, "APPROVAL_INVALID"],
+      ["missing approver", { approvedById: null }, "APPROVAL_INVALID"],
+      ["expired bound approval", { expiresAt: new Date(Date.now() - 60_000) }, "APPROVAL_EXPIRED"],
+      ["missing payload hash", { payloadHash: null }, "APPROVAL_PAYLOAD_MISMATCH"],
+      ["missing schema version", { resourceStateFingerprintSchemaVersion: null }, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED"],
+      ["unsupported schema version", { resourceStateFingerprintSchemaVersion: 99 }, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED"],
+      ["missing policy version", { resourceStateFingerprintPolicyVersion: null }, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED"],
+      ["unsupported policy version", { resourceStateFingerprintPolicyVersion: "unsupported-policy" }, "RESOURCE_FINGERPRINT_VERSION_UNSUPPORTED"],
+      ["missing capturedAt", { resourceStateCapturedAt: null }, "RESOURCE_FINGERPRINT_INVALID"],
+      ["malformed safe evidence", { resourceStateEvidence: { resourceId: "i-12345678" } }, "RESOURCE_FINGERPRINT_INVALID"]
+    ] as const) {
+      const plan = await createPlan();
+      await prisma.approvalRequest.update({
+        where: { id: plan.approvedByRequestId! },
+        data
+      });
+      const result = await runJob(plan);
+      assert.strictEqual((result as any).failureClassification, classification, name);
+      assertNoAwsSdkCalls();
+      assert.strictEqual(createTagsCount, 0);
+    }
+  });
+
+  await t.test("39b. cross-plan and cross-tenant exact bindings fail before AWS", async () => {
+    let plan = await createPlan();
+    const otherPlan = await prisma.remediationPlan.create({
+      data: {
+        id: randomUUID(),
+        organizationId: orgId,
+        findingId,
+        resourceId: resourceIdDb,
+        createdById: userIdDb,
+        approvedById: approverIdDb,
+        title: "Other plan",
+        summary: "Cross-plan binding test",
+        riskLevel: "LOW",
+        actionType: "TAGGING_GOVERNANCE",
+        implementationMode: "FUTURE_GOVERNED_EXECUTION",
+        lifecycleState: "QUEUED",
+        approvalStatus: "APPROVED"
+      }
+    });
+    const otherApproval = await prisma.approvalRequest.create({
+      data: {
+        organizationId: orgId,
+        remediationPlanId: otherPlan.id,
+        requestedById: userIdDb,
+        approvedById: approverIdDb,
+        status: "APPROVED"
+      }
+    });
+    await prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: { approvedByRequestId: otherApproval.id }
+    });
+    let result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_REQUEST_PLAN_MISMATCH");
+    assertNoAwsSdkCalls();
+
+    plan = await createPlan();
+    const otherOrganization = await prisma.organization.create({
+      data: { id: randomUUID(), name: "Approval tenant mismatch", slug: `approval-tenant-${randomUUID()}` }
+    });
+    await prisma.approvalRequest.update({
+      where: { id: plan.approvedByRequestId! },
+      data: { organizationId: otherOrganization.id }
+    });
+    result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "APPROVAL_REQUEST_TENANT_MISMATCH");
+    assertNoAwsSdkCalls();
+  });
+
+  await t.test("39c. the foreign key rejects an unknown approval binding", async () => {
+    const plan = await createPlan();
+    await assert.rejects(prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: { approvedByRequestId: randomUUID() }
+    }));
+    const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+    assert.strictEqual(stored.approvedByRequestId, plan.approvedByRequestId);
+    assertNoAwsSdkCalls();
+  });
+
+  for (const [name, key, value] of [
+    ["CloudShieldManaged", "CloudShieldManaged", "false"],
+    ["CloudShieldProtected", "CloudShieldProtected", "true"],
+    ["Environment", "Environment", "staging"]
+  ] as const) {
+    await t.test(`40. ${name} drift blocks before CreateTags`, async () => {
+      const plan = await createPlan();
+      ec2MockTags[key] = value;
+      const correlationId = "550e8400-e29b-41d4-a716-446655440000";
+      const result = await runJob(plan, { correlationId });
+      assert.strictEqual((result as any).failureClassification, "RESOURCE_STATE_DRIFTED");
+      assert.strictEqual(createTagsCount, 0);
+      const stored = await prisma.remediationPlan.findUniqueOrThrow({ where: { id: plan.id } });
+      assert.strictEqual((stored.executionEvidence as any).approvalRequestId, plan.approvedByRequestId);
+      assert.strictEqual((stored.executionEvidence as any).correlationId, correlationId);
+      assert.strictEqual((stored.executionEvidence as any).mutationExecuted, false);
+      assert.deepStrictEqual((stored.executionEvidence as any).changedControlFields, [name]);
+    });
+  }
+
+  await t.test("41. resource ID drift blocks and unrelated tags do not", async () => {
+    let plan = await createPlan();
+    ec2MockInstanceId = "i-87654321";
+    let result = await runJob(plan);
+    assert.strictEqual((result as any).failureClassification, "RESOURCE_STATE_DRIFTED");
+    assert.strictEqual(createTagsCount, 0);
+
+    ec2MockInstanceId = "i-12345678";
+    plan = await createPlan();
+    ec2MockTags.Unrelated = "changed";
+    result = await runJob(plan);
+    assert.strictEqual(result.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual(createTagsCount, 1);
+  });
+
+  await t.test("42. newer approved records never replace the exact binding", async () => {
+    const plan = await createPlan();
+    await prisma.approvalRequest.create({
+      data: {
+        organizationId: orgId,
+        remediationPlanId: plan.id,
+        requestedById: userIdDb,
+        approvedById: approverIdDb,
+        status: "APPROVED",
+        decidedAt: new Date(Date.now() + 60_000),
+        payloadHash: "0".repeat(64)
+      }
+    });
+    const result = await runJob(plan);
+    assert.strictEqual(result.status, "ROLLBACK_AVAILABLE");
+    assert.strictEqual(createTagsCount, 1);
+  });
 });
+
+test("governed worker event handlers only retain valid persisted correlation IDs", () => {
+  const valid = "550E8400-E29B-41D4-A716-446655440000";
+
+  assert.strictEqual(getPersistedGovernedCorrelationId(undefined), undefined);
+  assert.strictEqual(getPersistedGovernedCorrelationId("malformed-correlation"), undefined);
+  assert.strictEqual(
+    getPersistedGovernedCorrelationId(valid),
+    "550e8400-e29b-41d4-a716-446655440000"
+  );
+
+  const missingLog = buildGovernedAwsWorkerLogFields({ jobId: "job-missing" });
+  const malformedLog = buildGovernedAwsWorkerLogFields({
+    jobId: "job-malformed",
+    correlationId: getPersistedGovernedCorrelationId("malformed-correlation")
+  });
+  const validLog = buildGovernedAwsWorkerLogFields({
+    jobId: "job-valid",
+    correlationId: getPersistedGovernedCorrelationId(valid)
+  });
+
+  assert.strictEqual((missingLog as any).correlationId, undefined);
+  assert.strictEqual((malformedLog as any).correlationId, undefined);
+  assert.strictEqual(
+    (validLog as any).correlationId,
+    "550e8400-e29b-41d4-a716-446655440000"
+  );
+});
+
+test("safe worker AWS error logging strips raw provider context", () => {
+  const sensitiveMarkers = [
+    "RAW_AWS_ERROR_MESSAGE_MARKER",
+    "AKIA_TEST_ACCESS_KEY_MARKER",
+    "SECRET_ACCESS_KEY_MARKER",
+    "SESSION_TOKEN_MARKER",
+    "EXTERNAL_ID_MARKER",
+    "AUTHORIZATION_HEADER_MARKER",
+    "SIGV4_SIGNING_CONTEXT_MARKER",
+    "RAW_STACK_MARKER",
+    "RAW_AWS_RESPONSE_BODY_MARKER"
+  ];
+  const error = Object.assign(new Error("RAW_AWS_ERROR_MESSAGE_MARKER"), {
+    name: "AccessDeniedException",
+    code: "AccessDeniedException",
+    stack: "RAW_STACK_MARKER",
+    operationName: "ec2:CreateTags",
+    region: "us-east-1",
+    AccessKeyId: "AKIA_TEST_ACCESS_KEY_MARKER",
+    SecretAccessKey: "SECRET_ACCESS_KEY_MARKER",
+    SessionToken: "SESSION_TOKEN_MARKER",
+    externalId: "EXTERNAL_ID_MARKER",
+    signingContext: "SIGV4_SIGNING_CONTEXT_MARKER",
+    $metadata: {
+      requestId: "req-safe-123",
+      httpStatusCode: 403,
+      attempts: 2
+    },
+    $response: {
+      headers: {
+        Authorization: "AUTHORIZATION_HEADER_MARKER"
+      },
+      body: "RAW_AWS_RESPONSE_BODY_MARKER"
+    }
+  });
+
+  const logPayload = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    jobId: "job-1",
+    organizationId: "org-1",
+    planId: "plan-1",
+    failureClassification: "AWS_PERMISSION_DENIED",
+    awsApiCallExecuted: true,
+    mutationExecuted: false,
+    providerError: error
+  });
+  const serialized = JSON.stringify(logPayload);
+
+  for (const marker of sensitiveMarkers) {
+    assert.strictEqual(serialized.includes(marker), false, marker);
+  }
+  assert.strictEqual((logPayload as any).safeProviderRequestId, "req-safe-123");
+  assert.strictEqual((logPayload as any).safeProviderCode, "AccessDeniedException");
+  assert.strictEqual((logPayload as any).safeHttpStatusCode, 403);
+  assert.strictEqual((logPayload as any).safeMessage, "AWS denied the provider request.");
+  assert.strictEqual((logPayload as any).operationName, undefined);
+  assert.strictEqual((logPayload as any).region, undefined);
+});
+
+test("safe worker error logging uses fixed generic message for unknown errors", () => {
+  const logPayload = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    failureClassification: "AWS_EXECUTION_FAILED",
+    awsApiCallExecuted: true,
+    mutationExecuted: false,
+    providerError: new Error("UNKNOWN_RAW_MESSAGE_SHOULD_NOT_LEAK")
+  });
+  const serialized = JSON.stringify(logPayload);
+
+  assert.strictEqual((logPayload as any).safeCategory, "UNKNOWN");
+  assert.strictEqual((logPayload as any).safeMessage, "Provider operation failed.");
+  assert.strictEqual((logPayload as any).retryable, false);
+  assert.strictEqual(serialized.includes("UNKNOWN_RAW_MESSAGE_SHOULD_NOT_LEAK"), false);
+});
+
+test("safe worker logging uses only trusted operation context", () => {
+  const providerError = Object.assign(new Error("raw context must not be trusted"), {
+    name: "ThrottlingException",
+    operationName: "iam:DeleteUser",
+    region: "us-raw-1",
+    $metadata: { requestId: "req-context-1", httpStatusCode: 429 }
+  });
+  const trusted = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError,
+    providerContext: {
+      operationName: "ec2:CreateTags",
+      region: "us-east-1"
+    }
+  });
+  const malformed = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError,
+    providerContext: {
+      operationName: "ec2:CreateTags with spaces and way too much context that should not be trusted as a bounded operation name",
+      region: "not_a_region"
+    }
+  });
+  const noContext = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError
+  });
+
+  assert.strictEqual((trusted as any).operationName, "ec2:CreateTags");
+  assert.strictEqual((trusted as any).region, "us-east-1");
+  assert.strictEqual((trusted as any).retryable, true);
+  assert.strictEqual(JSON.stringify(trusted).includes("iam:DeleteUser"), false);
+  assert.strictEqual(JSON.stringify(trusted).includes("us-raw-1"), false);
+  assert.strictEqual((malformed as any).operationName, undefined);
+  assert.strictEqual((malformed as any).region, undefined);
+  assert.strictEqual((noContext as any).operationName, undefined);
+  assert.strictEqual((noContext as any).region, undefined);
+});
+
+test("safe worker logging retry and validation classifications are conservative", () => {
+  const rateLimited = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError: Object.assign(new Error("raw throttle"), { name: "ThrottlingException" })
+  });
+  const transientNetwork = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError: Object.assign(new Error("raw timeout"), { name: "TimeoutError" })
+  });
+  const validation = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError: Object.assign(new Error("raw validation details"), { name: "ValidationException" })
+  });
+  const invalidParameter = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    providerError: Object.assign(new Error("raw parameter details"), { name: "InvalidParameter" })
+  });
+
+  assert.strictEqual((rateLimited as any).safeCategory, "RATE_LIMITED");
+  assert.strictEqual((rateLimited as any).retryable, true);
+  assert.strictEqual((transientNetwork as any).safeCategory, "TRANSIENT_NETWORK");
+  assert.strictEqual((transientNetwork as any).retryable, true);
+  assert.strictEqual((validation as any).safeCategory, "UNKNOWN");
+  assert.strictEqual((validation as any).retryable, false);
+  assert.strictEqual((invalidParameter as any).safeCategory, "UNKNOWN");
+  assert.strictEqual((invalidParameter as any).retryable, false);
+});
+
+test("safe governed failure logs preserve execution facts", () => {
+  const payloadMismatch = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    failureClassification: "APPROVAL_PAYLOAD_MISMATCH",
+    awsApiCallExecuted: false,
+    mutationExecuted: false
+  });
+  const postStsFailure = buildSafeWorkerErrorLog({
+    component: "governed-aws-change-worker",
+    failureClassification: "IDENTITY_MISMATCH",
+    awsApiCallExecuted: true,
+    mutationExecuted: false
+  });
+
+  assert.strictEqual((payloadMismatch as any).awsApiCallExecuted, false);
+  assert.strictEqual((payloadMismatch as any).mutationExecuted, false);
+  assert.strictEqual((postStsFailure as any).awsApiCallExecuted, true);
+  assert.strictEqual((postStsFailure as any).mutationExecuted, false);
+});
+
+function approvalPayloadHash(plan: any) {
+  return computeApprovalPayloadHash(
+    buildCanonicalApprovalPayload({
+      organizationId: plan.organizationId,
+      remediationPlanId: plan.id,
+      createdById: plan.createdById,
+      allowlistedOperation: plan.allowlistedOperation,
+      confirmationTokenRequired: plan.confirmationTokenRequired ?? null,
+      requestedAction: plan.requestedAction ?? {},
+      normalizedPayload: plan.normalizedPayload ?? {},
+      beforeState: plan.beforeState ?? {},
+      expectedAfterState: plan.expectedAfterState ?? {},
+      rollbackPayload: plan.rollbackPayload ?? {},
+      executionMode: plan.executionMode ?? "disabled",
+      idempotencyKey: plan.idempotencyKey ?? null,
+      approvalExpiresAt: plan.approvalExpiresAt?.toISOString() ?? null
+    })
+  );
+}

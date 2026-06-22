@@ -90,6 +90,31 @@ test("MonitoringOrchestrator worker integration", async (t) => {
     assert.strictEqual(runs, 1);
   });
 
+  await t.test("mismatched run and organization fails closed", async () => {
+    const otherOrg = await prisma.organization.create({
+      data: {
+        id: randomUUID(),
+        name: `Mismatched Worker Test Org ${Date.now()}`,
+        slug: `mismatch-org-${Date.now()}`
+      }
+    });
+    const run = await prisma.monitoringRun.create({
+      data: {
+        id: randomUUID(),
+        organizationId: otherOrg.id,
+        trigger: "API_REQUEST",
+        status: "QUEUED"
+      }
+    });
+
+    await assert.rejects(async () => {
+      await orchestrator.evaluateMonitoring(testOrgId, run.id);
+    }, /not found or not in QUEUED state/);
+
+    const unchanged = await prisma.monitoringRun.findUnique({ where: { id: run.id } });
+    assert.strictEqual(unchanged?.status, "QUEUED");
+  });
+
   await t.test("all six run safety flags remain false on successful jobs", async () => {
     const runs = await prisma.monitoringRun.findMany({
       where: { organizationId: testOrgId },

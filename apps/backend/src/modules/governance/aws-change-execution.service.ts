@@ -5,6 +5,15 @@ import type {
 } from "@cloudshield/contracts";
 import { GovernedExecutionEvidenceResponseSchema } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
+import {
+  approvalPayloadHashesEqual,
+  buildCanonicalApprovalPayload,
+  computeApprovalPayloadHash,
+  computeEc2TagSafetyFingerprint,
+  parseCanonicalEc2TagSafetyEvidence,
+  RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
+  RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION
+} from "@cloudshield/utils";
 import { governedAwsChangeQueue } from "./aws-change-execution.queue.js";
 import {
   ALLOWLISTED_GOVERNED_AWS_OPERATIONS,
@@ -15,10 +24,15 @@ import {
   validateGovernanceTags
 } from "./aws-change-execution.policy.js";
 import { GovernanceSafety } from "./remediation.service.js";
+import { validateAuthoritativeApprovalCapture } from "./resource-state-capture.service.js";
 
 type ActorContext = {
   organizationId: string;
   userId: string;
+};
+
+type QueueExecutionContext = {
+  correlationId: string;
 };
 
 const APPROVAL_TTL_MS = 1000 * 60 * 60 * 24;
@@ -74,7 +88,17 @@ export async function simulateGovernedAwsChange(
     simulatedAt: now,
     approvalExpiresAt: new Date(now.getTime() + APPROVAL_TTL_MS),
     approvalStatus: "DRAFT" as const,
-    executionStatus: "EXECUTION_BLOCKED" as const
+    executionStatus: "EXECUTION_BLOCKED" as const,
+    mutationOutcome: "NOT_ATTEMPTED" as const,
+    reconciliationStatus: "NOT_REQUIRED" as const,
+    reconciliationAttemptCount: 0,
+    mutationAttemptedAt: null,
+    mutationConfirmedAt: null,
+    mutationProviderRequestId: null,
+    lastReconciliationAt: null,
+    nextReconciliationAt: null,
+    manualReviewReason: null,
+    executionLeaseStartedAt: null
   };
 
   const [plan, auditEvent] = await prisma.$transaction([
@@ -127,6 +151,7 @@ export async function requestGovernedAwsChangeApproval(
     return blockedMutation(actor, plan, "Incorrect confirmation token for requested governed change.");
   }
 
+  const payloadHash = approvalPayloadHash(plan);
   const [updatedPlan, approvalRequest, auditEvent] = await prisma.$transaction([
     prisma.remediationPlan.update({
       where: { id: plan.id },
@@ -153,6 +178,7 @@ export async function requestGovernedAwsChangeApproval(
           beforeState: plan.beforeState,
           expectedAfterState: plan.expectedAfterState
         },
+        payloadHash,
         expiresAt: plan.approvalExpiresAt
       }
     }),
@@ -188,13 +214,25 @@ export async function rejectGovernedAwsChange(
 export async function queueGovernedAwsChangeExecution(
   actor: ActorContext,
   planId: string,
-  body: GovernedExecuteRequest
+  body: GovernedExecuteRequest,
+  context: QueueExecutionContext
 ) {
   const plan = await prisma.remediationPlan.findFirst({
     where: { id: planId, organizationId: actor.organizationId },
     include: remediationExecutionInclude
   });
   if (!plan) return null;
+
+  if (plan.lifecycleState !== "APPROVED") {
+    const replayed = plan.lifecycleState === "QUEUED" && plan.idempotencyKey === body.idempotencyKey;
+    return nonMutatingBlockedDecision(
+      actor,
+      plan,
+      replayed
+        ? "Governed AWS change was already queued with this idempotency key."
+        : "Plan must be approved before execution can be queued."
+    );
+  }
 
   const blockedReason = validateExecutionReady(plan, body);
   if (blockedReason) {
@@ -212,42 +250,69 @@ export async function queueGovernedAwsChangeExecution(
     return blockedMutation(actor, plan, "Idempotency key has already completed or queued a governed change.");
   }
 
+  try {
+    await governedAwsChangeQueue.add(
+      "execute-governed-aws-change",
+      {
+        organizationId: actor.organizationId,
+        planId: plan.id,
+        requestedById: actor.userId,
+        idempotencyKey: body.idempotencyKey,
+        correlationId: context.correlationId
+      },
+      {
+        jobId: body.idempotencyKey,
+        attempts: 1,
+        removeOnComplete: 100,
+        removeOnFail: 100
+      }
+    );
+  } catch {
+    return queueEnqueueFailed(actor, plan, body.idempotencyKey, context.correlationId);
+  }
+
   const queuedAt = new Date();
-  const [updatedPlan, auditEvent] = await prisma.$transaction([
-    prisma.remediationPlan.update({
-      where: { id: plan.id },
+  const outcome = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.remediationPlan.updateMany({
+      where: {
+        id: plan.id,
+        organizationId: actor.organizationId,
+        lifecycleState: "APPROVED",
+        approvalStatus: "APPROVED",
+        mutationOutcome: "NOT_ATTEMPTED",
+        approvedByRequestId: plan.approvedByRequestId
+      },
       data: {
         lifecycleState: "QUEUED",
         executionStatus: "READY_FOR_EXECUTION",
         idempotencyKey: body.idempotencyKey,
         queuedAt,
         blockedReason: null
-      },
-      include: remediationExecutionInclude
-    }),
-    prisma.auditEvent.create({
+      }
+    });
+    if (claimed.count !== 1) return null;
+    const auditEvent = await tx.auditEvent.create({
       data: auditData(actor, plan.id, "governance.aws_change.execution_queued", {
-        idempotencyKey: body.idempotencyKey
+        idempotencyKey: body.idempotencyKey,
+        correlationId: context.correlationId
       })
-    })
-  ]);
+    });
+    const updatedPlan = await tx.remediationPlan.findUniqueOrThrow({
+      where: { id: plan.id },
+      include: remediationExecutionInclude
+    });
+    return { updatedPlan, auditEvent };
+  });
 
-  await governedAwsChangeQueue.add(
-    "execute-governed-aws-change",
-    {
-      organizationId: actor.organizationId,
-      planId: plan.id,
-      requestedById: actor.userId,
-      idempotencyKey: body.idempotencyKey,
-      correlationId: (body as any).correlationId
-    },
-    {
-      jobId: body.idempotencyKey,
-      attempts: 1,
-      removeOnComplete: 100,
-      removeOnFail: 100
-    }
-  );
+  if (!outcome) {
+    const currentPlan = await prisma.remediationPlan.findFirst({
+      where: { id: plan.id, organizationId: actor.organizationId },
+      include: remediationExecutionInclude
+    });
+    if (!currentPlan) return null;
+    return nonMutatingBlockedDecision(actor, currentPlan, "Governed AWS change queue transition was already claimed.");
+  }
+  const { updatedPlan, auditEvent } = outcome;
 
   return mutationResponse(updatedPlan, auditEvent, "Governed AWS change queued. Worker will enforce preflight gates before any mutation.");
 }
@@ -287,13 +352,52 @@ function validatePreparation(
 }
 
 function validateExecutionReady(plan: ExecutionPlan, body: GovernedExecuteRequest) {
+  const now = new Date();
   const mode = getAwsChangeExecutionMode();
   if (mode === "disabled") return "AWS_CHANGE_EXECUTION_MODE is disabled.";
   if (mode === "production") return "Production execution is configured but not enabled in this pilot milestone.";
   if (plan.lifecycleState !== "APPROVED") return "Plan must be approved before execution can be queued.";
   if (plan.approvalStatus !== "APPROVED") return "Approval is missing.";
+  if (plan.mutationOutcome !== "NOT_ATTEMPTED") return "Mutation outcome does not permit queueing or automatic replay.";
+  if (!plan.approvedByRequestId || !plan.approvedByRequest) return "Exact approved request binding is missing.";
+  if (plan.approvedByRequest.remediationPlanId !== plan.id) return "Bound approval does not belong to this plan.";
+  if (plan.approvedByRequest.organizationId !== plan.organizationId) return "Bound approval does not belong to this organization.";
+  if (plan.approvedByRequest.status !== "APPROVED") return "Bound approval is not approved.";
+  if (plan.approvedByRequest.expiresAt && plan.approvedByRequest.expiresAt < now) return "Bound approval has expired.";
+  if (!plan.approvedByRequest.approvedById) return "Bound approval approver is missing.";
+  if (plan.approvedByRequest.requestedById === plan.approvedByRequest.approvedById) return "Bound approval violates maker-checker policy.";
+  if (!plan.approvedByRequest.payloadHash) return "Bound approval payload hash is missing.";
+  if (!plan.approvedByRequest.resourceStateFingerprint) return "Bound approval resource fingerprint is missing.";
+  if (!/^[a-f0-9]{64}$/.test(plan.approvedByRequest.resourceStateFingerprint)) return "Bound approval resource fingerprint is malformed.";
+  if (plan.approvedByRequest.resourceStateFingerprintSchemaVersion !== RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION) {
+    return "Bound approval resource fingerprint schema version is missing or unsupported.";
+  }
+  if (plan.approvedByRequest.resourceStateFingerprintPolicyVersion !== RESOURCE_STATE_FINGERPRINT_POLICY_VERSION) {
+    return "Bound approval resource fingerprint policy version is missing or unsupported.";
+  }
+  if (!(plan.approvedByRequest.resourceStateCapturedAt instanceof Date) || Number.isNaN(plan.approvedByRequest.resourceStateCapturedAt.getTime())) {
+    return "Bound approval resource state capture time is missing or invalid.";
+  }
+  try {
+    const evidence = parseCanonicalEc2TagSafetyEvidence(
+      plan.approvedByRequest.resourceStateEvidence,
+      plan.approvedByRequest.resourceStateFingerprintSchemaVersion,
+      plan.approvedByRequest.resourceStateFingerprintPolicyVersion
+    );
+    const evidenceFingerprint = computeEc2TagSafetyFingerprint({
+      resourceId: evidence.resourceId,
+      accountId: evidence.accountId,
+      region: evidence.region,
+      tags: Object.fromEntries(Object.entries(evidence.controlTags).map(([key, tag]) => [key, tag.present ? tag.value ?? "" : undefined]))
+    });
+    if (!approvalPayloadHashesEqual(plan.approvedByRequest.resourceStateFingerprint, evidenceFingerprint)) {
+      return "Bound approval resource state evidence does not match its fingerprint.";
+    }
+  } catch {
+    return "Bound approval resource state evidence is missing or malformed.";
+  }
   if (body.confirmationToken !== plan.confirmationTokenRequired) return "Incorrect confirmation token.";
-  if (plan.approvalExpiresAt && plan.approvalExpiresAt < new Date()) return "Approval has expired.";
+  if (plan.approvalExpiresAt && plan.approvalExpiresAt < now) return "Approval has expired.";
   if (!plan.resource) return "Verified resource is required.";
   if (!plan.finding?.awsAccount) return "Registered AWS account is required.";
   if (isSampleResource(plan.resource)) return "SAMPLE DATA - EXECUTION NOT ALLOWED.";
@@ -317,9 +421,10 @@ async function decideGovernedAwsChange(
     include: remediationExecutionInclude
   });
   if (!plan) return null;
+  const decidedPlan = plan;
 
   if (plan.lifecycleState !== "PENDING_APPROVAL") {
-    return blockedMutation(actor, plan, "Plan must be pending approval before decision.");
+    return nonMutatingBlockedDecision(actor, plan, "Plan must be pending approval before decision.");
   }
   if (body.confirmationToken !== plan.confirmationTokenRequired) {
     return blockedMutation(actor, plan, "Incorrect confirmation token for approval decision.");
@@ -328,65 +433,131 @@ async function decideGovernedAwsChange(
     return blockedMutation(actor, plan, "Self-approval is blocked for governed AWS changes.");
   }
 
-  const approval = await prisma.approvalRequest.findFirst({
+  const pendingApprovals = await prisma.approvalRequest.findMany({
     where: {
       organizationId: actor.organizationId,
       remediationPlanId: plan.id,
       status: "PENDING"
-    },
-    orderBy: { createdAt: "desc" }
+    }
   });
+  if (pendingApprovals.length === 0) {
+    const currentPlan = await prisma.remediationPlan.findFirst({
+      where: { id: plan.id, organizationId: actor.organizationId },
+      include: remediationExecutionInclude
+    });
+    if (!currentPlan) return null;
+    return nonMutatingBlockedDecision(actor, currentPlan, "Approval request decision was already processed.");
+  }
+  if (pendingApprovals.length > 1) {
+    return blockedMutation(actor, plan, "Exactly one pending approval request is required.");
+  }
+  const approval = pendingApprovals[0]!;
 
-  if (approval?.expiresAt && approval.expiresAt < new Date()) {
+  if (approval.expiresAt && approval.expiresAt < new Date()) {
     return blockedMutation(actor, plan, "Approval request has expired.");
   }
 
-  const [updatedPlan, auditEvent] = await prisma.$transaction([
-    prisma.remediationPlan.update({
-      where: { id: plan.id },
-      data: {
-        lifecycleState: status === "APPROVED" ? "APPROVED" : "BLOCKED",
-        approvalStatus: status,
-        executionStatus: status === "APPROVED" ? "READY_FOR_EXECUTION" : "EXECUTION_BLOCKED",
-        approvedById: status === "APPROVED" ? actor.userId : null,
-        blockedReason: status === "REJECTED" ? body.reason : null
-      },
+  if (status === "APPROVED" && plan.allowlistedOperation === "EC2_APPLY_GOVERNANCE_TAGS") {
+    const captureFailure = validateAuthoritativeApprovalCapture(plan, approval);
+    if (captureFailure) return nonMutatingBlockedDecision(actor, plan, captureFailure);
+  }
+
+  const payloadHash = approvalPayloadHash(plan);
+  const decidedAt = new Date();
+  let outcome: Awaited<ReturnType<typeof persistApprovalDecision>> = null;
+  try {
+    outcome = await persistApprovalDecision();
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "APPROVAL_BINDING_CONFLICT") throw error;
+  }
+  if (!outcome) {
+    const currentPlan = await prisma.remediationPlan.findFirst({
+      where: { id: decidedPlan.id, organizationId: actor.organizationId },
       include: remediationExecutionInclude
-    }),
-    prisma.auditEvent.create({
-      data: auditData(actor, plan.id, status === "APPROVED" ? "governance.aws_change.approved" : "governance.aws_change.rejected", {
-        reason: body.reason,
-        expectedImpact: body.expectedImpact
-      })
-    }),
-    approval
-      ? prisma.approvalRequest.update({
-          where: { id: approval.id },
-          data: {
-            status,
-            approvedById: actor.userId,
-            decisionReason: body.reason,
-            expectedImpact: body.expectedImpact,
-            confirmationToken: body.confirmationToken,
-            decidedAt: new Date()
-          }
-        })
-      : prisma.approvalRequest.create({
-          data: {
-            organizationId: actor.organizationId,
-            remediationPlanId: plan.id,
-            requestedById: plan.createdById,
-            approvedById: actor.userId,
-            status,
-            decisionReason: body.reason,
-            expectedImpact: body.expectedImpact,
-            confirmationToken: body.confirmationToken,
-            decidedAt: new Date()
-          }
-        })
-  ]);
+    });
+    if (!currentPlan) return null;
+    return nonMutatingBlockedDecision(actor, currentPlan, "Approval request decision was already processed.");
+  }
+  const { updatedPlan, auditEvent } = outcome;
 
   return mutationResponse(updatedPlan, auditEvent, status === "APPROVED" ? "Governed AWS change approved. Queue execution separately with the exact confirmation token." : "Governed AWS change rejected and blocked.");
+
+  async function persistApprovalDecision() {
+    return prisma.$transaction(async (tx) => {
+      if (status === "APPROVED" && decidedPlan.allowlistedOperation === "EC2_APPLY_GOVERNANCE_TAGS") {
+        const currentApproval = await tx.approvalRequest.findFirst({
+          where: {
+            id: approval.id,
+            organizationId: actor.organizationId,
+            remediationPlanId: decidedPlan.id,
+            status: "PENDING"
+          }
+        });
+        if (!currentApproval || validateAuthoritativeApprovalCapture(decidedPlan, currentApproval)) {
+          return null;
+        }
+      }
+      const approvalUpdate = await tx.approvalRequest.updateMany({
+        where: {
+          id: approval.id,
+          organizationId: actor.organizationId,
+          remediationPlanId: decidedPlan.id,
+          status: "PENDING"
+        },
+        data: {
+          status,
+          approvedById: actor.userId,
+          decisionReason: body.reason,
+          expectedImpact: body.expectedImpact,
+          confirmationToken: body.confirmationToken,
+          payloadHash,
+          decidedAt
+        }
+      });
+      if (approvalUpdate.count !== 1) return null;
+
+      const planUpdate = await tx.remediationPlan.updateMany({
+        where: {
+          id: decidedPlan.id,
+          organizationId: actor.organizationId,
+          lifecycleState: "PENDING_APPROVAL",
+          approvedByRequestId: null
+        },
+        data: {
+          lifecycleState: status === "APPROVED" ? "APPROVED" : "BLOCKED",
+          approvalStatus: status,
+          executionStatus: status === "APPROVED" ? "READY_FOR_EXECUTION" : "EXECUTION_BLOCKED",
+          approvedById: status === "APPROVED" ? actor.userId : null,
+          approvedByRequestId: status === "APPROVED" ? approval.id : null,
+          blockedReason: status === "REJECTED" ? body.reason : null
+        }
+      });
+      if (planUpdate.count !== 1) throw new Error("APPROVAL_BINDING_CONFLICT");
+
+      const auditEvent = await tx.auditEvent.create({
+        data: auditData(actor, decidedPlan.id, status === "APPROVED" ? "governance.aws_change.approved" : "governance.aws_change.rejected", {
+          reason: body.reason,
+          expectedImpact: body.expectedImpact,
+          approvalRequestId: approval.id
+        })
+      });
+      const updatedPlan = await tx.remediationPlan.findUniqueOrThrow({
+        where: { id: decidedPlan.id },
+        include: remediationExecutionInclude
+      });
+      return { updatedPlan, auditEvent };
+    });
+  }
+}
+
+async function nonMutatingBlockedDecision(actor: ActorContext, plan: ExecutionPlan, blockedReason: string) {
+  const auditEvent = await prisma.auditEvent.create({
+    data: auditData(actor, plan.id, "governance.aws_change.decision_blocked", {
+      blockedReason,
+      approvedByRequestId: plan.approvedByRequestId
+    })
+  });
+  return mutationResponse(plan, auditEvent, blockedReason);
 }
 
 async function blockedMutation(actor: ActorContext, plan: ExecutionPlan, blockedReason: string) {
@@ -409,6 +580,47 @@ async function blockedMutation(actor: ActorContext, plan: ExecutionPlan, blocked
   return mutationResponse(updatedPlan, auditEvent, blockedReason);
 }
 
+async function queueEnqueueFailed(
+  actor: ActorContext,
+  plan: ExecutionPlan,
+  idempotencyKey: string,
+  correlationId: string
+) {
+  const [updatedPlan, auditEvent] = await prisma.$transaction([
+    prisma.remediationPlan.update({
+      where: { id: plan.id },
+      data: {
+        lifecycleState: "FAILED",
+        executionStatus: "EXECUTION_BLOCKED",
+        idempotencyKey,
+        failureClassification: "QUEUE_ENQUEUE_FAILED",
+        executionCompletedAt: new Date(),
+        blockedReason: "Governed AWS change could not be queued.",
+        mutationOutcome: "NOT_ATTEMPTED",
+        executionEvidence: {
+          correlationId,
+          failureClassification: "QUEUE_ENQUEUE_FAILED",
+          awsApiCallExecuted: false,
+          mutationExecuted: false,
+          mutationMayHaveExecuted: false,
+          operatorGuidance: "No provider execution was attempted because the queue did not accept the job."
+        }
+      },
+      include: remediationExecutionInclude
+    }),
+    prisma.auditEvent.create({
+      data: auditData(actor, plan.id, "governance.aws_change.queue_failed", {
+        idempotencyKey,
+        correlationId,
+        failureClassification: "QUEUE_ENQUEUE_FAILED",
+        awsApiCallExecuted: false,
+        mutationExecuted: false
+      })
+    })
+  ]);
+  return mutationResponse(updatedPlan, auditEvent, "Governed AWS change could not be queued. No provider execution was attempted.");
+}
+
 async function loadPlanForExecution(organizationId: string, planId: string) {
   return prisma.remediationPlan.findFirst({
     where: { id: planId, organizationId },
@@ -424,7 +636,8 @@ const remediationExecutionInclude = {
       }
     }
   },
-  resource: true
+  resource: true,
+  approvedByRequest: true
 } as const;
 
 type LoadedPlan = NonNullable<Awaited<ReturnType<typeof loadPlanForExecution>>>;
@@ -493,6 +706,17 @@ function evidenceResponse(plan: ExecutionPlan, message: string) {
     executionCompletedAt: plan.executionCompletedAt?.toISOString() ?? null,
     awsApiCallExecuted: Boolean((plan.executionEvidence as any)?.awsApiCallExecuted),
     mutationExecuted: Boolean((plan.executionEvidence as any)?.mutationExecuted),
+    mutationMayHaveExecuted: mutationMayHaveExecuted(plan),
+    mutationOutcome: plan.mutationOutcome,
+    mutationAttemptedAt: plan.mutationAttemptedAt?.toISOString() ?? null,
+    mutationConfirmedAt: plan.mutationConfirmedAt?.toISOString() ?? null,
+    providerRequestId: plan.mutationProviderRequestId,
+    reconciliationStatus: plan.reconciliationStatus,
+    reconciliationRequired: ["PENDING", "IN_PROGRESS", "FAILED_RETRYABLE"].includes(plan.reconciliationStatus ?? ""),
+    lastReconciliationAt: plan.lastReconciliationAt?.toISOString() ?? null,
+    reconciliationAttemptCount: plan.reconciliationAttemptCount,
+    manualReviewReason: plan.manualReviewReason,
+    operatorGuidance: mutationOperatorGuidance(plan),
     message
   });
 }
@@ -536,6 +760,17 @@ function toPlanDto(plan: ExecutionPlan) {
     queuedAt: plan.queuedAt?.toISOString() ?? null,
     executionStartedAt: plan.executionStartedAt?.toISOString() ?? null,
     executionCompletedAt: plan.executionCompletedAt?.toISOString() ?? null,
+    mutationOutcome: plan.mutationOutcome,
+    mutationAttemptedAt: plan.mutationAttemptedAt?.toISOString() ?? null,
+    mutationConfirmedAt: plan.mutationConfirmedAt?.toISOString() ?? null,
+    providerRequestId: plan.mutationProviderRequestId,
+    mutationMayHaveExecuted: mutationMayHaveExecuted(plan),
+    reconciliationStatus: plan.reconciliationStatus,
+    reconciliationRequired: ["PENDING", "IN_PROGRESS", "FAILED_RETRYABLE"].includes(plan.reconciliationStatus ?? ""),
+    lastReconciliationAt: plan.lastReconciliationAt?.toISOString() ?? null,
+    reconciliationAttemptCount: plan.reconciliationAttemptCount,
+    manualReviewReason: plan.manualReviewReason,
+    operatorGuidance: mutationOperatorGuidance(plan),
     createdById: plan.createdById,
     createdByEmail: null,
     approvedById: plan.approvedById,
@@ -547,6 +782,17 @@ function toPlanDto(plan: ExecutionPlan) {
     createdAt: plan.createdAt.toISOString(),
     updatedAt: plan.updatedAt.toISOString()
   };
+}
+
+function mutationOperatorGuidance(plan: ExecutionPlan) {
+  if (plan.mutationOutcome === "MANUAL_REVIEW_REQUIRED") return "Execution is not confirmed. The mutation may have executed and must not be retried. Review the safe reconciliation evidence.";
+  if (plan.mutationOutcome === "OUTCOME_UNKNOWN") return "Execution is not confirmed. The mutation may have executed and must not be retried. Read-only reconciliation is required.";
+  if (plan.mutationOutcome === "ATTEMPTED") return "Execution is not confirmed. The mutation may have executed and must not be retried. Read-only reconciliation is required.";
+  return "No operator action is currently required.";
+}
+
+function mutationMayHaveExecuted(plan: ExecutionPlan) {
+  return ["ATTEMPTED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"].includes(plan.mutationOutcome ?? "");
 }
 
 function toApprovalRequestDto(approval: any) {
@@ -563,6 +809,7 @@ function toApprovalRequestDto(approval: any) {
     decisionReason: approval.decisionReason,
     expectedImpact: approval.expectedImpact ?? null,
     confirmationToken: approval.confirmationToken ?? null,
+    payloadIntegrityBound: Boolean(approval.payloadHash),
     expiresAt: approval.expiresAt?.toISOString() ?? null,
     createdAt: approval.createdAt.toISOString(),
     decidedAt: approval.decidedAt?.toISOString() ?? null
@@ -589,6 +836,26 @@ function auditData(
       terraformApplyExecuted: false
     }
   };
+}
+
+function approvalPayloadHash(plan: ExecutionPlan) {
+  return computeApprovalPayloadHash(
+    buildCanonicalApprovalPayload({
+      organizationId: plan.organizationId,
+      remediationPlanId: plan.id,
+      createdById: plan.createdById,
+      allowlistedOperation: plan.allowlistedOperation,
+      confirmationTokenRequired: plan.confirmationTokenRequired,
+      requestedAction: plan.requestedAction ?? {},
+      normalizedPayload: plan.normalizedPayload ?? {},
+      beforeState: plan.beforeState ?? {},
+      expectedAfterState: plan.expectedAfterState ?? {},
+      rollbackPayload: plan.rollbackPayload ?? {},
+      executionMode: plan.executionMode,
+      idempotencyKey: plan.idempotencyKey,
+      approvalExpiresAt: plan.approvalExpiresAt?.toISOString() ?? null
+    })
+  );
 }
 
 function hashStable(value: unknown) {

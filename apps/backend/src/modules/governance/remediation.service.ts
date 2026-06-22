@@ -5,6 +5,10 @@ import type {
   RemediationPlanDto
 } from "@cloudshield/contracts";
 import { prisma } from "@cloudshield/database";
+import {
+  buildCanonicalApprovalPayload,
+  computeApprovalPayloadHash
+} from "@cloudshield/utils";
 
 type ActorContext = {
   organizationId: string;
@@ -140,6 +144,7 @@ export async function requestApproval(actor: ActorContext, planId: string) {
     return null;
   }
 
+  const payloadHash = approvalPayloadHash(plan);
   const [updatedPlan, approvalRequest] = await prisma.$transaction([
     prisma.remediationPlan.update({
       where: { id: plan.id },
@@ -154,7 +159,8 @@ export async function requestApproval(actor: ActorContext, planId: string) {
         organizationId: actor.organizationId,
         remediationPlanId: plan.id,
         requestedById: actor.userId,
-        status: "PENDING"
+        status: "PENDING",
+        payloadHash
       },
       include: approvalInclude
     })
@@ -316,6 +322,7 @@ async function decidePlan(
     orderBy: { createdAt: "desc" }
   });
 
+  const payloadHash = approvalPayloadHash(plan);
   const [updatedPlan, updatedApproval] = await prisma.$transaction([
     prisma.remediationPlan.update({
       where: { id: plan.id },
@@ -334,6 +341,7 @@ async function decidePlan(
             status,
             approvedById: actor.userId,
             decisionReason: body.decisionReason ?? null,
+            payloadHash,
             decidedAt: new Date()
           },
           include: approvalInclude
@@ -346,6 +354,7 @@ async function decidePlan(
             approvedById: actor.userId,
             status,
             decisionReason: body.decisionReason ?? null,
+            payloadHash,
             decidedAt: new Date()
           },
           include: approvalInclude
@@ -592,6 +601,21 @@ function toRemediationPlanDto(plan: any): RemediationPlanDto {
     queuedAt: plan.queuedAt?.toISOString() ?? null,
     executionStartedAt: plan.executionStartedAt?.toISOString() ?? null,
     executionCompletedAt: plan.executionCompletedAt?.toISOString() ?? null,
+    mutationOutcome: plan.mutationOutcome ?? null,
+    mutationAttemptedAt: plan.mutationAttemptedAt?.toISOString() ?? null,
+    mutationConfirmedAt: plan.mutationConfirmedAt?.toISOString() ?? null,
+    providerRequestId: plan.mutationProviderRequestId ?? null,
+    mutationMayHaveExecuted: ["ATTEMPTED", "OUTCOME_UNKNOWN", "MANUAL_REVIEW_REQUIRED"].includes(plan.mutationOutcome ?? ""),
+    reconciliationStatus: plan.reconciliationStatus ?? null,
+    reconciliationRequired: ["PENDING", "IN_PROGRESS", "FAILED_RETRYABLE"].includes(plan.reconciliationStatus ?? ""),
+    lastReconciliationAt: plan.lastReconciliationAt?.toISOString() ?? null,
+    reconciliationAttemptCount: plan.reconciliationAttemptCount ?? 0,
+    manualReviewReason: plan.manualReviewReason ?? null,
+    operatorGuidance: plan.mutationOutcome === "MANUAL_REVIEW_REQUIRED"
+      ? "Execution is not confirmed. The mutation may have executed and must not be retried. Review the safe reconciliation evidence."
+      : ["ATTEMPTED", "OUTCOME_UNKNOWN"].includes(plan.mutationOutcome ?? "")
+        ? "Execution is not confirmed. The mutation may have executed and must not be retried. Read-only reconciliation is required."
+        : "No operator action is currently required.",
     createdById: plan.createdById,
     createdByEmail: plan.createdBy?.email ?? null,
     approvedById: plan.approvedById,
@@ -620,6 +644,7 @@ function toApprovalRequestDto(approval: any): ApprovalRequestDto {
     decisionReason: approval.decisionReason,
     expectedImpact: approval.expectedImpact ?? null,
     confirmationToken: approval.confirmationToken ?? null,
+    payloadIntegrityBound: Boolean(approval.payloadHash),
     expiresAt: approval.expiresAt?.toISOString() ?? null,
     createdAt: approval.createdAt.toISOString(),
     decidedAt: approval.decidedAt?.toISOString() ?? null
@@ -636,6 +661,26 @@ function toGovernanceActivityDto(event: any) {
     metadata: event.metadata ?? {},
     createdAt: event.createdAt.toISOString()
   };
+}
+
+function approvalPayloadHash(plan: any) {
+  return computeApprovalPayloadHash(
+    buildCanonicalApprovalPayload({
+      organizationId: plan.organizationId,
+      remediationPlanId: plan.id,
+      createdById: plan.createdById,
+      allowlistedOperation: plan.allowlistedOperation ?? null,
+      confirmationTokenRequired: plan.confirmationTokenRequired ?? null,
+      requestedAction: plan.requestedAction ?? {},
+      normalizedPayload: plan.normalizedPayload ?? {},
+      beforeState: plan.beforeState ?? {},
+      expectedAfterState: plan.expectedAfterState ?? {},
+      rollbackPayload: plan.rollbackPayload ?? {},
+      executionMode: plan.executionMode ?? "disabled",
+      idempotencyKey: plan.idempotencyKey ?? null,
+      approvalExpiresAt: plan.approvalExpiresAt?.toISOString() ?? null
+    })
+  );
 }
 
 function stringArray(value: unknown) {

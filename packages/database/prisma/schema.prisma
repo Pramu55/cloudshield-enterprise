@@ -148,6 +148,24 @@ enum RemediationExecutionStatus {
   COMPLETED_MANUALLY
 }
 
+enum MutationOutcome {
+  NOT_ATTEMPTED
+  ATTEMPTED
+  CONFIRMED_SUCCEEDED
+  CONFIRMED_FAILED
+  OUTCOME_UNKNOWN
+  MANUAL_REVIEW_REQUIRED
+}
+
+enum MutationReconciliationStatus {
+  NOT_REQUIRED
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  MANUAL_REVIEW_REQUIRED
+  FAILED_RETRYABLE
+}
+
 enum ApprovalRequestStatus {
   PENDING
   APPROVED
@@ -256,6 +274,7 @@ model Organization {
   cloudResources        CloudResource[]
   relationships         ResourceRelationship[]
   securityFindings      SecurityFinding[]
+  findingEvidenceSnapshots SecurityFindingEvidenceSnapshot[]
   costFindings          CostFinding[]
   complianceControls    ComplianceControl[]
   complianceEvidence    ComplianceEvidence[]
@@ -270,6 +289,7 @@ model Organization {
   automationEvents      AutomationEvent[]
   intelligenceSummaries IntelligenceSummary[]
   savedViews            SavedView[]
+  securityAlertEvidence SecurityAlertEvidence[]
   notifications         Notification[]
   authSessions          AuthSession[]
   memberships           OrganizationMembership[]
@@ -460,6 +480,7 @@ model CloudResource {
   complianceEvidence  ComplianceEvidence[]
   remediationPlans    RemediationPlan[]
   securityAlerts      SecurityAlert[]
+  evidenceSnapshots   SecurityFindingEvidenceSnapshot[]
 
   @@unique([organizationId, awsAccountId, resourceType, resourceId])
   @@index([organizationId])
@@ -547,6 +568,7 @@ model SecurityFinding {
   riskAcceptances  RiskAcceptance[]
   remediationPlans RemediationPlan[]
   securityAlerts   SecurityAlert[]
+  evidenceSnapshots SecurityFindingEvidenceSnapshot[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -560,6 +582,33 @@ model SecurityFinding {
   @@index([organizationId, resourceId])
   @@index([organizationId, status, archivedAt])
   @@index([organizationId, severity, status, archivedAt])
+}
+
+model SecurityFindingEvidenceSnapshot {
+  id                   String                     @id @default(cuid())
+  organizationId       String
+  organization         Organization               @relation(fields: [organizationId], references: [id])
+  securityFindingId    String
+  securityFinding      SecurityFinding            @relation(fields: [securityFindingId], references: [id])
+  resourceId           String?
+  resource             CloudResource?             @relation(fields: [resourceId], references: [id])
+  ruleId               String
+  ruleVersion          String
+  schemaVersion        Int                        @default(1)
+  evaluationMode       String
+  findingSource        DataSourceClassification
+  resourceSource       DataSourceClassification?
+  sampleData           Boolean
+  title                String
+  summary              String
+  resourceSnapshot     Json
+  evaluationContext    Json
+  correlationId        String?
+  capturedAt           DateTime
+  createdAt            DateTime                   @default(now())
+  riskAcceptances      RiskAcceptance[]
+
+  @@index([organizationId, securityFindingId, capturedAt(sort: Desc), id(sort: Desc)])
 }
 
 model CostFinding {
@@ -694,9 +743,11 @@ model RiskAcceptance {
   organizationId        String
   organization          Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   securityFindingId     String?
-  securityFinding       SecurityFinding? @relation(fields: [securityFindingId], references: [id], onDelete: Cascade)
+  securityFinding       SecurityFinding? @relation(fields: [securityFindingId], references: [id], onDelete: SetNull)
   costFindingId         String?
   costFinding           CostFinding?     @relation(fields: [costFindingId], references: [id], onDelete: Cascade)
+  evidenceSnapshotId    String?
+  evidenceSnapshot      SecurityFindingEvidenceSnapshot? @relation(fields: [evidenceSnapshotId], references: [id], onDelete: SetNull)
   businessJustification String
   approver              String
   owner                 String
@@ -709,6 +760,7 @@ model RiskAcceptance {
 
   @@index([organizationId])
   @@index([organizationId, expiresAt])
+  @@index([organizationId, evidenceSnapshotId])
 }
 
 model ScanRun {
@@ -824,14 +876,26 @@ model RemediationPlan {
   executionStartedAt        DateTime?
   executionCompletedAt      DateTime?
   rollbackAvailableAt       DateTime?
+  mutationOutcome           MutationOutcome?
+  mutationAttemptedAt       DateTime?
+  mutationConfirmedAt       DateTime?
+  mutationProviderRequestId String?
+  reconciliationStatus      MutationReconciliationStatus?
+  reconciliationAttemptCount Int                         @default(0)
+  lastReconciliationAt      DateTime?
+  nextReconciliationAt      DateTime?
+  manualReviewReason        String?
+  executionLeaseStartedAt   DateTime?
   createdById               String
   createdBy                 User                          @relation("RemediationPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
   approvedById              String?
   approvedBy                User?                         @relation("RemediationPlanApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedByRequestId       String?                       @unique
+  approvedByRequest         ApprovalRequest?              @relation("BoundApprovalRequest", fields: [approvedByRequestId], references: [id], onDelete: SetNull)
   createdAt                 DateTime                      @default(now())
   updatedAt                 DateTime                      @updatedAt
 
-  approvalRequests ApprovalRequest[]
+  approvalRequests ApprovalRequest[] @relation("PlanApprovalRequests")
 
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId])
@@ -841,6 +905,8 @@ model RemediationPlan {
   @@index([organizationId, lifecycleState])
   @@index([organizationId, resourceId])
   @@index([organizationId, createdById])
+  @@index([mutationOutcome, mutationAttemptedAt])
+  @@index([reconciliationStatus, nextReconciliationAt])
 }
 
 model ApprovalRequest {
@@ -848,7 +914,8 @@ model ApprovalRequest {
   organizationId    String
   organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   remediationPlanId String
-  remediationPlan   RemediationPlan       @relation(fields: [remediationPlanId], references: [id], onDelete: Cascade)
+  remediationPlan   RemediationPlan       @relation("PlanApprovalRequests", fields: [remediationPlanId], references: [id], onDelete: Cascade)
+  authorizedPlan    RemediationPlan?      @relation("BoundApprovalRequest")
   requestedById     String
   requestedBy       User                  @relation("ApprovalRequestRequester", fields: [requestedById], references: [id], onDelete: Restrict)
   approvedById      String?
@@ -858,6 +925,12 @@ model ApprovalRequest {
   expectedImpact    String?
   confirmationToken String?
   evidenceSnapshot  Json                  @default("{}")
+  payloadHash       String?
+  resourceStateFingerprint              String?
+  resourceStateFingerprintSchemaVersion Int?
+  resourceStateFingerprintPolicyVersion String?
+  resourceStateCapturedAt               DateTime?
+  resourceStateEvidence                 Json?
   expiresAt         DateTime?
   createdAt         DateTime              @default(now())
   decidedAt         DateTime?
@@ -1141,6 +1214,8 @@ model MonitoringRun {
   startedAt                    DateTime                 @default(now())
   completedAt                  DateTime?
 
+  securityAlertEvidence SecurityAlertEvidence[]
+
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, startedAt])
@@ -1179,6 +1254,8 @@ model SecurityAlert {
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
 
+  securityAlertEvidence SecurityAlertEvidence[]
+
   @@unique([organizationId, dedupeKey])
   @@index([organizationId])
   @@index([organizationId, status, severity, updatedAt])
@@ -1206,4 +1283,30 @@ model MonitoringSnapshot {
   @@index([organizationId])
   @@index([organizationId, generatedAt])
   @@index([organizationId, awsAccountId])
+}
+
+model SecurityAlertEvidence {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  securityAlertId String
+  securityAlert   SecurityAlert  @relation(fields: [securityAlertId], references: [id], onDelete: Restrict)
+  monitoringRunId String?
+  monitoringRun   MonitoringRun? @relation(fields: [monitoringRunId], references: [id], onDelete: SetNull)
+
+  evidenceType  String
+  sourceType    String
+  sourceId      String?
+  title         String
+  summary       String
+  observedAt    DateTime
+  createdAt     DateTime @default(now())
+  correlationId String?
+  dedupeKey     String
+  schemaVersion Int      @default(1)
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId, securityAlertId, observedAt(sort: Desc), id(sort: Desc)])
+  @@index([organizationId, monitoringRunId])
+  @@index([organizationId, createdAt])
 }

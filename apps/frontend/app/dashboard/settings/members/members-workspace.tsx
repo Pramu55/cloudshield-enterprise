@@ -15,6 +15,12 @@ import {
 } from "../../shared";
 import { useCloudShieldData, fetchCloudShieldClient, RefreshBadge } from "../../../../lib/client-api";
 import { Circle, UserPlus, Users, Trash2, Mail, MailPlus, RefreshCw, KeyRound, ShieldAlert } from "lucide-react";
+import {
+  FrontendCapabilitySessionSchema,
+  type FrontendCapabilitySession
+} from "../../../../lib/response-contracts";
+import { authoritativePermission, permissionCapability } from "../../../../lib/action-capability";
+import { GuardedAction } from "../../../../components/ui/guarded-action";
 
 type AnyRecord = Record<string, any>;
 
@@ -52,7 +58,9 @@ function RoleBadge({ role }: { role: string }) {
 export function MembersWorkspace() {
   const members = useCloudShieldData<AnyRecord>("/api/v1/members", { members: [], invitations: [] });
   const teams = useCloudShieldData<AnyRecord>("/api/v1/teams", { teams: [] });
-  const auth = useCloudShieldData<AnyRecord>("/api/v1/auth/me", { user: {} });
+  const auth = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, {
+    schema: FrontendCapabilitySessionSchema
+  });
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -65,9 +73,10 @@ export function MembersWorkspace() {
   const invitationRows = pickArray(members.data, ["invitations"]);
   const teamRows = pickArray(teams.data, ["teams"]);
   
-  const currentUserRole = auth.data?.user?.role?.toUpperCase();
-  const canManageMembers = ["OWNER", "ADMIN"].includes(currentUserRole);
-  const canManageTeams = ["OWNER", "ADMIN"].includes(currentUserRole);
+  const inviteCapability = permissionCapability(authoritativePermission(auth.data, "members.invite"));
+  const removeCapability = permissionCapability(authoritativePermission(auth.data, "members.remove"));
+  const createTeamCapability = permissionCapability(authoritativePermission(auth.data, "teams.create"));
+  const archiveTeamCapability = permissionCapability(authoritativePermission(auth.data, "teams.archive"));
 
   const handleAction = async (action: () => Promise<void>) => {
     setErrorMsg(null);
@@ -140,10 +149,10 @@ export function MembersWorkspace() {
 
       <Section 
         title="Member directory" 
-        action={canManageMembers && (
-          <button className="cs-action-primary" onClick={inviteMember}>
+        action={(
+          <GuardedAction capability={inviteCapability} className="cs-action-primary" onClick={inviteMember}>
             <UserPlus size={14} /> Invite Member
-          </button>
+          </GuardedAction>
         )}
       >
         <DataTable
@@ -155,10 +164,10 @@ export function MembersWorkspace() {
             <StatusBadge key="status" status={member.status ?? member.invitationStatus ?? "ACTIVE"} />,
             formatDate(member.lastActiveAt ?? member.updatedAt),
             <ActionMenu key="actions">
-              {canManageMembers && member.userId !== auth.data?.user?.id && (
-                <button className="text-red-600 hover:underline text-xs" onClick={() => removeMember(member.userId)}>
+              {member.userId !== auth.data?.user.id && (
+                <GuardedAction capability={removeCapability} className="text-red-600 hover:underline text-xs" onClick={() => removeMember(member.userId)}>
                   Remove
-                </button>
+                </GuardedAction>
               )}
             </ActionMenu>
           ])}
@@ -174,10 +183,10 @@ export function MembersWorkspace() {
             <StatusBadge key="status" status={invite.status} />,
             formatDate(invite.createdAt),
             <ActionMenu key="actions">
-              {canManageMembers && invite.status === "PENDING" && (
+              {invite.status === "PENDING" && (
                 <>
-                  <button className="text-blue-600 hover:underline text-xs" onClick={() => resendInvitation(invite.id)}>Resend</button>
-                  <button className="text-red-600 hover:underline text-xs ml-2" onClick={() => revokeInvitation(invite.id)}>Revoke</button>
+                  <GuardedAction capability={inviteCapability} className="text-blue-600 hover:underline text-xs" onClick={() => resendInvitation(invite.id)}>Resend</GuardedAction>
+                  <GuardedAction capability={inviteCapability} className="text-red-600 hover:underline text-xs ml-2" onClick={() => revokeInvitation(invite.id)}>Revoke</GuardedAction>
                 </>
               )}
             </ActionMenu>
@@ -187,10 +196,10 @@ export function MembersWorkspace() {
 
       <Section 
         title="Teams" 
-        action={canManageTeams && (
-          <button className="cs-action-primary" onClick={createTeam}>
+        action={(
+          <GuardedAction capability={createTeamCapability} className="cs-action-primary" onClick={createTeam}>
             <Users size={14} /> Create Team
-          </button>
+          </GuardedAction>
         )}
       >
         <DataTable
@@ -201,9 +210,7 @@ export function MembersWorkspace() {
             String(team.members?.length || 0),
             formatDate(team.createdAt),
             <ActionMenu key="actions">
-              {canManageTeams && (
-                <button className="text-red-600 hover:underline text-xs ml-2" onClick={() => archiveTeam(team.id)}>Archive</button>
-              )}
+              <GuardedAction capability={archiveTeamCapability} className="text-red-600 hover:underline text-xs ml-2" onClick={() => archiveTeam(team.id)}>Archive</GuardedAction>
             </ActionMenu>
           ])}
         />

@@ -31,7 +31,7 @@ CloudShield uses a modern, enterprise-ready technology stack:
 The platform is designed with extreme safety in mind:
 - **Tenant Isolation**: All data is strictly scoped to `organizationId` boundaries.
 - **Read-Only AWS Strategy**: The scanner and connector modules only use read-only APIs (`Describe*`, `List*`).
-- **No Mutations**: There is absolutely no code capable of AWS mutation, automatic remediation, or Terraform applies.
+- **Governed Mutation Boundary**: CloudShield contains a restricted future `CreateTags` execution path, but it is disabled by default and protected by execution mode, capability checks, exact approvals, idempotency, evidence capture, state-drift checks, and mutation-outcome classification. No real AWS mutation was performed for v0.5.0. Automatic remediation and Terraform apply are not enabled.
 - **Evaluator Safe**: All execution capabilities are disabled by default. 
 
 ## What Makes It Advanced
@@ -50,6 +50,8 @@ Instead of being a simple CRUD dashboard, CloudShield integrates complex backend
 * Integrated live non-mutating credential check gates via AWS STS `GetCallerIdentity` and background scan loops executing read-only `Describe` APIs to ingest EC2, security groups, volumes, VPCs, and subnets.
 * Programmed relational resource mappings (`ResourceRelationship`) and automated local database-backed security posture rules evaluations upon successful scan completions.
 * Added governed remediation operations with DB-backed plans, approval requests, manual completion tracking, and audit evidence while keeping AWS mutations, Terraform apply, and automatic remediation disabled.
+
+The v0.5.0 release remains `CLOUDSHIELD_AWS_UNVERIFIED_RELEASE_CANDIDATE_v0.5.0`. Its governed mutation-capable code is not evidence of production mutation readiness.
 
 ## Interview Explanation
 **30-Second Version:**

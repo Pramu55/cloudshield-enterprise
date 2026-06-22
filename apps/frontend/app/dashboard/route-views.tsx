@@ -22,10 +22,31 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  User,
   Users,
   Wallet
 } from "lucide-react";
 import { RefreshBadge, useCloudShieldData } from "../../lib/client-api";
+import type { ApiError } from "../../lib/api-error";
+import {
+  FrontendAutomationLatestSchema,
+  FrontendCapabilitySessionSchema,
+  FrontendCommandCenterResponseSchema,
+  FrontendGovernanceApprovalsSchema,
+  FrontendGovernanceActivitySchema,
+  FrontendComplianceEvidenceCenterSchema,
+  FrontendMonitoringHealthSchema,
+  FrontendRemediationPlanListSchema,
+  FrontendSecurityFindingsResponseSchema,
+  type FrontendAutomationLatest,
+  type FrontendCapabilitySession,
+  type FrontendGovernanceApprovals,
+  type FrontendGovernanceActivity,
+  type FrontendComplianceEvidenceCenter,
+  type FrontendRemediationPlanList,
+  type FrontendMonitoringHealth,
+  type FrontendSecurityFindingsResponse
+} from "../../lib/response-contracts";
 import { AccountDetailWorkspace, AccountsWorkspace } from "./account-workflows";
 import {
   DataTable,
@@ -44,6 +65,18 @@ import {
   StatusBadge,
   Timeline
 } from "./shared";
+import {
+  authoritativePermission,
+  permissionCapability,
+  resolveApprovalCapability,
+  resolvePlanExecutionCapability,
+  unknownBlockReasonCapability
+} from "../../lib/action-capability";
+import {
+  CapabilityNotice,
+  GuardedAction,
+  PermissionRestriction,
+} from "../../components/ui/guarded-action";
 
 type AnyRecord = Record<string, any>;
 
@@ -76,12 +109,18 @@ function text(value: any, fallback = "None") {
   return String(value);
 }
 
-function sourceFor(item: AnyRecord, parent?: AnyRecord) {
+type SourceDescriptor = {
+  dataSource?: string | null;
+  source?: string | null;
+  sampleData?: boolean;
+};
+
+function sourceFor(item: SourceDescriptor, parent?: SourceDescriptor | null) {
   return item.dataSource ?? item.source ?? parent?.dataSource ?? parent?.source ?? null;
 }
 
-function ErrorAndRefresh({ error, isRefreshing }: { error: string | null; isRefreshing: boolean }) {
-  return <RefreshBadge error={error} isRefreshing={isRefreshing} />;
+function ErrorAndRefresh({ error, isRefreshing, onRetry }: { error: ApiError | null; isRefreshing: boolean; onRetry?: () => void }) {
+  return <RefreshBadge error={error} isRefreshing={isRefreshing} onRetry={onRetry} />;
 }
 
 function ConsoleLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -106,8 +145,6 @@ import {
   PostureScoreComponent,
   CloudResourceDto,
   CloudResourceListResponse,
-  SecurityFindingDto,
-  SecurityFindingsResponse,
   ComplianceControlDto,
   ComplianceEvidenceCenterResponse
 } from "@cloudshield/contracts";
@@ -118,40 +155,89 @@ function getScoreColor(score: number) {
   return "var(--danger-color, #ef4444)";
 }
 
+function scoreStatusLabel(status: PostureScoreComponent["scoreStatus"]) {
+  const labels = {
+    SCORED: "Scored",
+    NOT_EVALUATED: "Not evaluated",
+    NOT_CONNECTED: "Not connected",
+    SAMPLE_ONLY: "Demo/sample data",
+    STALE: "Stale data",
+    BLOCKED: "Blocked"
+  };
+  return labels[status];
+}
+
 function PostureBar({ component }: { component: PostureScoreComponent }) {
-  const clampedScore = Math.max(0, Math.min(100, component.score));
+  const scoreAvailable =
+    component.score !== null &&
+    (component.scoreStatus === "SCORED" || component.scoreStatus === "STALE");
+  const clampedScore = scoreAvailable && component.score !== null
+    ? Math.max(0, Math.min(100, component.score))
+    : null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-4">
         <span className="min-w-0 font-medium text-slate-700">{component.label}</span>
-        <span className="shrink-0 font-semibold tabular-nums text-slate-900">{clampedScore}/100</span>
+        <span className="shrink-0 font-semibold tabular-nums text-slate-900">
+          {clampedScore === null ? scoreStatusLabel(component.scoreStatus) : `${clampedScore}/100`}
+        </span>
       </div>
 
-      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${clampedScore}%`, backgroundColor: getScoreColor(clampedScore) }}
-          role="progressbar"
-          aria-valuenow={clampedScore}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        />
-      </div>
+      {clampedScore === null ? null : (
+        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${clampedScore}%`, backgroundColor: getScoreColor(clampedScore) }}
+            role="progressbar"
+            aria-valuenow={clampedScore}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          />
+        </div>
+      )}
 
       <p className="text-sm leading-relaxed text-slate-500">
-        {component.explanation}
+        {component.reason}
       </p>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <SourceBadge source={component.dataSource} />
+        {component.lastEvaluatedAt ? <span>Evaluated {formatDate(component.lastEvaluatedAt)}</span> : null}
+        {component.scoreStatus === "STALE" ? <StatusBadge status="STALE" /> : null}
+      </div>
     </div>
   );
 }
 
 export function OverviewView() {
-  const { data, error, isRefreshing } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null);
-  const { data: monitoringHealth } = useCloudShieldData<any>("/api/v1/security-monitoring/health", null);
+  const { data, error, isRefreshing, refetch } = useCloudShieldData<CommandCenterResponse | null>("/api/v1/dashboard/command-center", null, { schema: FrontendCommandCenterResponseSchema });
+  const { data: monitoringHealth } = useCloudShieldData<FrontendMonitoringHealth | null>("/api/v1/security-monitoring/health", null, { schema: FrontendMonitoringHealthSchema });
 
   if (error) {
-    return <ErrorAndRefresh error={error} isRefreshing={false} />;
+    const title = error.kind === "CONTRACT_INVALID"
+      ? "Dashboard data contract is out of sync"
+      : error.kind === "FORBIDDEN"
+        ? "Dashboard permission required"
+        : "Command center data is unavailable";
+    return (
+      <>
+        <PageHeader
+          breadcrumbs={["CloudShield", "Enterprise Command Center"]}
+          eyebrow="Enterprise operations command center"
+          title="Security & Governance Posture"
+          description="CloudShield could not load the organization-scoped command-center response."
+        />
+        <div className="cs-command-error">
+          <InlineNotice title={title} tone="warning">{error.safeMessage}</InlineNotice>
+          <p>Backend health can remain green while the database schema, running backend image, and frontend contract are out of sync.</p>
+          <div className="cs-action-grid">
+            {error.retryableRead ? <button className="cs-button" type="button" onClick={refetch}>Retry dashboard</button> : null}
+            <PrimaryLink href="/dashboard/accounts">Review AWS setup</PrimaryLink>
+            <PrimaryLink href="/dashboard/settings">Open workspace settings</PrimaryLink>
+          </div>
+        </div>
+      </>
+    );
   }
 
   if (!data) {
@@ -175,6 +261,7 @@ export function OverviewView() {
 
   const connectorStatus = accountHealth.length > 0 && accountHealth.some(a => a.connectionStatus === "VALIDATION_SUCCEEDED")
     ? "CONNECTED" : "NOT_CONFIGURED";
+  const setupRequired = executiveSummary.totalAccounts === 0;
 
   return (
     <>
@@ -196,6 +283,19 @@ export function OverviewView() {
         }
       />
       <ErrorAndRefresh error={null} isRefreshing={isRefreshing} />
+      {setupRequired ? (
+        <section className="cs-setup-callout">
+          <div>
+            <span>Setup required</span>
+            <h2>Connect a non-production AWS account to activate live posture workflows</h2>
+            <p>No AWS account is registered for this workspace. Current zero values are accurate; CloudShield is not substituting sample cloud data.</p>
+          </div>
+          <div className="cs-action-grid">
+            <PrimaryLink href="/dashboard/accounts">Register AWS account</PrimaryLink>
+            <ConsoleLink href="/dashboard/settings">Review safe runtime settings</ConsoleLink>
+          </div>
+        </section>
+      ) : null}
 
       <StatGroup>
         <MetricTile label="AWS Accounts" value={executiveSummary.totalAccounts} detail={`${executiveSummary.connectedAccounts} connected`} tone="info" icon={<Cloud size={16} />} />
@@ -217,7 +317,7 @@ export function OverviewView() {
                   <div className="text-xs text-slate-400 mt-1 uppercase tracking-wider">{postureScore.assessmentState.replace("_", " ")}</div>
                 </div>
               </>
-            ) : (
+            ) : postureScore.totalScore !== null ? (
               <>
                 <div className="text-5xl font-black" style={{ color: getScoreColor(postureScore.totalScore) }}>
                   {postureScore.totalScore}
@@ -227,7 +327,7 @@ export function OverviewView() {
                   <div className="text-xs text-slate-400 mt-1">Out of 100</div>
                 </div>
               </>
-            )}
+            ) : null}
           </div>
           <div className="flex flex-col gap-4">
             {postureScore.components.map(c => <PostureBar key={c.key} component={c} />)}
@@ -236,7 +336,14 @@ export function OverviewView() {
 
         <Section title="Priority Actions" description="High-impact actions requiring immediate attention." icon={<Activity size={16} />} variant="warning">
           {priorityActions.length === 0 ? (
-            <EmptyState title="No priority actions" description="All critical items have been addressed." icon={<CheckCircle2 size={32} />} />
+            <EmptyState
+              title={setupRequired ? "No account data to evaluate" : "No priority actions"}
+              description={setupRequired
+                ? "Register and validate an approved sandbox account before CloudShield can calculate cloud priority actions."
+                : "No priority actions were generated from the current organization-scoped records."}
+              icon={<CheckCircle2 size={32} />}
+              action={setupRequired ? <PrimaryLink href="/dashboard/accounts">Set up an account</PrimaryLink> : undefined}
+            />
           ) : (
             <div className="flex flex-col gap-4">
               {priorityActions.map(action => (
@@ -317,7 +424,7 @@ export function OverviewView() {
       </div>
 
       <div className="cs-two-column mt-8 gap-8">
-        <Section title="Account Health & Readiness" description="Validation status and risk levels across registered AWS environments." icon={<Cloud size={16} />} variant="operational">
+      <Section title="Account Health & Readiness" description="Validation status and risk levels across registered AWS environments." icon={<Cloud size={16} />} variant="operational">
           <DataTable
             columns={["Account", "Env", "Connection", "Freshness", "Findings", "Resources"]}
             rows={accountHealth.map(acc => [
@@ -328,6 +435,7 @@ export function OverviewView() {
               <span key="find" className="font-mono text-sm">{acc.findingCount}</span>,
               <span key="res" className="font-mono text-sm">{acc.resourceCount}</span>
             ])}
+            empty={<PrimaryLink href="/dashboard/accounts">Register an AWS account</PrimaryLink>}
           />
         </Section>
 
@@ -384,8 +492,9 @@ export function InventoryView() {
             <span key="account" className="font-mono text-xs">{text(resource.awsAccountId)}</span>,
             text(resource.region),
             <StatusBadge key="status" status={resource.status} />,
-            <SourceBadge key="source" source={sourceFor(resource as any, data as any)} />
+            <SourceBadge key="source" source={sourceFor(resource, data)} />
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Configure read-only inventory</PrimaryLink>}
         />
       </Section>
     </>
@@ -445,13 +554,13 @@ export function ResourceDetailView({ resourceId }: { resourceId: string }) {
 }
 
 export function SecurityView() {
-  const { data, error, isRefreshing } = useCloudShieldData<SecurityFindingsResponse>("/api/v1/findings/security", {
+  const { data, error, isRefreshing } = useCloudShieldData<FrontendSecurityFindingsResponse>("/api/v1/findings/security", {
     items: [],
     sampleData: false,
     sampleDataLabel: "",
     awsApiCallExecuted: false,
     mutationExecuted: false
-  });
+  }, { schema: FrontendSecurityFindingsResponseSchema });
   const findings = data?.items || [];
 
   return (
@@ -459,39 +568,59 @@ export function SecurityView() {
       <PageHeader breadcrumbs={["Security"]} title="Security findings" description="Prioritized findings and workflow state from CloudShield security analysis." />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
       <StatGroup>
-        <MetricTile label="Open findings" value={findings.filter((finding: SecurityFindingDto) => !["RESOLVED", "ARCHIVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="warning" />
-        <MetricTile label="Critical" value={findings.filter((finding: SecurityFindingDto) => String(finding.severity).toUpperCase() === "CRITICAL").length} tone="danger" />
-        <MetricTile label="Resolved" value={findings.filter((finding: SecurityFindingDto) => ["RESOLVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="success" />
+        <MetricTile label="Open findings" value={findings.filter((finding) => !["RESOLVED", "ARCHIVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="warning" />
+        <MetricTile label="Critical" value={findings.filter((finding) => String(finding.severity).toUpperCase() === "CRITICAL").length} tone="danger" />
+        <MetricTile label="Resolved" value={findings.filter((finding) => ["RESOLVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="success" />
       </StatGroup>
       <Section title="Finding queue">
         <DataTable
           columns={["Finding", "Severity", "Resource", "Workflow", "Source", "Updated"]}
-          rows={findings.map((finding: AnyRecord) => [
-            text(finding.title ?? finding.name, "Finding"),
+          rows={findings.map((finding) => [
+            <ConsoleLink key="finding" href={`/dashboard/security/${encodeURIComponent(finding.id)}`}>{finding.title}</ConsoleLink>,
             <StatusBadge key="severity" status={finding.severity} />,
-            text(finding.resourceId ?? finding.resource?.name ?? finding.awsResourceId),
-            <StatusBadge key="status" status={finding.workflowStatus ?? finding.status} />,
-            <SourceBadge key="source" source={sourceFor(finding, data)} />,
-            formatDate(finding.updatedAt ?? finding.createdAt)
+            text(finding.resourceName ?? finding.resourceId),
+            <StatusBadge key="status" status={finding.status} />,
+            <div key="source" className="flex flex-col items-start gap-1">
+              <SourceBadge source={finding.resourceSource} />
+              <span className="text-xs text-slate-500">Generated by rule engine</span>
+            </div>,
+            formatDate(finding.lastSeenAt)
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Connect inventory before evaluation</PrimaryLink>}
         />
       </Section>
     </>
   );
 }
 
+function GovernancePlanAction({ capability, guidance }: { capability: ReturnType<typeof resolvePlanExecutionCapability>; guidance: string }) {
+  const showGuidance = capability.blockedReason === "OUTCOME_UNKNOWN" || capability.blockedReason === "MANUAL_REVIEW_REQUIRED" || capability.blockedReason === "RECONCILIATION_PENDING";
+  return (
+    <div className="flex flex-col gap-2">
+      <GuardedAction capability={capability}>Queue execution</GuardedAction>
+      {showGuidance ? <CapabilityNotice capability={capability} title="Operator action required" /> : null}
+      {showGuidance ? <p className="text-xs text-slate-600">{guidance}</p> : null}
+    </div>
+  );
+}
+
 export function GovernanceView() {
-  const plans = useCloudShieldData<AnyRecord>("/api/v1/remediation/plans", { plans: [] });
-  const approvals = useCloudShieldData<AnyRecord>("/api/v1/governance/approvals", { approvals: [] });
-  const activity = useCloudShieldData<AnyRecord>("/api/v1/governance/activity", { events: [] });
-  const planRows = pickArray(plans.data, ["plans", "items"]);
-  const approvalRows = pickArray(approvals.data, ["approvals", "items"]);
+  const plans = useCloudShieldData<FrontendRemediationPlanList | null>("/api/v1/remediation/plans", null, { schema: FrontendRemediationPlanListSchema });
+  const approvals = useCloudShieldData<FrontendGovernanceApprovals | null>("/api/v1/governance/approvals", null, { schema: FrontendGovernanceApprovalsSchema });
+  const activity = useCloudShieldData<FrontendGovernanceActivity | null>("/api/v1/governance/activity", null, { schema: FrontendGovernanceActivitySchema });
+  const session = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
+  const planRows = plans.data?.items ?? [];
+  const approvalRows = approvals.data?.items ?? [];
+  const preparePermission = authoritativePermission(session.data, "operations.prepare");
+  const approvalPermission = authoritativePermission(session.data, "approvals.decide");
+  const permissionNotice = permissionCapability(preparePermission);
 
   return (
     <>
       <PageHeader breadcrumbs={["Governance"]} title="Governed operations" description="Remediation plans, approvals, owners, and audit events for manual cloud operations." />
-      <ErrorAndRefresh error={plans.error || approvals.error || activity.error} isRefreshing={plans.isRefreshing || approvals.isRefreshing || activity.isRefreshing} />
+      <ErrorAndRefresh error={plans.error || approvals.error || activity.error || session.error} isRefreshing={plans.isRefreshing || approvals.isRefreshing || activity.isRefreshing || session.isRefreshing} />
       <InlineNotice title="Approval required" tone="info">Operational work is tracked through plans, approvals, owners, and completion evidence.</InlineNotice>
+      <PermissionRestriction capability={permissionNotice} />
       <StatGroup>
         <MetricTile label="Plans" value={planRows.length} />
         <MetricTile label="Pending approvals" value={approvalRows.filter((row: AnyRecord) => String(row.status).toUpperCase().includes("PENDING")).length} tone="warning" />
@@ -500,22 +629,48 @@ export function GovernanceView() {
       <div className="cs-two-column">
         <Section title="Remediation plans">
           <DataTable
-            columns={["Plan", "Owner", "Status", "Updated"]}
-            rows={planRows.map((plan: AnyRecord) => [
-              text(plan.title ?? plan.name),
-              text(plan.ownerName ?? plan.ownerEmail ?? plan.assignee),
-              <StatusBadge key="status" status={plan.executionStatus ?? plan.status} />,
-              formatDate(plan.updatedAt ?? plan.createdAt)
+            columns={["Plan", "Approval", "Execution", "Updated", "Action availability"]}
+            rows={planRows.map((plan) => [
+              text(plan.title),
+              <StatusBadge key="approval" status={plan.approvalStatus} />,
+              <StatusBadge key="status" status={plan.mutationOutcome ?? plan.executionStatus} />,
+              formatDate(plan.updatedAt),
+              <GovernancePlanAction key="action" capability={resolvePlanExecutionCapability({
+                permission: preparePermission,
+                executionMode: plan.executionMode,
+                lifecycleState: plan.lifecycleState,
+                approvalStatus: plan.approvalStatus,
+                approvalExpiresAt: plan.approvalExpiresAt,
+                mutationOutcome: plan.mutationOutcome,
+                reconciliationStatus: plan.reconciliationStatus
+              })} guidance={plan.operatorGuidance} />
+            ])}
+          />
+        </Section>
+        <Section title="Approval requests">
+          <DataTable
+            columns={["Plan", "Status", "Requested", "Decision availability"]}
+            rows={approvalRows.map((approval) => [
+              text(approval.remediationPlanTitle, "Remediation plan"),
+              <StatusBadge key="status" status={approval.status} />,
+              formatDate(approval.createdAt),
+              <GuardedAction key="action" capability={resolveApprovalCapability({
+                permission: approvalPermission,
+                status: approval.status,
+                requestedById: approval.requestedById,
+                currentUserId: session.data?.user.id,
+                payloadIntegrityBound: approval.payloadIntegrityBound,
+                expiresAt: approval.expiresAt
+              })}>Review approval</GuardedAction>
             ])}
           />
         </Section>
         <Section title="Governance activity">
           <Timeline
-            events={pickArray(activity.data, ["events", "activity", "items"]).slice(0, 8).map((event: AnyRecord) => ({
-              title: text(event.action ?? event.title ?? event.type, "Governance event"),
-              description: text(event.description ?? event.summary, ""),
-              time: event.createdAt ?? event.timestamp,
-              status: event.status
+            events={(activity.data?.items ?? []).slice(0, 8).map((event) => ({
+              title: event.action,
+              description: event.targetType,
+              time: event.createdAt
             }))}
           />
         </Section>
@@ -525,58 +680,40 @@ export function GovernanceView() {
 }
 
 export function AutomationView() {
-  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/automation/latest", emptyObject);
-  const jobs = pickArray(data, ["jobs", "runs", "items", "activity"]);
+  const { data, error, isRefreshing, refetch } = useCloudShieldData<FrontendAutomationLatest | null>("/api/v1/automation/latest", null, { schema: FrontendAutomationLatestSchema });
+  const jobs = data?.events ?? [];
 
   return (
     <>
       <PageHeader breadcrumbs={["Operations", "Automation"]} title="Automation center" description="Latest advisory automation runs, job outcomes, and report workflow status." />
-      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} onRetry={refetch} />
+      <CapabilityNotice capability={unknownBlockReasonCapability()} title="Automation action unavailable" />
       <StatGroup>
-        <MetricTile label="Latest status" value={<StatusBadge status={data.status ?? data.latestStatus} />} />
+        <MetricTile label="Latest status" value={<StatusBadge status={data?.assessment?.status ?? "NOT_CONFIGURED"} />} />
         <MetricTile label="Runs" value={jobs.length} />
-        <MetricTile label="Updated" value={formatDate(data.updatedAt ?? data.createdAt)} />
+        <MetricTile label="Updated" value={formatDate(data?.assessment?.updatedAt)} />
       </StatGroup>
       <Section title="Automation runs">
         <DataTable
           columns={["Run", "Status", "Summary", "Updated"]}
-          rows={jobs.map((job: AnyRecord) => [
-            text(job.name ?? job.id ?? job.type, "Automation run"),
-            <StatusBadge key="status" status={job.status ?? job.state} />,
-            text(job.summary ?? job.description),
-            formatDate(job.updatedAt ?? job.createdAt)
+          rows={jobs.map((job) => [
+            text(job.type ?? job.id, "Automation event"),
+            <StatusBadge key="status" status={job.status} />,
+            text(job.message),
+            formatDate(job.createdAt)
           ])}
         />
+      </Section>
+      <Section title="Mutation automation">
+        <GuardedAction capability={unknownBlockReasonCapability()}>Start mutation automation</GuardedAction>
       </Section>
     </>
   );
 }
 
 export function ComplianceView() {
-  const { data, error, isRefreshing } = useCloudShieldData<ComplianceEvidenceCenterResponse>("/api/v1/compliance/evidence-center", {
-    controls: [],
-    evidence: [],
-    summary: {
-      totalControls: 0,
-      pass: 0,
-      fail: 0,
-      warning: 0,
-      needsReview: 0,
-      evidenceItems: 0,
-      linkedFindings: 0,
-      riskAccepted: 0,
-      lastEvaluatedAt: null
-    },
-    sampleData: false,
-    sampleDataLabel: "",
-    officialCertificationClaim: false,
-    awsApiCallExecuted: false,
-    mutationExecuted: false,
-    remediationExecuted: false,
-    generatedFromCloudShieldRecordsOnly: true,
-    message: ""
-  });
-  const controls = data?.controls || [];
+  const { data, error, isRefreshing } = useCloudShieldData<FrontendComplianceEvidenceCenter | null>("/api/v1/compliance/evidence-center", null, { schema: FrontendComplianceEvidenceCenterSchema });
+  const controls = data?.controls ?? [];
 
   return (
     <>
@@ -584,18 +721,18 @@ export function ComplianceView() {
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
       <StatGroup>
         <MetricTile label="Controls" value={controls.length} />
-        <MetricTile label="Passing" value={controls.filter((control: ComplianceControlDto) => String(control.status).toUpperCase().includes("PASS")).length} tone="success" />
-        <MetricTile label="Needs review" value={controls.filter((control: ComplianceControlDto) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
+        <MetricTile label="Passing" value={controls.filter((control) => String(control.status).toUpperCase().includes("PASS")).length} tone="success" />
+        <MetricTile label="Needs review" value={controls.filter((control) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
       </StatGroup>
       <Section title="Control evidence">
         <DataTable
           columns={["Control", "Framework", "Status", "Evidence", "Source"]}
-          rows={controls.map((control: ComplianceControlDto) => [
+          rows={controls.map((control) => [
             text(control.title ?? control.controlId, "Control"),
             text(control.framework),
             <StatusBadge key="status" status={control.status} />,
             text(control.evidenceCount),
-            <SourceBadge key="source" source={sourceFor(control as any, data as any)} />
+            <SourceBadge key="source" source={sourceFor(control, data)} />
           ])}
         />
       </Section>
@@ -626,6 +763,7 @@ export function CostView() {
             <StatusBadge key="status" status={finding.status ?? finding.workflowStatus} />,
             <SourceBadge key="source" source={sourceFor(finding, data)} />
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Configure account inventory</PrimaryLink>}
         />
       </Section>
     </>
@@ -650,6 +788,7 @@ export function RecommendationsView() {
             <StatusBadge key="status" status={item.status ?? item.workflowStatus} />,
             <SourceBadge key="source" source={sourceFor(item, data)} />
           ])}
+          empty={<PrimaryLink href="/dashboard/security">Review security findings</PrimaryLink>}
         />
       </Section>
     </>
@@ -679,6 +818,7 @@ export function GraphView() {
             text(node.awsAccountId ?? node.accountId),
             <StatusBadge key="status" status={node.status ?? node.state} />
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Configure inventory ingestion</PrimaryLink>}
         />
       </Section>
     </>
@@ -709,6 +849,7 @@ export function ScansView() {
             formatDate(run.startedAt ?? run.createdAt),
             formatDate(run.completedAt ?? run.finishedAt)
           ])}
+          empty={<PrimaryLink href="/dashboard/accounts">Review scanner readiness</PrimaryLink>}
         />
       </Section>
     </>
@@ -786,6 +927,7 @@ export function ReportsView() {
             formatDate(report.createdAt ?? report.updatedAt),
             <SourceBadge key="source" source={sourceFor(report, reports.data)} />
           ])}
+          empty={<PrimaryLink href="/dashboard/compliance">Review available evidence</PrimaryLink>}
         />
       </Section>
     </>
@@ -902,6 +1044,7 @@ export function MembersView() {
 export function RouteIcon({ name }: { name: string }) {
   const icons: Record<string, React.ReactNode> = {
     overview: <Activity size={16} />,
+    activity: <RadioTower size={16} />,
     accounts: <Cloud size={16} />,
     inventory: <Boxes size={16} />,
     security: <ShieldAlert size={16} />,
@@ -915,6 +1058,7 @@ export function RouteIcon({ name }: { name: string }) {
     reports: <FileText size={16} />,
     settings: <KeyRound size={16} />,
     members: <Users size={16} />,
+    profile: <User size={16} />,
     metrics: <BarChart3 size={16} />,
     branch: <GitBranch size={16} />
   };

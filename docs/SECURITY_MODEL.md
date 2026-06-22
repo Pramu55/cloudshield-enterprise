@@ -1,351 +1,106 @@
 # Security Model
 
-CloudShield Enterprise v1 is a read-only governance platform.
+CloudShield Enterprise v0.5.0 is a governed AWS security, inventory, evidence, and risk-workflow release candidate.
 
-The upgraded architecture uses a Fastify 5 backend, Zod 4 contracts, a Next.js frontend, Prisma, PostgreSQL, Redis, and BullMQ. These changes do not expand CloudShield beyond read-only governance behavior.
+Classification:
 
-CloudShield is enterprise-client-ready for consulting demos, but it must not be described as deployed to a real customer or as an official compliance certification product.
+`CLOUDSHIELD_AWS_UNVERIFIED_RELEASE_CANDIDATE_v0.5.0`
 
-## Allowed
+The platform has tested STS validation and read-only inventory code paths, but no real AWS account validation or production deployment has been performed.
 
-- Read AWS resource metadata in future scanner milestones.
-- Store normalized cloud inventory.
-- Detect security and cost findings.
-- Generate internal cloud governance evidence.
-- Generate CIS-inspired controls and SOC2-inspired evidence.
-- Generate safe remediation recommendations.
-- Track risk ownership, acceptance, and audit events.
+## Core Boundaries
 
-## Not Allowed
+- Tenant-owned data is scoped by authenticated `organizationId`.
+- Authorization uses capability checks rather than client-supplied roles.
+- Browser authentication uses HTTP-only session cookies.
+- Mutative routes require CSRF protection and origin validation.
+- Provider errors and evidence are projected through bounded response contracts.
+- External IDs, access keys, secret keys, session tokens, and raw provider payloads must never appear in API responses.
+- Sample and simulated records remain visibly labeled.
 
-- No automatic AWS mutation.
-- No deleting resources.
-- No terminating EC2 instances.
-- No modifying IAM.
-- No modifying S3 policies.
-- No modifying security groups.
-- No changing VPCs or networking.
-- No Terraform apply.
-- No automatic remediation.
-- No fake real-data claims.
-- No official compliance certification claims.
+## AWS Account And STS Validation
 
-## Recommendation Execution
+The account registry stores account metadata, role-ARN metadata, readiness state, and an External-ID-configured marker. It does not store the External ID value or long-lived AWS credentials.
 
-All foundation recommendations must use:
+The STS validation path exists and is tested. When explicitly enabled, it assumes the configured scanner role, calls `sts:GetCallerIdentity`, verifies account and role identity, records sanitized evidence, and returns no credentials or raw provider payload.
 
-```text
-canExecute = false
-blockedReason = "Automatic remediation is disabled in CloudShield v1."
-```
-
-This keeps remediation advisory-only.
-
-Seeded recommendations in the local runtime milestone are sample demo data only. They can include manual steps, CLI suggestion strings, and Terraform snippet strings for review, but CloudShield does not execute them.
-
-## Tenant Isolation
-
-Tenant-owned records include `organizationId`. Services must scope tenant-owned queries by organization.
-
-Authenticated API routes must derive `organizationId` from the verified JWT user context. Tenant-owned records must not be queried by ID alone.
-
-The local demo login is sample/demo only and must not be treated as a production identity provider.
-
-For the expanded tenant model, see `docs/SECURITY_AND_TENANT_ISOLATION.md`.
-
-## AWS Account Registry Safety
-
-The account registry milestone stores metadata only. It may store:
-
-- AWS account ID
-- Account display name
-- Environment
-- Owner team reference
-- Region list
-- Notes
-- Future role ARN and external ID placeholders
-
-It must not store AWS access keys, secret access keys, session tokens, or other long-lived AWS credentials.
-
-Registry validation is intentionally not implemented yet. The validation endpoint returns:
-
-```text
-VALIDATION_NOT_IMPLEMENTED
-Real AWS read-only validation will be added in the AWS read-only connector milestone. No AWS API calls were executed.
-```
-
-Safe archive sets an account registry record to disabled and records `archivedAt`. It does not delete AWS resources or mutate cloud state.
-
-## Read-Only AWS Connector Safety
-
-The connector defaults to disabled:
+Default configuration remains:
 
 ```text
 AWS_CONNECTOR_MODE=disabled
 ```
 
-When explicitly changed to `readonly-validation`, the connector may perform only STS `GetCallerIdentity` for identity validation. This milestone does not scan AWS inventory and does not call EC2, S3, IAM inventory, Security Group, VPC, CloudTrail, KMS, or billing APIs.
+Real AWS STS validation requires separate authorization and a dedicated non-production sandbox.
 
-Disabled mode must return `DISABLED` and `awsApiCallExecuted=false`. Optional real STS validation should only run when `AWS_CONNECTOR_MODE=readonly-validation` and the required role/external ID environment values are configured.
+## Read-Only Inventory
 
-CloudShield must not store AWS secret access keys, session tokens, or long-lived access keys. IAM role assumption with an external ID is the preferred future connection model.
+The onboarding preflight, inventory orchestration, queue, worker, and scanner pipeline exist and are tested with mocks and local records.
 
-## AWS Inventory Scanner Plan Safety
+When explicitly enabled, the Phase 1 scanner is limited to:
 
-The inventory scanner plan milestone keeps scanner execution disabled:
+- `ec2:DescribeRegions`
+- `ec2:DescribeVpcs`
+- `ec2:DescribeSubnets`
+- `ec2:DescribeSecurityGroups`
+- `ec2:DescribeInstances`
+- `ec2:DescribeVolumes`
 
-```text
-AWS_INVENTORY_SCANNER_MODE=disabled
-```
-
-The plan may describe future read-only AWS APIs, but CloudShield must not execute EC2, S3, IAM, Security Group, EBS, VPC, subnet, RDS, Lambda, CloudTrail, KMS, or billing inventory calls in this milestone.
-
-Scanner start attempts return a blocked response with `awsApiCallExecuted=false`. Worker inventory job types are also blocked. This preserves the read-only planning boundary while preparing a future company IT-level cloud governance platform.
-
-## Risk Workflow Safety
-
-Risk workflow actions update CloudShield records only. They do not call AWS, do not mutate cloud resources, do not execute remediation, and do not run Terraform apply.
-
-Every workflow route requires authentication and scopes finding lookup by `organizationId`. Each write action creates an `AuditEvent` with sanitized metadata and returns:
-
-```text
-awsApiCallExecuted=false
-mutationExecuted=false
-remediationExecuted=false
-```
-
-Risk acceptance requires business justification and an expiration date. Remediation plans are review-only records for human approval outside CloudShield.
-
-
----
-### Security Posture Rules Foundation Note
-* Security rules are strictly deterministic.
-* Rules evaluate stored CloudShield inventory records only.
-* No AWS scan is triggered by rule evaluation.
-* No AWS mutation is executed.
-* No automatic remediation is performed.
-* Findings contain evidence and business impact.
-* Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
-* Sample/demo data remains clearly labeled.
-## Compliance Evidence Center Safety
-
-Compliance evaluation is an internal CloudShield database workflow. It uses authenticated organization scope and maps only existing CloudShield records into CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence.
-
-Safety guarantees:
-
-- No AWS scan is triggered by compliance evaluation.
-- No AWS inventory API is called.
-- No AWS mutation is executed.
-- No automatic remediation is executed.
-- No Terraform apply is executed.
-- No official CIS/SOC2 certification is claimed.
-- Sample/demo evidence remains labeled.
-
-## Reports And Exports Safety
-
-Report previews are generated from CloudShield records only. Creating a report record writes `summaryJson` to the CloudShield database and does not create an official audit report file.
-
-Safety guarantees:
-
-- No AWS scan is triggered by report generation.
-- No AWS inventory/list API is called.
-- No AWS mutation is executed.
-# Security Model
-
-CloudShield Enterprise v1 is a governed cloud operations platform with strict mutation blocking.
-
-The upgraded architecture uses a Fastify 5 backend, Zod 4 contracts, a Next.js frontend, Prisma, PostgreSQL, Redis, and BullMQ. These changes do not expand CloudShield beyond read-only governance behavior.
-
-CloudShield is enterprise-client-ready for consulting demos, but it must not be described as deployed to a real customer or as an official compliance certification product.
-
-## Allowed
-
-- Read AWS resource metadata in future scanner milestones.
-- Store normalized cloud inventory.
-- Detect security and cost findings.
-- Generate internal cloud governance evidence.
-- Generate CIS-inspired controls and SOC2-inspired evidence.
-- Generate safe remediation recommendations.
-- Track risk ownership, acceptance, and audit events.
-- Create remediation plans and approval requests.
-- Track manual completion evidence.
-
-## Not Allowed
-
-- No automatic AWS mutation.
-- No deleting resources.
-- No terminating EC2 instances.
-- No modifying IAM.
-- No modifying S3 policies.
-- No modifying security groups.
-- No changing VPCs or networking.
-- No Terraform apply.
-- No automatic remediation.
-- No fake real-data claims.
-- No official compliance certification claims.
-
-## Recommendation Execution
-
-All foundation recommendations must use:
-
-```text
-canExecute = false
-blockedReason = "Automatic remediation is disabled in CloudShield v1."
-```
-
-This keeps remediation advisory-only.
-
-Seeded recommendations in the local runtime milestone are sample demo data only. They can include manual steps, CLI suggestion strings, and Terraform snippet strings for review, but CloudShield does not execute them.
-
-## Tenant Isolation
-
-Tenant-owned records include `organizationId`. Services must scope tenant-owned queries by organization.
-
-Authenticated API routes must derive `organizationId` from the verified JWT user context. Tenant-owned records must not be queried by ID alone.
-
-The local demo login is sample/demo only and must not be treated as a production identity provider.
-
-For the expanded tenant model, see `docs/SECURITY_AND_TENANT_ISOLATION.md`.
-
-## AWS Account Registry Safety
-
-The account registry milestone stores metadata only. It may store:
-
-- AWS account ID
-- Account display name
-- Environment
-- Owner team reference
-- Region list
-- Notes
-- Future role ARN and external ID placeholders
-
-It must not store AWS access keys, secret access keys, session tokens, or other long-lived AWS credentials.
-
-Registry validation is intentionally not implemented yet. The validation endpoint returns:
-
-```text
-VALIDATION_NOT_IMPLEMENTED
-Real AWS read-only validation will be added in the AWS read-only connector milestone. No AWS API calls were executed.
-```
-
-Safe archive sets an account registry record to disabled and records `archivedAt`. It does not delete AWS resources or mutate cloud state.
-
-## Read-Only AWS Connector Safety
-
-The connector defaults to disabled:
-
-```text
-AWS_CONNECTOR_MODE=disabled
-```
-
-When explicitly changed to `readonly-validation`, the connector may perform only STS `GetCallerIdentity` for identity validation. This milestone does not scan AWS inventory and does not call EC2, S3, IAM inventory, Security Group, VPC, CloudTrail, KMS, or billing APIs.
-
-Disabled mode must return `DISABLED` and `awsApiCallExecuted=false`. Optional real STS validation should only run when `AWS_CONNECTOR_MODE=readonly-validation` and the required role/external ID environment values are configured.
-
-CloudShield must not store AWS secret access keys, session tokens, or long-lived access keys. IAM role assumption with an external ID is the preferred future connection model.
-
-## AWS Inventory Scanner Plan Safety
-
-The inventory scanner plan milestone keeps scanner execution disabled:
+Default configuration remains:
 
 ```text
 AWS_INVENTORY_SCANNER_MODE=disabled
 ```
 
-The plan may describe future read-only AWS APIs, but CloudShield must not execute EC2, S3, IAM, Security Group, EBS, VPC, subnet, RDS, Lambda, CloudTrail, KMS, or billing inventory calls in this milestone.
+The scanner validates identity first, enforces account and region allowlists, paginates bounded Describe operations, reuses temporary credentials in memory, and persists normalized inventory rather than raw provider responses.
 
-Scanner start attempts return a blocked response with `awsApiCallExecuted=false`. Worker inventory job types are also blocked. This preserves the read-only planning boundary while preparing a future company IT-level cloud governance platform.
+## Security, Evidence, And Governance
 
-## Risk Workflow Safety
+- Security rules evaluate stored CloudShield inventory only.
+- Rule evaluation does not trigger an AWS scan or mutation.
+- Findings preserve `RULE_ENGINE` and resource provenance such as `SAMPLE` or `AWS_SYNC`.
+- Evidence snapshots are append-only and tenant scoped.
+- Risk workflow actions update CloudShield database records only.
+- Risk acceptance requires ownership, justification, expiration, and evidence linkage.
+- Compliance mappings are CIS-inspired and SOC2-inspired; no certification is claimed.
+- Executive scores distinguish scored, unavailable, disconnected, sample-only, stale, and blocked states.
 
-Risk workflow actions update CloudShield records only. They do not call AWS, do not mutate cloud resources, do not execute remediation, and do not run Terraform apply.
+## Governed Mutation-Capable Code
 
-Every workflow route requires authentication and scopes finding lookup by `organizationId`. Each write action creates an `AuditEvent` with sanitized metadata and returns:
+CloudShield contains a restricted future `ec2:CreateTags` path. Its presence must not be described as production mutation readiness.
 
-```text
-awsApiCallExecuted=false
-mutationExecuted=false
-remediationExecuted=false
-```
+The path is:
 
-Risk acceptance requires business justification and an expiration date. Remediation plans are governed records for human approval and manual execution outside CloudShield.
+- disabled by default with `AWS_CHANGE_EXECUTION_MODE=disabled`;
+- capability and tenant scoped;
+- limited to an allowlisted operation;
+- bound to an exact maker-checker approval;
+- protected by confirmation, idempotency, account, region, environment, and tag allowlists;
+- protected by authoritative resource-state fingerprint checks;
+- recorded with correlation, audit, evidence, and mutation-outcome classification;
+- blocked from automatic replay when the provider outcome is uncertain.
 
-## Governed Remediation Operations Safety
+No real AWS mutation was performed for v0.5.0. Automatic remediation, arbitrary AWS commands, Terraform apply, and automatic rollback are not enabled.
 
-CloudShield can create remediation plans, approval requests, approval decisions, manual completion records, and governance audit events. These workflows are real CloudShield database operations.
+## Local Workflow Safety
 
-They do not execute AWS mutation, Terraform apply, or automatic remediation. Generated AWS CLI and Terraform content is review guidance only and must be executed manually outside CloudShield under the user's production change process.
+Security finding lifecycle actions, remediation planning, approvals, risk acceptance, evidence history, reports, and compliance projection are real CloudShield database workflows. They do not by themselves call AWS.
 
+Generated CLI or Terraform text is review guidance only. CloudShield does not execute it.
 
----
-### Security Posture Rules Foundation Note
-* Security rules are strictly deterministic.
-* Rules evaluate stored CloudShield inventory records only.
-* No AWS scan is triggered by rule evaluation.
-* No AWS mutation is executed.
-* No automatic remediation is performed.
-* Findings contain evidence and business impact.
-* Compliance mapping is CIS-inspired/SOC2-inspired/internal only.
-* Sample/demo data remains clearly labeled.
-## Compliance Evidence Center Safety
+## Release Claims
 
-Compliance evaluation is an internal CloudShield database workflow. It uses authenticated organization scope and maps only existing CloudShield records into CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence.
+CloudShield v0.5.0 may be described as:
 
-Safety guarantees:
+- locally validated;
+- contract and type checked;
+- tested against PostgreSQL and Redis;
+- validated with mocked STS and read-only inventory behavior;
+- ready for a separately authorized, non-production read-only AWS validation track.
 
-- No AWS scan is triggered by compliance evaluation.
-- No AWS inventory API is called.
-- No AWS mutation is executed.
-- No automatic remediation is executed.
-- No Terraform apply is executed.
-- No official CIS/SOC2 certification is claimed.
-- Sample/demo evidence remains labeled.
+It must not be described as:
 
-## Reports And Exports Safety
-
-Report previews are generated from CloudShield records only. Creating a report record writes `summaryJson` to the CloudShield database and does not create an official audit report file.
-
-Safety guarantees:
-
-- No AWS scan is triggered by report generation.
-- No AWS inventory/list API is called.
-- No AWS mutation is executed.
-- No automatic remediation is executed.
-- No Terraform apply is executed.
-- No official audit report is claimed.
-- No official CIS/SOC2 certification is claimed.
-
-
----
-### Real AWS Integration and Company Deployment Note
-CloudShield is in the CLOUDSHIELD_REAL_AWS_INTEGRATION_AND_COMPANY_DEPLOYMENT_FOUNDATION_GREEN milestone.
-* **Non-Mutating STS Identity Gates**: Connection validation checks execute live `sts:GetCallerIdentity` calls to fetch caller identity context safely without any mutations.
-* **Read-Only AWS Inventory**: Inventory scan loops execute read-only Describe instances, security groups, volumes, VPCs, and subnets. Automatic remediation and Terraform write operations are strictly blocked.
-* **Secure Environment Credentials**: AWS credentials are never committed, logged, or saved in the database. Role assumption with an external ID is preferred.
-* **Deterministic Local Posture Rules**: Posture evaluations are executed against local PostgreSQL records only; no live AWS API calls occur during posture analyses.
-* **Clear Safety Banners**: Interactive modals require explicit warnings and confirmation checks prior to all STS connection tests or EC2 describe scans.
-## AWS Credential Readiness Safety
-
-CloudShield credential readiness is metadata-only. It inspects whether expected environment variables are present and reports booleans such as `awsRoleArnConfigured`, `roleBasedReadiness`, and `localAccessKeyFallbackDetected`.
-
-Safety guarantees:
-
-- No AWS credentials are committed.
-- No `.env` file is committed.
-- No AWS secret values are returned by API responses.
-- No credentials are stored in CloudShield DB.
-- No AWS validation is run by the readiness endpoint.
-- No AWS scanner is run.
-- No AWS mutation, Terraform apply, or automatic remediation is added.
-## AI-Assisted Automation Safety
-
-CloudShield automation is advisory automation. The deterministic intelligence engine can create assessment records, events, summaries, evidence/report records, and remediation plan drafts. It cannot auto-fix AWS, mutate cloud resources, run Terraform apply, or execute remediation.
-
-Credentials remain environment-only. The database stores readiness booleans and mode labels, not secret values.
-
-Default local mode is `EVALUATION`, where AWS execution is blocked and all automation output is generated from CloudShield DB records.
-# Read-only AWS Inventory Safety
-
-AWS inventory sync is allowlisted and disabled by default. Disabled mode returns `BLOCKED_DISABLED` with `awsApiCallExecuted=false` and `scannerRun=false`. Enabled mode validates `sts:GetCallerIdentity` first, checks the registered account match, and only calls the Phase 1 EC2 describe APIs documented in `docs/AWS_READONLY_INVENTORY_SYNC.md`.
-
-CloudShield does not persist AWS credentials, log secret values, run Terraform apply, execute automatic remediation, or call Create/Update/Delete/Put/Attach/Detach/Authorize/Revoke APIs.
+- validated against a real AWS account;
+- production deployed;
+- ready for production mutation or remediation;
+- formally audited or certified;
+- backed by an SLA or proven disaster-recovery exercise.

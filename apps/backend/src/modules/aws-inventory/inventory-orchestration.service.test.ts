@@ -6,6 +6,7 @@ import {
   classifyRelationshipSource,
   classifyInventoryFailure,
   normalizeScanLifecycleStatus,
+  projectInventoryEnvironment,
   relationshipCountsTowardAwsCoverage,
   relationshipExecutionEligibility,
   resolveRequestedRegions,
@@ -46,6 +47,15 @@ test("failure classifier maps safe retry and policy categories", () => {
   assert.equal(classifyInventoryFailure("production account blocked"), "PRODUCTION_BLOCKED");
   assert.equal(classifyInventoryFailure("request throttling"), "RATE_LIMITED");
   assert.equal(classifyInventoryFailure("network timeout"), "TRANSIENT_NETWORK");
+});
+
+test("unknown persisted environment fails closed without exposing the raw value", () => {
+  assert.throws(
+    () => projectInventoryEnvironment("unexpected-database-value"),
+    (error: unknown) => error instanceof Error
+      && error.message === "AWS account environment is not supported for inventory orchestration."
+      && !error.message.includes("unexpected-database-value")
+  );
 });
 
 test("reconciliation only marks AWS_SYNC resources stale after a successful region", () => {

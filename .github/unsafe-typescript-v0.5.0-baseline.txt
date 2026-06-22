@@ -1,0 +1,3 @@
+apps/backend/src/__tests__/aws-error-sanitization.test.ts|(error as any).$metadata = {
+apps/backend/src/__tests__/aws-error-sanitization.test.ts|(error as any).$fault = "client";
+apps/backend/src/__tests__/aws-error-sanitization.test.ts|} as any, "readonly");

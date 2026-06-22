@@ -66,3 +66,11 @@ Protected runtime endpoints require `Authorization: Bearer <accessToken>`.
 No AWS credentials are required. No real AWS scanner is included. No AWS SDK scan execution, AWS mutation, Terraform apply, or automatic remediation is included.
 
 Compliance wording remains limited to CIS-inspired controls, SOC2-inspired evidence, and internal cloud governance evidence.
+
+## Local Runtime and Database Readiness
+
+The `GET /ready` route acts as a safe validation gate ensuring the database connection is alive and migrations are fully up to date, without exposing internal database errors.
+
+### Health vs Ready
+- `/health`: Always returns `ok` if the HTTP server is alive. Used for basic liveness checks.
+- `/ready`: Executes a bounded `SELECT 1` query to verify PostgreSQL connectivity. Returns `ready` if successful and migrations are valid; returns `not_ready` if down or stuck. Raw Prisma details and stack traces are stripped for security.

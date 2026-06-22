@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import {
   AutomationSafety,
@@ -22,6 +23,7 @@ const AssessmentParamsSchema = z.object({
 export async function registerAutomationRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/v1/automation/assessment/start", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_MANAGE);
     const mode = resolveAssessmentMode(app.config);
     const assessment = await prisma.automationAssessment.create({
       data: {
@@ -49,6 +51,7 @@ export async function registerAutomationRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/automation/assessment/:assessmentId", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_READ);
     const { assessmentId } = AssessmentParamsSchema.parse(request.params);
     const assessment = await prisma.automationAssessment.findFirst({
       where: { id: assessmentId, organizationId: auth.organizationId },
@@ -72,6 +75,7 @@ export async function registerAutomationRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/automation/assessment/:assessmentId/events", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_READ);
     const { assessmentId } = AssessmentParamsSchema.parse(request.params);
     const exists = await prisma.automationAssessment.findFirst({
       where: { id: assessmentId, organizationId: auth.organizationId },
@@ -95,6 +99,7 @@ export async function registerAutomationRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/automation/latest", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_READ);
     const assessment = await prisma.automationAssessment.findFirst({
       where: scopeByOrganization(auth.organizationId),
       include: {
@@ -128,6 +133,7 @@ export async function registerAutomationRoutes(app: FastifyInstance): Promise<vo
 
   app.get("/api/v1/intelligence/summary", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_READ);
     const latest = await prisma.intelligenceSummary.findFirst({
       where: scopeByOrganization(auth.organizationId),
       orderBy: { createdAt: "desc" }

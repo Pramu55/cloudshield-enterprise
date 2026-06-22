@@ -3,6 +3,7 @@ import helmet from "@fastify/helmet";
 import fastifyCookie from "@fastify/cookie";
 import fastifyCsrfProtection from "@fastify/csrf-protection";
 import rateLimit from "@fastify/rate-limit";
+import { normalizeOrGenerateCorrelationId } from "@cloudshield/utils";
 import Fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import { registerEnvPlugin } from "./plugins/env.js";
 import { registerErrorPlugin } from "./plugins/errors.js";
@@ -26,18 +27,10 @@ import { registerTeamsRoutes } from "./routes/teams.routes.js";
 import { registerSearchRoutes } from "./routes/search.routes.js";
 import { registerDashboardRoutes } from "./routes/dashboard.routes.js";
 import { registerMonitoringRoutes } from "./routes/monitoring.routes.js";
-import { randomUUID } from "node:crypto";
-
 export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     ...opts,
-    genReqId: (req) => {
-      const headerId = req.headers["x-correlation-id"];
-      if (typeof headerId === "string" && /^[a-zA-Z0-9-]{10,100}$/.test(headerId)) {
-        return headerId;
-      }
-      return randomUUID();
-    }
+    genReqId: (request) => normalizeOrGenerateCorrelationId(request.headers["x-correlation-id"])
   });
 
   app.addHook("onSend", async (request, reply, payload) => {
@@ -79,6 +72,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
     cookieOpts: {
       signed: false,
       httpOnly: true,
+      path: "/",
       sameSite: "lax",
       secure: process.env.AUTH_COOKIE_SECURE === "true"
     },
