@@ -1,17 +1,22 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   AwsCredentialReadinessResponseSchema,
   AwsConnectorStatusResponseSchema,
   ValidateReadonlyConnectionResponseSchema,
   AwsIdentityValidationResponseSchema,
+  AwsStsValidationResponseSchema,
   type AwsReadonlyValidationStatus,
   type AwsIdentityValidationStatus
 } from "@cloudshield/contracts";
 import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
 import { prisma } from "@cloudshield/database";
+import type { Prisma } from "@cloudshield/database";
 import { getAwsConnectorConfig } from "../modules/aws-connector/aws-connector.config.js";
-import { AwsConnectorService } from "../modules/aws-connector/aws-connector.service.js";
+import {
+  AwsConnectorService,
+  AwsStsValidationError
+} from "../modules/aws-connector/aws-connector.service.js";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import {
@@ -60,6 +65,7 @@ export async function registerAwsConnectorRoutes(
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
+      emptyValidationBodySchema.parse(request.body ?? {});
       const accountId = accountParamsSchema.parse(request.params).accountId;
       const account = await findAccountForOrganization(
         auth.organizationId,
@@ -74,16 +80,106 @@ export async function registerAwsConnectorRoutes(
         return;
       }
 
-      const result = await getConnectorService(app).validateIdentity(account.accountId);
-      
-      await prisma.awsAccount.update({
-        where: { id: account.id },
-        data: {
-          connectionStatus: mapIdentityValidationStatusToConnectionStatus(result.status)
-        }
-      });
+      if (account.archivedAt || account.connectionStatus === "DISABLED") {
+        reply.status(409).send({
+          error: "aws_account_disabled",
+          message: "Archived or disabled AWS account records cannot be validated.",
+          correlationId: request.id
+        });
+        return;
+      }
+      if (account.environment === "prod") {
+        reply.status(403).send({
+          error: "production_sts_validation_blocked",
+          message: "Production AWS account validation is blocked by the current safeguards.",
+          correlationId: request.id
+        });
+        return;
+      }
 
-      return AwsIdentityValidationResponseSchema.parse(result);
+      const auditBase = {
+        awsAccountRegistryId: account.id,
+        expectedAccountId: account.accountId,
+        roleName: configuredRoleName(app.config.AWS_ROLE_ARN),
+        validationMode: "STS_ONLY",
+        correlationId: request.id,
+        awsApiCallExecuted: false
+      };
+      try {
+        await createStsValidationAudit(auth, account.id, "AWS_STS_VALIDATION_REQUESTED", auditBase);
+      } catch {
+        sendStsPersistenceFailure(request, reply, false);
+        return;
+      }
+      request.log.info({
+        correlationId: request.id,
+        awsAccountRegistryId: account.id,
+        validationMode: "STS_ONLY"
+      }, "AWS STS validation requested");
+
+      let serviceResult;
+      try {
+        serviceResult = await getConnectorService(app).validateStsOnly(account.accountId, request.id);
+      } catch (error) {
+        if (!(error instanceof AwsStsValidationError)) throw error;
+
+        try {
+          await prisma.awsAccount.update({
+            where: { id: account.id },
+            data: { connectionStatus: mapStsFailureToConnectionStatus(error.classification) }
+          });
+          await createStsValidationAudit(auth, account.id, "AWS_STS_VALIDATION_FAILED", {
+            ...auditBase,
+            failureClassification: error.classification,
+            awsApiCallExecuted: error.awsApiCallExecuted,
+            ...(error.providerRequestId ? { providerRequestId: error.providerRequestId } : {})
+          });
+        } catch {
+          sendStsPersistenceFailure(request, reply, error.awsApiCallExecuted);
+          return;
+        }
+
+        request.log.warn({
+          correlationId: request.id,
+          awsAccountRegistryId: account.id,
+          validationMode: "STS_ONLY",
+          failureClassification: error.classification
+        }, "AWS STS validation failed");
+        reply.status(stsFailureStatusCode(error)).send({
+          error: error.classification,
+          message: error.message,
+          retryable: error.retryable,
+          awsApiCallExecuted: error.awsApiCallExecuted,
+          correlationId: request.id,
+          ...(error.providerRequestId ? { providerRequestId: error.providerRequestId } : {})
+        });
+        return;
+      }
+
+      const result = AwsStsValidationResponseSchema.parse(serviceResult);
+      try {
+        await prisma.awsAccount.update({
+          where: { id: account.id },
+          data: { connectionStatus: "VALIDATION_SUCCEEDED" }
+        });
+        await createStsValidationAudit(auth, account.id, "AWS_STS_VALIDATION_SUCCEEDED", {
+          ...auditBase,
+          validatedAccountId: result.accountId,
+          maskedPrincipalArn: result.maskedPrincipalArn,
+          roleName: result.roleName,
+          awsApiCallExecuted: true,
+          ...(result.providerRequestId ? { providerRequestId: result.providerRequestId } : {})
+        });
+        request.log.info({
+          correlationId: request.id,
+          awsAccountRegistryId: account.id,
+          validationMode: "STS_ONLY"
+        }, "AWS STS validation succeeded");
+      } catch {
+        sendStsPersistenceFailure(request, reply, true);
+        return;
+      }
+      return result;
     }
   );
 
@@ -269,6 +365,64 @@ function scannerStatusLabel(status: string) {
 const accountParamsSchema = z.object({
   accountId: z.string().min(1).max(64)
 });
+
+const emptyValidationBodySchema = z.object({}).strict();
+
+async function createStsValidationAudit(
+  auth: { organizationId: string; userId: string },
+  accountId: string,
+  action: string,
+  metadata: Prisma.InputJsonObject
+) {
+  return prisma.auditEvent.create({
+    data: {
+      organizationId: auth.organizationId,
+      actorUserId: auth.userId,
+      action,
+      targetType: "AWS_ACCOUNT",
+      targetId: accountId,
+      metadata
+    }
+  });
+}
+
+function configuredRoleName(roleArn: string) {
+  const match = /^arn:aws(?:-us-gov|-cn)?:iam::\d{12}:role\/(.{1,128})$/.exec(roleArn);
+  return match?.[1]?.split("/").at(-1) ?? null;
+}
+
+function mapStsFailureToConnectionStatus(classification: string) {
+  if (classification === "ASSUME_ROLE_ACCESS_DENIED") return "PERMISSION_DENIED";
+  if (classification === "STS_AUTHENTICATION_FAILED") return "AUTH_FAILED";
+  if (classification === "STS_VALIDATION_DISABLED") return "DISABLED";
+  return "VALIDATION_FAILED";
+}
+
+function stsFailureStatusCode(error: AwsStsValidationError) {
+  if (error.retryable) return 503;
+  if (["ACCOUNT_IDENTITY_MISMATCH", "ROLE_PRINCIPAL_MISMATCH"].includes(error.classification)) return 409;
+  if (["STS_VALIDATION_DISABLED", "ACCOUNT_NOT_ALLOWLISTED", "ASSUME_ROLE_ACCESS_DENIED"].includes(error.classification)) return 403;
+  return 500;
+}
+
+function sendStsPersistenceFailure(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  awsApiCallExecuted: boolean
+) {
+  request.log.error({
+    correlationId: request.id,
+    validationMode: "STS_ONLY",
+    awsApiCallExecuted,
+    failureClassification: "STS_VALIDATION_PERSISTENCE_FAILED"
+  }, "AWS STS validation evidence persistence failed");
+  reply.status(500).send({
+    error: "sts_validation_persistence_failed",
+    message: "AWS STS validation evidence could not be persisted.",
+    awsApiCallExecuted,
+    correlationId: request.id
+  });
+}
 
 function getConnectorService(app: FastifyInstance) {
   return new AwsConnectorService(getAwsConnectorConfig(app.config));

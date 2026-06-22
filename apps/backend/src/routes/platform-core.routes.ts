@@ -1,14 +1,18 @@
 import type { FastifyInstance } from "fastify";
-import { Queue } from "bullmq";
+import { Queue, type JobType } from "bullmq";
 import { z } from "zod";
 import {
   CLOUD_ASSESSMENT_QUEUE_NAME,
   CLOUD_INVENTORY_SYNC_QUEUE_NAME,
-  GOVERNED_AWS_CHANGE_QUEUE_NAME
+  CLOUD_SCAN_QUEUE_NAME,
+  GOVERNED_AWS_CHANGE_QUEUE_NAME,
+  SECURITY_MONITORING_QUEUE_NAME,
+  PlatformOperationsHealthResponseSchema
 } from "@cloudshield/contracts";
 import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
-import { optionalEnv } from "@cloudshield/utils";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import { createQueueConnection } from "../modules/queue/queue-connection.js";
 import {
   PLATFORM_CORE_SAFETY_FLAGS,
   buildAccountDetail,
@@ -60,17 +64,20 @@ const settingsBodySchema = z.object({
 export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/v1/platform/overview", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     return buildPlatformOverview(auth.organizationId, app.config);
   });
 
   app.get("/api/v1/platform/activity", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.AUDIT_READ);
     const query = paginationQuerySchema.parse(request.query);
     return buildPlatformActivity(auth.organizationId, query);
   });
 
   app.get("/api/v1/platform/accounts/:id/detail", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
     const { id } = idParamsSchema.parse(request.params);
     const detail = await buildAccountDetail(auth.organizationId, id);
     if (!detail) {
@@ -82,6 +89,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.get("/api/v1/platform/resources/:id/detail", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
     const { id } = idParamsSchema.parse(request.params);
     const detail = await buildResourceDetail(auth.organizationId, id);
     if (!detail) {
@@ -93,6 +101,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.get("/api/v1/saved-views", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_READ);
     const query = z.object({
       workspace: savedViewBodySchema.shape.workspace.optional()
     }).parse(request.query);
@@ -120,6 +129,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.post("/api/v1/saved-views", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_UPDATE);
     const body = savedViewBodySchema.parse(request.body);
     const { filters, sort } = validateSavedViewPayload(body);
     const safeFilters = toJson(filters);
@@ -201,6 +211,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.get("/api/v1/platform/settings", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_READ);
     const [organization, accounts, teams] = await Promise.all([
       prisma.organization.findFirstOrThrow({ where: { id: auth.organizationId } }),
       prisma.awsAccount.findMany({ where: scopeByOrganization(auth.organizationId), select: { id: true, name: true, environment: true, changeExecutionEnabled: true } }),
@@ -225,11 +236,8 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.patch("/api/v1/platform/settings", { preHandler: requireAuth }, async (request, reply) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.SETTINGS_UPDATE);
     const body = settingsBodySchema.parse(request.body);
-    if (auth.role !== "admin" && auth.role !== "owner") {
-      reply.status(403).send({ error: "forbidden", message: "Only organization administrators can update platform settings." });
-      return;
-    }
     await audit(auth.organizationId, auth.userId, "settings.platform.updated", "organization", auth.organizationId, {
       changedFields: Object.keys(body),
       secretsReturned: false,
@@ -244,6 +252,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
 
   app.get("/api/v1/platform/operations-health", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.OPERATIONS_READ);
     const queues = await getQueueHealth();
     const [
       lastSuccessfulScan,
@@ -271,8 +280,32 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
         take: 10
       })
     ]);
+    const FailedRegionArraySchema = z.array(z.object({
+      region: z.string(),
+      failureClassification: z.string().nullable().optional()
+    }));
+
+    function getSafeFailureClassification(rawClassification: unknown) {
+      if (typeof rawClassification === "string") {
+        if (rawClassification === "NETWORK_UNREACHABLE") return "NETWORK_UNREACHABLE";
+        if (rawClassification === "AUTH_FAILED") return "AUTH_FAILED";
+        if (rawClassification === "PERMISSION_DENIED") return "PERMISSION_DENIED";
+        if (rawClassification === "RATE_LIMITED") return "RATE_LIMITED";
+      }
+      return "UNKNOWN_SAFE_CLASSIFICATION" as const;
+    }
+
+    const safeRecentFailures = recentRegionFailures.map(scan => {
+      const parsedRegions = FailedRegionArraySchema.safeParse(scan.failedRegions);
+      const regions = parsedRegions.success ? parsedRegions.data : [];
+      return {
+        ...scan,
+        regions
+      };
+    });
+
     const configuredRegions = new Set(accounts.flatMap((account) => account.regions));
-    return {
+    const responsePayload = {
       api: "ok",
       database: "configured",
       redis: queues.redis,
@@ -290,58 +323,110 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
           blockedAccounts: accounts.filter((account) => account.archivedAt || account.connectionStatus === "DISABLED" || account.status === "AUTH_FAILED").length,
           configuredRegions: configuredRegions.size
         },
-        regionFailures: recentRegionFailures.flatMap((scan) =>
-          Array.isArray(scan.failedRegions)
-            ? (scan.failedRegions as any[]).map((failure) => ({
-                scanRunId: scan.id,
-                awsAccountId: scan.awsAccountId,
-                region: failure.region,
-                failureClassification: failure.failureClassification ?? scan.failureClassification,
-                completedAt: scan.completedAt?.toISOString() ?? null
-              }))
-            : []
-        )
+        regionFailureSummary: {
+          totalFailures: safeRecentFailures.reduce((acc, scan) => acc + scan.regions.length, 0),
+          affectedRegionCount: new Set(safeRecentFailures.flatMap((scan) => scan.regions.map((f) => f.region))).size,
+          classifications: Array.from(new Set(safeRecentFailures.flatMap((scan) => scan.regions.map((f) => {
+            return getSafeFailureClassification(f.failureClassification ?? scan.failureClassification);
+          }))))
+        }
       },
-      lastSuccessfulScan: lastSuccessfulScan ? { id: lastSuccessfulScan.id, completedAt: lastSuccessfulScan.completedAt?.toISOString() ?? null } : null,
-      lastFailedScan: lastFailedScan ? { id: lastFailedScan.id, failureClassification: lastFailedScan.failureClassification ?? lastFailedScan.errorCode, completedAt: lastFailedScan.completedAt?.toISOString() ?? null } : null,
+      lastSuccessfulScanAt: lastSuccessfulScan?.completedAt?.toISOString() ?? null,
+      lastFailedScanAt: lastFailedScan?.completedAt?.toISOString() ?? null,
+      lastFailureClassification: lastFailedScan ? getSafeFailureClassification(lastFailedScan.failureClassification ?? lastFailedScan.errorCode) : null,
       executionMode: app.config.AWS_CHANGE_EXECUTION_MODE,
       scannerMode: app.config.AWS_INVENTORY_SCANNER_MODE,
-      ...PLATFORM_CORE_SAFETY_FLAGS
-    };
+      awsApiCallExecuted: false,
+      scannerRun: false,
+      mutationExecuted: false,
+      terraformApplyExecuted: false,
+      automaticRemediationExecuted: false
+    } as const;
+
+    try {
+      return PlatformOperationsHealthResponseSchema.parse(responsePayload);
+    } catch {
+      app.log.error("OPERATIONS_HEALTH_CONTRACT_INVALID");
+      throw new Error("Unexpected backend error");
+    }
   });
 }
 
-async function getQueueHealth() {
-  const connection = {
-    host: optionalEnv("REDIS_HOST", "localhost"),
-    port: Number(optionalEnv("REDIS_PORT", "6379")),
-    maxRetriesPerRequest: null
-  };
-  const queues = [
-    CLOUD_INVENTORY_SYNC_QUEUE_NAME,
-    CLOUD_ASSESSMENT_QUEUE_NAME,
-    GOVERNED_AWS_CHANGE_QUEUE_NAME
-  ];
-  const handles = process.env.DISABLE_QUEUE_CONNECTIONS_FOR_TESTS === "true" ? queues.map(name => ({ name, getJobCounts: async () => ({}) } as unknown as Queue)) : queues.map((name) => new Queue(name, { connection }));
+export type QueueHealthHandle = {
+  name: string;
+  close: () => Promise<void>;
+  getJobCounts: (...types: JobType[]) => Promise<Record<string, number>>;
+  isPaused: () => Promise<boolean>;
+  getWaiting: (start: number, end: number) => Promise<Array<{ timestamp?: number }>>;
+};
+
+export async function collectQueueHealth(handles: QueueHealthHandle[]) {
   try {
-    const counts = await Promise.all(handles.map(async (queue) => ({
-      name: queue.name,
-      counts: await queue.getJobCounts("waiting", "active", "completed", "failed", "delayed")
-    })));
+    const items = await Promise.all(handles.map(async (queue) => {
+      try {
+        const [counts, paused, waitingJobs] = await Promise.all([
+          queue.getJobCounts("waiting", "active", "completed", "failed", "delayed", "paused"),
+          queue.isPaused(),
+          queue.getWaiting(0, 0)
+        ]);
+        const oldestWaitingJob = waitingJobs[0];
+        const oldestWaitingAgeMs = oldestWaitingJob?.timestamp
+          ? Math.max(0, Date.now() - oldestWaitingJob.timestamp)
+          : null;
+        return {
+          name: queue.name,
+          status: "ok",
+          counts: {
+            waiting: counts.waiting ?? 0,
+            active: counts.active ?? 0,
+            delayed: counts.delayed ?? 0,
+            failed: counts.failed ?? 0,
+            completed: counts.completed ?? 0,
+            paused: counts.paused ?? 0
+          },
+          paused,
+          oldestWaitingAgeMs
+        };
+      } catch {
+        return {
+          name: queue.name,
+          status: "degraded",
+          counts: null,
+          paused: null,
+          oldestWaitingAgeMs: null
+        };
+      }
+    }));
+    const degraded = items.some((item) => item.status !== "ok");
     return {
-      redis: "reachable",
+      redis: degraded ? "degraded" : "reachable",
       workerHeartbeat: "queue-counts-available",
-      items: counts
-    };
-  } catch {
-    return {
-      redis: "unreachable",
-      workerHeartbeat: "unknown",
-      items: queues.map((name) => ({ name, counts: null }))
+      items
     };
   } finally {
     await Promise.allSettled(handles.map((queue) => queue.close()));
   }
+}
+
+async function getQueueHealth() {
+  const connection = createQueueConnection();
+  const queues = [
+    CLOUD_SCAN_QUEUE_NAME,
+    CLOUD_INVENTORY_SYNC_QUEUE_NAME,
+    CLOUD_ASSESSMENT_QUEUE_NAME,
+    GOVERNED_AWS_CHANGE_QUEUE_NAME,
+    SECURITY_MONITORING_QUEUE_NAME
+  ];
+  const handles: QueueHealthHandle[] = process.env.DISABLE_QUEUE_CONNECTIONS_FOR_TESTS === "true"
+    ? queues.map((name) => ({
+        name,
+        close: async () => {},
+        getJobCounts: async () => ({}),
+        isPaused: async () => false,
+        getWaiting: async () => []
+      }))
+    : queues.map((name) => new Queue(name, { connection }));
+  return collectQueueHealth(handles);
 }
 
 async function audit(

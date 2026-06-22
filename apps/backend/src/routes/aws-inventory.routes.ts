@@ -36,7 +36,7 @@ export async function registerAwsInventoryRoutes(
         reply.status(409).send(result);
         return;
       }
-      reply.status(body.dryRun ? 200 : 202).send(result);
+      reply.status(result.status === "QUEUED" ? 202 : 200).send(result);
     }
   );
 

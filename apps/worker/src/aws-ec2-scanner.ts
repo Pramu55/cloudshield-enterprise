@@ -19,6 +19,12 @@ const SUPPORTED_RESOURCE_TYPES = [
   "VPC",
   "SUBNET"
 ];
+const SUPPORTED_RELATIONSHIP_TYPES = [
+  "RESIDES_IN",
+  "ASSOCIATED_WITH",
+  "ATTACHED_TO"
+];
+const MAX_AWS_PAGES = 100;
 
 type ExecuteEc2ScanOptions = {
   regions?: string[];
@@ -49,6 +55,12 @@ type RegionCounts = {
 type SavedResource = {
   id: string;
   changed: "created" | "updated" | "unchanged";
+};
+
+type ScannerCredentials = {
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
 };
 
 export async function executeEc2Scan(
@@ -165,16 +177,42 @@ export async function executeEc2Scan(
     archived: 0
   };
 
+  let credentials: Awaited<ReturnType<typeof assumeScannerRole>>;
+  try {
+    const identityRegion = regions[0] ?? process.env.AWS_REGION_DEFAULT ?? "us-east-1";
+    credentials = await assumeScannerRole(identityRegion);
+    const sts = new STSClient({ region: identityRegion, credentials });
+    const identity = await sts.send(new GetCallerIdentityCommand({}));
+    if (identity.Account !== account.accountId) {
+      throw namedError("AccountMismatch", "STS identity did not match the registered AWS account.");
+    }
+  } catch (error) {
+    const failureClassification = classifyAwsError(error);
+    await updateScan(scanRunId, {
+      status: "FAILED",
+      phase: "identity_failed",
+      completedAt: new Date(),
+      errorCode: failureClassification,
+      errorMessage: safeFailureSummary(failureClassification),
+      failureClassification,
+      failureCount: 1,
+      metadata: toJson({
+        awsApiCallExecuted: true,
+        mutationExecuted: false,
+        rawAwsResponsesStored: false
+      })
+    });
+    await audit(organizationId, scanRunId, "inventory.identity.failed", {
+      failureClassification,
+      awsApiCallExecuted: true,
+      mutationExecuted: false
+    });
+    return { status: "FAILED", awsApiCallExecuted: true };
+  }
+
   for (const region of regions) {
     const startedAt = new Date();
     try {
-      const credentials = await assumeScannerRole(region);
-      const sts = new STSClient({ region, credentials });
-      const identity = await sts.send(new GetCallerIdentityCommand({}));
-      if (identity.Account !== account.accountId) {
-        throw namedError("AccountMismatch", "STS identity did not match the registered AWS account.");
-      }
-
       const counts = await scanRegion({
         organizationId,
         awsAccountId,
@@ -283,7 +321,7 @@ async function scanRegion(input: {
   awsAccountId: string;
   scanRunId: string;
   region: string;
-  credentials: any;
+  credentials: ScannerCredentials;
   account: any;
 }): Promise<RegionCounts> {
   await updateScan(input.scanRunId, { phase: `syncing_${input.region}` });
@@ -301,19 +339,13 @@ async function scanRegion(input: {
     archived: 0
   };
 
-  const [instancesRes, sgRes, volRes, vpcRes, subnetRes] = await Promise.all([
-    ec2.send(new DescribeInstancesCommand({})),
-    ec2.send(new DescribeSecurityGroupsCommand({})),
-    ec2.send(new DescribeVolumesCommand({})),
-    ec2.send(new DescribeVpcsCommand({})),
-    ec2.send(new DescribeSubnetsCommand({}))
+  const [instances, securityGroups, volumes, vpcs, subnets] = await Promise.all([
+    collectInstances(ec2),
+    collectSecurityGroups(ec2),
+    collectVolumes(ec2),
+    collectVpcs(ec2),
+    collectSubnets(ec2)
   ]);
-
-  const instances = instancesRes.Reservations?.flatMap((reservation) => reservation.Instances || []) || [];
-  const securityGroups = sgRes.SecurityGroups || [];
-  const volumes = volRes.Volumes || [];
-  const vpcs = vpcRes.Vpcs || [];
-  const subnets = subnetRes.Subnets || [];
 
   for (const vpc of vpcs) {
     if (!vpc.VpcId) continue;
@@ -358,7 +390,7 @@ async function scanRegion(input: {
 
   const staleResult = await markMissingResourcesStale(input, seenResourceIds);
   counts.stale = staleResult.count;
-  await markMissingRelationshipsStale(input.organizationId, input.scanRunId, relationshipKeys);
+  await markMissingRelationshipsStale(input, relationshipKeys);
   return counts;
 }
 
@@ -543,13 +575,29 @@ async function markMissingResourcesStale(
   });
 }
 
-async function markMissingRelationshipsStale(
-  organizationId: string,
-  scanRunId: string,
+export async function markMissingRelationshipsStale(
+  input: {
+    organizationId: string;
+    awsAccountId: string;
+    region: string;
+    scanRunId: string;
+  },
   seenKeys: Set<string>
 ) {
   const relationships = await prisma.resourceRelationship.findMany({
-    where: { organizationId, sourceClassification: "AWS_SYNC", staleAt: null },
+    where: {
+      organizationId: input.organizationId,
+      sourceClassification: "AWS_SYNC",
+      relationshipType: { in: SUPPORTED_RELATIONSHIP_TYPES },
+      staleAt: null,
+      sourceResource: {
+        awsAccountId: input.awsAccountId,
+        region: input.region
+      },
+      targetResource: {
+        awsAccountId: input.awsAccountId
+      }
+    },
     select: { id: true, sourceResourceId: true, targetResourceId: true, relationshipType: true }
   });
   const staleIds = relationships
@@ -557,9 +605,69 @@ async function markMissingRelationshipsStale(
     .map((relationship) => relationship.id);
   if (!staleIds.length) return;
   await prisma.resourceRelationship.updateMany({
-    where: { organizationId, id: { in: staleIds } },
-    data: { staleAt: new Date(), lastScanRunId: scanRunId }
+    where: { organizationId: input.organizationId, id: { in: staleIds } },
+    data: { staleAt: new Date(), lastScanRunId: input.scanRunId }
   });
+}
+
+export async function collectInstances(client: EC2Client) {
+  const items = [];
+  let nextToken: string | undefined;
+  for (let page = 0; page < MAX_AWS_PAGES; page += 1) {
+    const response = await client.send(new DescribeInstancesCommand({ NextToken: nextToken }));
+    items.push(...(response.Reservations?.flatMap((reservation) => reservation.Instances ?? []) ?? []));
+    nextToken = response.NextToken;
+    if (!nextToken) return items;
+  }
+  throw namedError("PageLimitExceeded", "AWS pagination exceeded the configured safe page limit.");
+}
+
+export async function collectSecurityGroups(client: EC2Client) {
+  const items = [];
+  let nextToken: string | undefined;
+  for (let page = 0; page < MAX_AWS_PAGES; page += 1) {
+    const response = await client.send(new DescribeSecurityGroupsCommand({ NextToken: nextToken }));
+    items.push(...(response.SecurityGroups ?? []));
+    nextToken = response.NextToken;
+    if (!nextToken) return items;
+  }
+  throw namedError("PageLimitExceeded", "AWS pagination exceeded the configured safe page limit.");
+}
+
+export async function collectVolumes(client: EC2Client) {
+  const items = [];
+  let nextToken: string | undefined;
+  for (let page = 0; page < MAX_AWS_PAGES; page += 1) {
+    const response = await client.send(new DescribeVolumesCommand({ NextToken: nextToken }));
+    items.push(...(response.Volumes ?? []));
+    nextToken = response.NextToken;
+    if (!nextToken) return items;
+  }
+  throw namedError("PageLimitExceeded", "AWS pagination exceeded the configured safe page limit.");
+}
+
+export async function collectVpcs(client: EC2Client) {
+  const items = [];
+  let nextToken: string | undefined;
+  for (let page = 0; page < MAX_AWS_PAGES; page += 1) {
+    const response = await client.send(new DescribeVpcsCommand({ NextToken: nextToken }));
+    items.push(...(response.Vpcs ?? []));
+    nextToken = response.NextToken;
+    if (!nextToken) return items;
+  }
+  throw namedError("PageLimitExceeded", "AWS pagination exceeded the configured safe page limit.");
+}
+
+export async function collectSubnets(client: EC2Client) {
+  const items = [];
+  let nextToken: string | undefined;
+  for (let page = 0; page < MAX_AWS_PAGES; page += 1) {
+    const response = await client.send(new DescribeSubnetsCommand({ NextToken: nextToken }));
+    items.push(...(response.Subnets ?? []));
+    nextToken = response.NextToken;
+    if (!nextToken) return items;
+  }
+  throw namedError("PageLimitExceeded", "AWS pagination exceeded the configured safe page limit.");
 }
 
 async function assumeScannerRole(region: string) {
@@ -673,6 +781,7 @@ function classifyAwsError(error: any) {
   if (text.includes("Expired")) return "EXPIRED_CREDENTIALS";
   if (text.includes("Throttl")) return "RATE_LIMITED";
   if (text.includes("Networking") || text.includes("Timeout")) return "TRANSIENT_NETWORK";
+  if (text.includes("PageLimitExceeded")) return "PAGE_LIMIT_EXCEEDED";
   return "AWS_SCAN_FAILED";
 }
 
@@ -687,7 +796,8 @@ function safeFailureSummary(classification: string) {
     INVALID_ROLE_CONFIGURATION: "Scanner role configuration is incomplete.",
     EXPIRED_CREDENTIALS: "Temporary credentials expired.",
     RATE_LIMITED: "AWS throttling or rate limit was encountered.",
-    TRANSIENT_NETWORK: "A temporary network or timeout error was encountered."
+    TRANSIENT_NETWORK: "A temporary network or timeout error was encountered.",
+    PAGE_LIMIT_EXCEEDED: "AWS pagination exceeded the configured safe page limit."
   };
   return summaries[classification] ?? "Inventory scan failed with a safe classified error.";
 }
@@ -698,14 +808,30 @@ function namedError(name: string, message: string) {
   return error;
 }
 
-function resourceFingerprint(resource: any) {
+export function resourceFingerprint(resource: {
+  name?: unknown;
+  region?: unknown;
+  status?: unknown;
+  tags?: unknown;
+  metadata?: unknown;
+}) {
   return JSON.stringify({
     name: resource.name ?? null,
     region: resource.region ?? null,
     status: resource.status ?? null,
     tags: resource.tags ?? {},
-    metadata: resource.metadata ?? {}
+    metadata: stableResourceMetadata(resource.metadata)
   });
+}
+
+function stableResourceMetadata(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  const aws = record.aws;
+  return {
+    source: record.source ?? null,
+    aws: aws && typeof aws === "object" && !Array.isArray(aws) ? aws : {}
+  };
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue {

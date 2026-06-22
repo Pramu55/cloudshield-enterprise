@@ -5,7 +5,7 @@ import { prisma } from "@cloudshield/database";
 import { cloudScanQueue } from "../modules/aws-inventory/aws-inventory.queue.js";
 import { cloudAssessmentQueue } from "../modules/intelligence/assessment.queue.js";
 import { governedAwsChangeQueue } from "../modules/governance/aws-change-execution.queue.js";
-import { ROLES } from "@cloudshield/security";
+import { hasPermission, PERMISSIONS, resolveCurrentUserCapabilities, ROLES } from "@cloudshield/security";
 
 test("AWS workflow RBAC gates", async (t) => {
   const app = await buildApp();
@@ -63,6 +63,31 @@ test("AWS workflow RBAC gates", async (t) => {
       headers: { cookie: sessionCookie }
     });
     csrfToken = newCsrfRes.json().token;
+  });
+
+  await t.test("returns explicit viewer capabilities from the authoritative permission resolver", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { cookie: sessionCookie }
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    const body = res.json();
+    const expected = resolveCurrentUserCapabilities(ROLES.VIEWER);
+    assert.deepStrictEqual(body.capabilities, expected);
+    assert.equal(body.capabilities[PERMISSIONS.ACCOUNTS_MANAGE], false);
+    assert.equal(body.capabilities[PERMISSIONS.INVENTORY_SCAN_REQUEST], false);
+    assert.equal(body.capabilities[PERMISSIONS.MEMBERS_INVITE], false);
+    assert.equal(body.capabilities[PERMISSIONS.TEAMS_CREATE], false);
+    assert.equal(body.capabilities[PERMISSIONS.ACCOUNTS_READ], true);
+    assert.equal(body.capabilities[PERMISSIONS.INVENTORY_READ], true);
+    assert.equal(body.capabilities[PERMISSIONS.MEMBERS_READ], true);
+    assert.equal(body.capabilities[PERMISSIONS.TEAMS_READ], true);
+    for (const [permission, allowed] of Object.entries(body.capabilities)) {
+      assert.equal(allowed, hasPermission(ROLES.VIEWER, permission as Parameters<typeof hasPermission>[1]));
+    }
+    assert.deepStrictEqual(Object.keys(body.capabilities).sort(), Object.keys(expected).sort());
   });
 
   await t.test("blocks viewer account creation", async () => {

@@ -1,8 +1,60 @@
+import type {
+  RiskWorkflowActionName,
+  RiskWorkflowStatus
+} from "@cloudshield/contracts";
+
 export const RiskWorkflowSafety = {
   awsApiCallExecuted: false,
   mutationExecuted: false,
   remediationExecuted: false
 } as const;
+
+export const RiskWorkflowTransitionMatrix: Readonly<
+  Record<RiskWorkflowStatus, readonly RiskWorkflowActionName[]>
+> = {
+  OPEN: ["acknowledge", "assign", "false-positive", "resolve", "archive"],
+  REOPENED: ["acknowledge", "assign", "false-positive", "resolve", "archive"],
+  ACKNOWLEDGED: [
+    "assign",
+    "plan-remediation",
+    "accept-risk",
+    "false-positive",
+    "resolve",
+    "archive"
+  ],
+  ASSIGNED: [
+    "assign",
+    "plan-remediation",
+    "accept-risk",
+    "false-positive",
+    "resolve",
+    "archive"
+  ],
+  REMEDIATION_PLANNED: [
+    "assign",
+    "plan-remediation",
+    "accept-risk",
+    "resolve",
+    "archive"
+  ],
+  RISK_ACCEPTED: ["reopen", "archive"],
+  FALSE_POSITIVE: ["reopen", "archive"],
+  RESOLVED: ["reopen", "archive"],
+  ARCHIVED: ["reopen"]
+};
+
+export function availableRiskWorkflowActions(
+  status: RiskWorkflowStatus
+): RiskWorkflowActionName[] {
+  return [...RiskWorkflowTransitionMatrix[status]];
+}
+
+export function isRiskWorkflowTransitionAllowed(
+  status: RiskWorkflowStatus,
+  action: RiskWorkflowActionName
+): boolean {
+  return RiskWorkflowTransitionMatrix[status].includes(action);
+}
 
 export const RiskWorkflowMessages = {
   acknowledge:

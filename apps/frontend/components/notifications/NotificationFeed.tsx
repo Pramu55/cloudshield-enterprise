@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import { useCloudShieldData } from "../../lib/client-api";
 import { Bell, AlertTriangle, Info, CheckCircle, Clock } from "lucide-react";
 import { NotificationListResponse, NotificationDto } from "@cloudshield/contracts";
@@ -27,10 +28,16 @@ export function NotificationFeed() {
     <div className="portal-popover portal-notifications absolute top-14 right-10 w-[24rem] max-h-[32rem] overflow-y-auto bg-white border border-slate-200 shadow-2xl rounded-2xl z-50 flex flex-col">
       <div className="px-5 py-4 border-b border-slate-100 font-bold flex justify-between items-center bg-white sticky top-0 z-10">
         <span className="text-slate-900">Notifications</span>
-        <button className="text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">Mark all read</button>
+        <Link href="/dashboard/monitoring" className="text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">Open monitoring</Link>
       </div>
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-        {notifications.length === 0 ? (
+        {error ? (
+          <div className="py-10 px-6 text-center text-sm text-slate-600">
+            Notifications are temporarily unavailable. Open Security Monitoring for the authoritative alert view.
+          </div>
+        ) : isRefreshing && notifications.length === 0 ? (
+          <div className="py-10 px-6 text-center text-sm font-semibold text-slate-500">Loading notifications...</div>
+        ) : notifications.length === 0 ? (
           <div className="py-12 px-6 text-center text-sm text-slate-500 flex flex-col items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center">
               <CheckCircle size={24} className="text-emerald-500" />

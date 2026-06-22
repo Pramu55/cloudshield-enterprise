@@ -1,11 +1,19 @@
-import type { ComplianceEvidenceCenterResponse } from "@cloudshield/contracts";
+import type {
+  ComplianceControlSummary,
+  ComplianceControlsRegistryResponse,
+  ComplianceEvidenceCenterResponse,
+  RiskWorkflowStatus
+} from "@cloudshield/contracts";
 import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
 import type {
   ComplianceControlDefinition,
+  ComplianceControlProjectionCounts,
+  ComplianceControlProjectionDefinition,
   ControlEvaluationResult
 } from "./compliance-control.types.js";
 import {
   ComplianceControlCatalog,
+  ComplianceControlProjectionCatalog,
   ComplianceEvidenceSafety
 } from "./compliance-evidence.policy.js";
 import {
@@ -35,12 +43,193 @@ export async function getComplianceEvidenceCenter(organizationId: string) {
 }
 
 export async function listComplianceControls(organizationId: string) {
-  await ensureControlCatalog(organizationId);
+  const mappedRuleIds = [
+    ...new Set(
+      ComplianceControlProjectionCatalog.flatMap((control) => control.mappedRuleIds)
+    )
+  ];
+  const findings = await loadComplianceProjectionFindings(
+    organizationId,
+    mappedRuleIds
+  );
+
+  const controls = ComplianceControlProjectionCatalog.map((definition) => {
+    const mappedFindings = findings.filter((finding) =>
+      definition.mappedRuleIds.includes(finding.ruleId)
+    );
+    return projectComplianceControl(definition, mappedFindings);
+  });
 
   return {
-    ...ComplianceEvidenceSafety,
-    items: await listControls(organizationId)
+    controls,
+    generatedAt: new Date().toISOString(),
+    total: controls.length,
+    safety: {
+      awsApiCallExecuted: false,
+      mutationExecuted: false,
+      remediationExecuted: false,
+      rawEvidenceIncluded: false
+    }
+  } satisfies ComplianceControlsRegistryResponse;
+}
+
+async function loadComplianceProjectionFindings(
+  organizationId: string,
+  mappedRuleIds: string[]
+) {
+  return prisma.securityFinding.findMany({
+    where: {
+      organizationId,
+      ruleId: { in: mappedRuleIds },
+      archivedAt: null
+    },
+    orderBy: [{ severity: "asc" }, { updatedAt: "desc" }, { id: "desc" }],
+    include: {
+      resource: { select: { source: true } },
+      evidenceSnapshots: {
+        where: { organizationId },
+        orderBy: [{ capturedAt: "desc" }, { id: "desc" }],
+        select: { id: true, capturedAt: true },
+        take: 1
+      },
+      riskAcceptances: {
+        where: { organizationId },
+        select: { id: true }
+      },
+      _count: {
+        select: {
+          evidenceSnapshots: { where: { organizationId } }
+        }
+      }
+    }
+  });
+}
+
+type ComplianceProjectionFinding = Awaited<
+  ReturnType<typeof loadComplianceProjectionFindings>
+>[number];
+
+function projectComplianceControl(
+  definition: ComplianceControlProjectionDefinition,
+  findings: ComplianceProjectionFinding[]
+): ComplianceControlSummary {
+  const state = complianceProjectionCounts(findings);
+  const snapshots = findings.flatMap((finding) => finding.evidenceSnapshots);
+  const latestEvidence = snapshots
+    .slice()
+    .sort((left, right) => right.capturedAt.getTime() - left.capturedAt.getTime())[0];
+  const findingSources = [
+    ...new Set(findings.map((finding) => finding.source))
+  ].sort();
+  const resourceSources = [
+    ...new Set(
+      findings
+        .map((finding) => finding.resource?.source)
+        .filter((source) => source !== undefined && source !== null)
+    )
+  ].sort();
+
+  return {
+    controlId: definition.controlId,
+    framework: definition.framework,
+    controlCode: definition.controlCode,
+    title: definition.title,
+    description: definition.description,
+    severity: definition.severity,
+    status: state.status,
+    findingCount: state.findingCount,
+    openFindingCount: state.openFindingCount,
+    acceptedRiskCount: state.acceptedRiskCount,
+    resolvedFindingCount: state.resolvedFindingCount,
+    evidenceSnapshotCount: state.evidenceSnapshotCount,
+    latestEvidenceCapturedAt: latestEvidence?.capturedAt.toISOString() ?? null,
+    mappedRuleIds: definition.mappedRuleIds,
+    provenance: {
+      findingSources,
+      resourceSources,
+      sampleData: resourceSources.includes("SAMPLE")
+    },
+    mappedFindings: findings.map((finding) => {
+      const latestSnapshot = finding.evidenceSnapshots[0];
+      return {
+        findingId: finding.id,
+        title: finding.title,
+        severity: finding.severity,
+        workflowStatus: normalizeComplianceWorkflowStatus(
+          finding.workflowStatus
+        ),
+        ruleId: finding.ruleId,
+        latestEvidenceSnapshotId: latestSnapshot?.id ?? null,
+        latestEvidenceCapturedAt:
+          latestSnapshot?.capturedAt.toISOString() ?? null
+      };
+    })
   };
+}
+
+function complianceProjectionCounts(
+  findings: ComplianceProjectionFinding[]
+): ComplianceControlProjectionCounts {
+  const activeStatuses = new Set([
+    "OPEN",
+    "ACKNOWLEDGED",
+    "ASSIGNED",
+    "REMEDIATION_PLANNED",
+    "REOPENED"
+  ]);
+  let openFindingCount = 0;
+  let acceptedRiskCount = 0;
+  let resolvedFindingCount = 0;
+
+  for (const finding of findings) {
+    if (activeStatuses.has(finding.workflowStatus)) {
+      openFindingCount++;
+    } else if (
+      finding.workflowStatus === "RISK_ACCEPTED" ||
+      finding.riskAcceptances.length > 0
+    ) {
+      acceptedRiskCount++;
+    } else {
+      resolvedFindingCount++;
+    }
+  }
+
+  const evidenceSnapshotCount = findings.reduce(
+    (count, finding) => count + finding._count.evidenceSnapshots,
+    0
+  );
+  return {
+    findingCount: findings.length,
+    openFindingCount,
+    acceptedRiskCount,
+    resolvedFindingCount,
+    evidenceSnapshotCount,
+    status:
+      openFindingCount > 0
+        ? "FAILING"
+        : acceptedRiskCount > 0
+          ? "ACCEPTED_RISK"
+          : evidenceSnapshotCount > 0
+            ? "PASSING"
+            : "UNKNOWN"
+  };
+}
+
+function normalizeComplianceWorkflowStatus(value: string): RiskWorkflowStatus {
+  if (
+    value === "OPEN" ||
+    value === "ACKNOWLEDGED" ||
+    value === "ASSIGNED" ||
+    value === "REMEDIATION_PLANNED" ||
+    value === "RISK_ACCEPTED" ||
+    value === "FALSE_POSITIVE" ||
+    value === "RESOLVED" ||
+    value === "ARCHIVED" ||
+    value === "REOPENED"
+  ) {
+    return value;
+  }
+  return "OPEN";
 }
 
 export async function getComplianceControlDetail(

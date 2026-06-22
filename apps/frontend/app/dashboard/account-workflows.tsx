@@ -25,12 +25,40 @@ import type {
   AwsConnectorStatusResponse,
   AwsIdentityValidationResponse,
   AwsInventoryPlanResponse,
-  AwsInventoryStartResponse,
   CreateAwsAccountRequest,
   TeamDto,
   UpdateAwsAccountRequest
 } from "@cloudshield/contracts";
 import { fetchCloudShieldClient, RefreshBadge, useCloudShieldData } from "../../lib/client-api";
+import {
+  FrontendAwsAccountListSchema,
+  FrontendAwsAccountDetailSchema,
+  FrontendAwsIdentityValidationSchema,
+  FrontendAwsAccountMutationSchema,
+  FrontendAwsAccountOnboardingPreflightSchema,
+  FrontendCapabilitySessionSchema,
+  type FrontendCapabilitySession,
+  type FrontendAwsAccountOnboardingPreflight,
+  type FrontendAwsIdentityValidation,
+  createFrontendInventoryAccountSyncResponseSchema,
+  type FrontendInventorySyncResponse
+} from "../../lib/response-contracts";
+import { inventorySyncFeedback } from "../../lib/inventory-sync-feedback";
+import {
+  authoritativePermission,
+  capabilityPermission,
+  permissionCapability,
+  resolveAccountMutationCapability,
+  runtimeDisabledCapability,
+  type ActionCapability
+} from "../../lib/action-capability";
+import {
+  CapabilityNotice,
+  GuardedAction,
+  PermissionRestriction,
+  ProductionRestrictionNotice,
+  RuntimeModeRestrictionNotice
+} from "../../components/ui/guarded-action";
 import {
   DataTable,
   DetailList,
@@ -44,15 +72,6 @@ import {
   StatGroup,
   StatusBadge
 } from "./shared";
-
-type CurrentUserPayload = {
-  user?: {
-    role?: string;
-    name?: string;
-    email?: string;
-    organizationName?: string;
-  };
-};
 
 type ActionKey = "save" | "registry" | "identity" | "sync" | "archive";
 
@@ -76,18 +95,13 @@ type AccountFormState = {
   ownerTeamId: string;
   regions: string;
   description: string;
+  roleArn: string;
+  externalIdConfigured: boolean;
 };
 
 type ConfirmState = {
   action: "identity" | "sync" | "archive";
   account: AwsAccountDto;
-};
-
-type InventorySyncResponse = AwsInventoryStartResponse | {
-  status: string;
-  message: string;
-  scanRunId?: string;
-  error?: string;
 };
 
 const emptyForm: AccountFormState = {
@@ -96,7 +110,9 @@ const emptyForm: AccountFormState = {
   environment: "DEVELOPMENT",
   ownerTeamId: "",
   regions: "us-east-1",
-  description: ""
+  description: "",
+  roleArn: "",
+  externalIdConfigured: false
 };
 
 const environmentOptions: AwsAccountEnvironment[] = [
@@ -107,20 +123,6 @@ const environmentOptions: AwsAccountEnvironment[] = [
   "SHARED",
   "SANDBOX"
 ];
-
-const rolePermissions: Record<string, string[]> = {
-  OWNER: ["accounts.manage", "inventory.scan.request"],
-  ADMIN: ["accounts.manage", "inventory.scan.request"],
-  CLOUD_OPERATOR: ["accounts.manage", "inventory.scan.request"],
-  SECURITY_OPERATOR: [],
-  AUDITOR: [],
-  VIEWER: [],
-  MEMBER: []
-};
-
-function hasPermission(role: string | undefined, permission: "accounts.manage" | "inventory.scan.request") {
-  return Boolean(rolePermissions[String(role ?? "VIEWER").toUpperCase()]?.includes(permission));
-}
 
 function actionId(action: ActionKey, accountRecordId?: string) {
   return `${action}:${accountRecordId ?? "new"}`;
@@ -144,13 +146,15 @@ export function AccountsWorkspace() {
   const [activeAction, setActiveAction] = useState<ActionState>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  const accountsState = useCloudShieldData<AwsAccountListResponse>(accountListPath(refreshNonce), { sampleData: false, sampleDataLabel: "", items: [] });
+  const accountsState = useCloudShieldData<AwsAccountListResponse>(accountListPath(refreshNonce), { sampleData: false, sampleDataLabel: "", items: [] }, { schema: FrontendAwsAccountListSchema });
   const connectorState = useCloudShieldData<AwsConnectorStatusResponse>("/api/v1/aws/connector/status", defaultConnectorStatus);
   const inventoryPlanState = useCloudShieldData<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan", defaultInventoryPlan);
-  const currentUserState = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
+  const currentUserState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
   const accounts = accountsState.data.items;
-  const canManageAccounts = hasPermission(currentUserState.data.user?.role, "accounts.manage");
-  const canRequestScan = hasPermission(currentUserState.data.user?.role, "inventory.scan.request");
+  const manageCapability = permissionCapability(authoritativePermission(currentUserState.data, "accounts.manage"));
+  const scanCapability = permissionCapability(authoritativePermission(currentUserState.data, "inventory.scan.request"));
+  const canManageAccounts = manageCapability.allowed;
+  const canRequestScan = scanCapability.allowed;
   const connectedCount = accounts.filter((account) => account.connectionStatus === "VALIDATION_SUCCEEDED").length;
   const failureCount = accounts.filter((account) => ["AUTH_FAILED", "VALIDATION_FAILED", "PERMISSION_DENIED"].includes(account.connectionStatus)).length;
   const editingAccount = useMemo(() => accounts.find((account) => account.id === form.id), [accounts, form.id]);
@@ -169,7 +173,7 @@ export function AccountsWorkspace() {
       const payload = toPayload(form);
       const result = await fetchCloudShieldClient<AwsAccountMutationResponse>(
         form.id ? `/api/v1/aws/accounts/${form.id}` : "/api/v1/aws/accounts",
-        { method: form.id ? "PATCH" : "POST", body: payload }
+        { method: form.id ? "PATCH" : "POST", body: payload, schema: FrontendAwsAccountMutationSchema }
       );
       setFeedback({ tone: "success", title: "Account saved", message: result.message });
       setForm(emptyForm);
@@ -183,14 +187,14 @@ export function AccountsWorkspace() {
 
   async function validateRegistry(account: AwsAccountDto) {
     if (!canManageAccounts || activeAction) return;
-    setFeedback({ tone: "info", title: "Validating registry", message: "Validating registry..." });
-    setActiveAction({ key: "registry", accountRecordId: account.id, label: "Validating registry..." });
+    setFeedback({ tone: "info", title: "Checking registry readiness", message: "Checking registry readiness..." });
+    setActiveAction({ key: "registry", accountRecordId: account.id, label: "Checking registry readiness..." });
     try {
-      const result = await fetchCloudShieldClient<AwsAccountMutationResponse & { code?: string }>(`/api/v1/aws/accounts/${account.id}/validate`, { method: "POST" });
-      setFeedback({ tone: result.item.connectionStatus === "VALIDATION_NOT_IMPLEMENTED" ? "warning" : "success", title: result.code ?? "Registry validation complete", message: result.message });
+      const result = await fetchCloudShieldClient<AwsAccountMutationResponse>(`/api/v1/aws/accounts/${account.id}/validate`, { method: "POST", schema: FrontendAwsAccountMutationSchema });
+      setFeedback({ tone: "success", title: "Registry readiness checked", message: result.message });
       refresh();
     } catch (error) {
-      setFeedback({ tone: "danger", title: "Registry validation failed", message: errorMessage(error) });
+      setFeedback({ tone: "danger", title: "Registry readiness check failed", message: errorMessage(error) });
     } finally {
       setActiveAction(null);
     }
@@ -201,7 +205,7 @@ export function AccountsWorkspace() {
     setFeedback({ tone: "info", title: "Validating AWS identity", message: "Validating AWS identity..." });
     setActiveAction({ key: "identity", accountRecordId: account.id, label: "Validating AWS identity..." });
     try {
-      const result = await fetchCloudShieldClient<AwsIdentityValidationResponse>(`/api/v1/aws/accounts/${account.id}/validate-identity`, { method: "POST" });
+      const result = await fetchCloudShieldClient<FrontendAwsIdentityValidation>(`/api/v1/aws/accounts/${account.id}/validate-identity`, { method: "POST", schema: FrontendAwsIdentityValidationSchema });
       setFeedback({
         tone: identityTone(result.status),
         title: `STS identity validation: ${result.status}`,
@@ -220,8 +224,11 @@ export function AccountsWorkspace() {
     setFeedback({ tone: "info", title: "Starting inventory sync", message: "Starting read-only sync..." });
     setActiveAction({ key: "sync", accountRecordId: account.id, label: "Starting read-only sync..." });
     try {
-      const result = await fetchCloudShieldClient<InventorySyncResponse>(`/api/v1/aws/accounts/${account.id}/inventory/sync`, { method: "POST" });
-      setFeedback({ tone: result.status === "BLOCKED_DISABLED" ? "warning" : "success", title: `Inventory sync: ${result.status}`, message: result.message });
+      const result = await fetchCloudShieldClient<FrontendInventorySyncResponse>(`/api/v1/aws/accounts/${account.id}/inventory/sync`, {
+        method: "POST",
+        schema: createFrontendInventoryAccountSyncResponseSchema(account.id)
+      });
+      setFeedback(inventorySyncFeedback(result));
       refresh();
     } catch (error) {
       setFeedback({ tone: "danger", title: "Inventory sync failed", message: errorMessage(error) });
@@ -235,7 +242,7 @@ export function AccountsWorkspace() {
     setFeedback({ tone: "info", title: "Archiving registry record", message: "Archiving registry record..." });
     setActiveAction({ key: "archive", accountRecordId: account.id, label: "Archiving registry record..." });
     try {
-      const result = await fetchCloudShieldClient<AwsAccountMutationResponse>(`/api/v1/aws/accounts/${account.id}/archive`, { method: "PATCH" });
+      const result = await fetchCloudShieldClient<AwsAccountMutationResponse>(`/api/v1/aws/accounts/${account.id}/archive`, { method: "PATCH", schema: FrontendAwsAccountMutationSchema });
       setFeedback({ tone: "success", title: "Registry record archived", message: result.message });
       refresh();
     } catch (error) {
@@ -257,7 +264,7 @@ export function AccountsWorkspace() {
           <>
             <span>Connector <StatusBadge status={connectorState.data.status} /></span>
             <span>Scanner <StatusBadge status={connectorState.data.scannerStatus} /></span>
-            <span>Role {currentUserState.data.user?.role ?? "Member"}</span>
+            <span>Role {currentUserState.data?.user.role ?? "Member"}</span>
           </>
         }
       />
@@ -269,9 +276,8 @@ export function AccountsWorkspace() {
         <MetricTile label="Validation issues" value={failureCount} tone={failureCount ? "danger" : "neutral"} icon={<ShieldAlert size={16} />} />
         <MetricTile label="Resource count" value={connectorState.data.resourceCount} detail="AWS_SYNC records" icon={<Radar size={16} />} />
       </StatGroup>
-      {!canManageAccounts ? (
-        <InlineNotice title="Read-only account access" tone="info">Your role can view account records. Account registration, validation, synchronization, and archive actions require account management permissions.</InlineNotice>
-      ) : null}
+      <PermissionRestriction capability={manageCapability} />
+      {!connectorState.isRefreshing && !connectorState.data.executionEligibility.eligible && connectorState.data.executionEligibility.mode === "disabled" ? <RuntimeModeRestrictionNotice /> : null}
       <div className="cs-account-workspace mt-8 gap-8">
         <Section title="Account registry" description="Clean account table with workflow commands kept in a compact action area." icon={<Cloud size={16} />} variant="operational">
           <DataTable
@@ -286,13 +292,13 @@ export function AccountsWorkspace() {
               account.regions.join(", "),
               <StatusBadge key="status" status={account.connectionStatus} />,
               formatDate(account.lastScanAt),
-              <SourceBadge key="source" source={account.sampleData ? "SAMPLE" : "AWS_SYNC"} />,
+              <SourceBadge key="source" source={account.source} />,
               <AccountCommandBar
                 key="actions"
                 account={account}
                 activeAction={activeAction}
-                canManageAccounts={canManageAccounts}
-                canRequestScan={canRequestScan}
+                manageCapability={manageCapability}
+                scanCapability={scanCapability}
                 connector={connectorState.data}
                 inventoryPlan={inventoryPlanState.data}
                 onEdit={() => setForm(fromAccount(account))}
@@ -307,7 +313,7 @@ export function AccountsWorkspace() {
         </Section>
         <AccountFormPanel
           activeAction={activeAction}
-          canManageAccounts={canManageAccounts}
+          manageCapability={manageCapability}
           editingAccount={editingAccount}
           form={form}
           teams={teamsState.data.teams}
@@ -319,7 +325,7 @@ export function AccountsWorkspace() {
       </div>
       <Section title="Read-only workflow guardrails" description="Command meanings for the account actions restored in this premium workspace." icon={<KeyRound size={16} />} variant="evidence">
         <div className="cs-guardrail-grid">
-          <Guardrail title="Registry validation" body="Runs CloudShield registry validation and updates the account record returned by the backend." />
+          <Guardrail title="Registry readiness" body="Checks CloudShield account metadata before explicit STS validation. This check does not call AWS." />
           <Guardrail title="STS identity validation" body="Uses AWS STS GetCallerIdentity only when connector configuration allows it." />
           <Guardrail title="Inventory synchronization" body="Starts the read-only inventory sync endpoint for the selected account and regions." />
           <Guardrail title="Archive registry record" body="Archives CloudShield registry metadata only. It does not modify AWS resources." />
@@ -347,13 +353,18 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
   const [activeAction, setActiveAction] = useState<ActionState>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  const accountState = useCloudShieldData<{ item?: AwsAccountDto }>(accountDetailPath(accountId, refreshNonce), {});
+  const accountState = useCloudShieldData<{ item: AwsAccountDto } | null>(accountDetailPath(accountId, refreshNonce), null, { schema: FrontendAwsAccountDetailSchema });
+  const preflightState = useCloudShieldData<FrontendAwsAccountOnboardingPreflight | null>(
+    `/api/v1/aws/accounts/${accountId}/onboarding-preflight?refresh=${refreshNonce}`,
+    null,
+    { schema: FrontendAwsAccountOnboardingPreflightSchema }
+  );
   const connectorState = useCloudShieldData<AwsConnectorStatusResponse>("/api/v1/aws/connector/status", defaultConnectorStatus);
   const inventoryPlanState = useCloudShieldData<AwsInventoryPlanResponse>("/api/v1/aws/inventory/plan", defaultInventoryPlan);
-  const currentUserState = useCloudShieldData<CurrentUserPayload>("/api/v1/auth/me", {});
-  const account = accountState.data.item;
-  const canManageAccounts = hasPermission(currentUserState.data.user?.role, "accounts.manage");
-  const canRequestScan = hasPermission(currentUserState.data.user?.role, "inventory.scan.request");
+  const currentUserState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, { schema: FrontendCapabilitySessionSchema });
+  const account = accountState.data?.item;
+  const manageCapability = permissionCapability(authoritativePermission(currentUserState.data, "accounts.manage"));
+  const scanCapability = permissionCapability(authoritativePermission(currentUserState.data, "inventory.scan.request"));
 
   function refresh() {
     setRefreshNonce((value) => value + 1);
@@ -364,13 +375,14 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
     label: string,
     path: string,
     method: "POST" | "PATCH",
-    complete: (result: TResponse) => Feedback
+    complete: (result: TResponse) => Feedback,
+    schema?: { safeParse(value: unknown): { success: true; data: TResponse } | { success: false } }
   ) {
     if (!account || activeAction) return;
     setFeedback({ tone: "info", title: label, message: label });
     setActiveAction({ key, accountRecordId: account.id, label });
     try {
-      const result = await fetchCloudShieldClient<TResponse>(path, { method });
+      const result = await fetchCloudShieldClient<TResponse>(path, { method, schema });
       setFeedback(complete(result));
       refresh();
     } catch (error) {
@@ -405,21 +417,25 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
           </>
         }
       />
-      <RefreshBadge error={accountState.error || connectorState.error || inventoryPlanState.error || currentUserState.error} isRefreshing={accountState.isRefreshing || connectorState.isRefreshing || inventoryPlanState.isRefreshing || currentUserState.isRefreshing} />
+      <RefreshBadge error={accountState.error || preflightState.error || connectorState.error || inventoryPlanState.error || currentUserState.error} isRefreshing={accountState.isRefreshing || preflightState.isRefreshing || connectorState.isRefreshing || inventoryPlanState.isRefreshing || currentUserState.isRefreshing} />
       {feedback ? <InlineNotice title={feedback.title} tone={feedback.tone}>{feedback.message}</InlineNotice> : null}
+      <PermissionRestriction capability={manageCapability} />
+      {account?.environment === "PRODUCTION" ? <ProductionRestrictionNotice /> : null}
+      {!connectorState.isRefreshing && !connectorState.data.executionEligibility.eligible && connectorState.data.executionEligibility.mode === "disabled" ? <RuntimeModeRestrictionNotice /> : null}
       {account ? (
         <>
+          {preflightState.data ? <OnboardingJourney preflight={preflightState.data} /> : null}
           <Section title="Account command center" description="Actions are permission-gated and show per-command progress." icon={<Cloud size={16} />} variant="action">
             <div className="cs-detail-actions">
               <AccountCommandBar
                 account={account}
                 activeAction={activeAction}
-                canManageAccounts={canManageAccounts}
-                canRequestScan={canRequestScan}
+                manageCapability={manageCapability}
+                scanCapability={scanCapability}
                 connector={connectorState.data}
                 inventoryPlan={inventoryPlanState.data}
                 onEdit={undefined}
-                onRegistry={() => runMutation<AwsAccountMutationResponse & { code?: string }>("registry", "Validating registry...", `/api/v1/aws/accounts/${account.id}/validate`, "POST", (result) => ({ tone: result.item.connectionStatus === "VALIDATION_NOT_IMPLEMENTED" ? "warning" : "success", title: result.code ?? "Registry validation complete", message: result.message }))}
+                onRegistry={() => runMutation<AwsAccountMutationResponse>("registry", "Checking registry readiness...", `/api/v1/aws/accounts/${account.id}/validate`, "POST", (result) => ({ tone: "success", title: "Registry readiness checked", message: result.message }), FrontendAwsAccountMutationSchema)}
                 onIdentity={() => setConfirm({ action: "identity", account })}
                 onSync={() => setConfirm({ action: "sync", account })}
                 onArchive={() => setConfirm({ action: "archive", account })}
@@ -434,7 +450,9 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
                 { label: "Environment", value: account.environment },
                 { label: "Owner team", value: account.ownerTeamName ?? "Unassigned" },
                 { label: "Regions", value: account.regions.join(", ") },
-                { label: "Source", value: <SourceBadge source={account.sampleData ? "SAMPLE" : "AWS_SYNC"} /> }
+                { label: "Source", value: <SourceBadge source={account.source} /> },
+                { label: "Scanner role", value: account.roleArnDisplay ?? "Not configured" },
+                { label: "External ID", value: account.externalIdConfigured ? "Configured in secure runtime" : "Not configured" }
               ]} />
             </Section>
             <Section title="Workflow state" icon={<ShieldCheck size={16} />} variant="status">
@@ -466,13 +484,13 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
             const { action } = confirm;
             setConfirm(null);
             if (action === "identity") {
-              void runMutation<AwsIdentityValidationResponse>("identity", "Validating AWS identity...", `/api/v1/aws/accounts/${account.id}/validate-identity`, "POST", (result) => ({ tone: identityTone(result.status), title: `STS identity validation: ${result.status}`, message: identityMessage(result) }));
+              void runMutation<FrontendAwsIdentityValidation>("identity", "Validating AWS identity...", `/api/v1/aws/accounts/${account.id}/validate-identity`, "POST", (result) => ({ tone: identityTone(result.status), title: `STS identity validation: ${result.status}`, message: identityMessage(result) }), FrontendAwsIdentityValidationSchema);
             }
             if (action === "sync") {
-              void runMutation<InventorySyncResponse>("sync", "Starting read-only sync...", `/api/v1/aws/accounts/${account.id}/inventory/sync`, "POST", (result) => ({ tone: result.status === "BLOCKED_DISABLED" ? "warning" : "success", title: `Inventory sync: ${result.status}`, message: result.message }));
+              void runMutation<FrontendInventorySyncResponse>("sync", "Starting read-only sync...", `/api/v1/aws/accounts/${account.id}/inventory/sync`, "POST", inventorySyncFeedback, createFrontendInventoryAccountSyncResponseSchema(account.id));
             }
             if (action === "archive") {
-              void runMutation<AwsAccountMutationResponse>("archive", "Archiving registry record...", `/api/v1/aws/accounts/${account.id}/archive`, "PATCH", (result) => ({ tone: "success", title: "Registry record archived", message: result.message }));
+              void runMutation<AwsAccountMutationResponse>("archive", "Archiving registry record...", `/api/v1/aws/accounts/${account.id}/archive`, "PATCH", (result) => ({ tone: "success", title: "Registry record archived", message: result.message }), FrontendAwsAccountMutationSchema);
             }
           }}
         />
@@ -484,8 +502,8 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
 function AccountCommandBar({
   account,
   activeAction,
-  canManageAccounts,
-  canRequestScan,
+  manageCapability,
+  scanCapability,
   connector,
   inventoryPlan,
   onEdit,
@@ -496,8 +514,8 @@ function AccountCommandBar({
 }: {
   account: AwsAccountDto;
   activeAction: ActionState;
-  canManageAccounts: boolean;
-  canRequestScan: boolean;
+  manageCapability: ActionCapability;
+  scanCapability: ActionCapability;
   connector: AwsConnectorStatusResponse;
   inventoryPlan: AwsInventoryPlanResponse;
   onEdit?: () => void;
@@ -506,52 +524,50 @@ function AccountCommandBar({
   onSync: () => void;
   onArchive: () => void;
 }) {
-  const identityDisabledReason = !canManageAccounts
-    ? "Requires accounts.manage permission."
-    : !connector.enabled || !connector.configured
-      ? connector.message
-      : undefined;
-  const syncDisabledReason = !canRequestScan
-    ? "Requires inventory.scan.request permission."
-    : !inventoryPlan.inventoryScanningEnabled
-      ? inventoryPlan.message
-      : undefined;
+  const identityCapability = !connector.enabled || !connector.configured ? runtimeDisabledCapability() : manageCapability;
+  const syncCapability = !inventoryPlan.inventoryScanningEnabled ? runtimeDisabledCapability() : scanCapability;
+  const productionMutationCapability = resolveAccountMutationCapability({
+    permission: capabilityPermission(manageCapability),
+    environment: account.environment,
+    runtimeEnabled: connector.executionEligibility.eligible
+  });
   return (
     <div className="cs-account-actions gap-3">
       <Link className="cs-button-secondary" href={`/dashboard/accounts/${account.id}`}>Open</Link>
-      {onEdit ? <ActionButton icon={<Edit3 size={14} />} label="Edit" disabled={!canManageAccounts || Boolean(activeAction)} onClick={onEdit} /> : null}
-      <ActionButton icon={<CheckCircle2 size={14} />} label="Validate registry" active={actionMatches(activeAction, "registry", account.id)} activeLabel="Validating registry..." disabled={!canManageAccounts || Boolean(activeAction)} onClick={onRegistry} />
-      <ActionButton icon={<ShieldCheck size={14} />} label="Validate identity" active={actionMatches(activeAction, "identity", account.id)} activeLabel="Validating AWS identity..." disabled={Boolean(identityDisabledReason) || Boolean(activeAction)} title={identityDisabledReason ?? "Uses AWS STS GetCallerIdentity only."} onClick={onIdentity} />
-      <ActionButton icon={<RotateCw size={14} />} label="Read-only sync" active={actionMatches(activeAction, "sync", account.id)} activeLabel="Starting read-only sync..." disabled={Boolean(syncDisabledReason) || Boolean(activeAction)} title={syncDisabledReason ?? "Starts read-only inventory synchronization."} onClick={onSync} />
-      <ActionButton icon={<Archive size={14} />} label="Archive" active={actionMatches(activeAction, "archive", account.id)} activeLabel="Archiving registry record..." disabled={!canManageAccounts || Boolean(activeAction)} danger onClick={onArchive} />
+      {onEdit ? <ActionButton capability={manageCapability} icon={<Edit3 size={14} />} label="Edit" disabled={Boolean(activeAction)} onClick={onEdit} /> : null}
+      <ActionButton capability={manageCapability} icon={<CheckCircle2 size={14} />} label="Check registry" active={actionMatches(activeAction, "registry", account.id)} activeLabel="Checking registry..." disabled={Boolean(activeAction)} onClick={onRegistry} />
+      <ActionButton capability={identityCapability} icon={<ShieldCheck size={14} />} label="Validate identity" active={actionMatches(activeAction, "identity", account.id)} activeLabel="Validating AWS identity..." disabled={Boolean(activeAction)} onClick={onIdentity} />
+      <ActionButton capability={syncCapability} icon={<RotateCw size={14} />} label="Read-only sync" active={actionMatches(activeAction, "sync", account.id)} activeLabel="Starting read-only sync..." disabled={Boolean(activeAction)} onClick={onSync} />
+      <ActionButton capability={productionMutationCapability.restrictionLayer === "ENVIRONMENT" ? manageCapability : productionMutationCapability} icon={<Archive size={14} />} label="Archive" active={actionMatches(activeAction, "archive", account.id)} activeLabel="Archiving registry record..." disabled={Boolean(activeAction)} danger onClick={onArchive} />
+      {account.environment === "PRODUCTION" ? <CapabilityNotice capability={productionMutationCapability} /> : null}
     </div>
   );
 }
 
 function ActionButton({
   icon,
+  capability,
   label,
   active,
   activeLabel,
   disabled,
   danger,
-  title,
   onClick
 }: {
   icon: React.ReactNode;
+  capability: ActionCapability;
   label: string;
   active?: boolean;
   activeLabel?: string;
   disabled?: boolean;
   danger?: boolean;
-  title?: string;
   onClick: () => void;
 }) {
   return (
-    <button className={danger ? "cs-action-danger" : "cs-button-secondary"} disabled={disabled} onClick={onClick} title={title} type="button">
+    <GuardedAction capability={capability} className={danger ? "cs-action-danger" : "cs-button-secondary"} disabled={disabled} onClick={onClick}>
       {active ? <Loader2 size={14} className="animate-spin" /> : icon}
       {active ? activeLabel : label}
-    </button>
+    </GuardedAction>
   );
 }
 
@@ -559,7 +575,7 @@ function AccountFormPanel({
   form,
   editingAccount,
   activeAction,
-  canManageAccounts,
+  manageCapability,
   teams,
   allowedRegions,
   onChange,
@@ -569,13 +585,14 @@ function AccountFormPanel({
   form: AccountFormState;
   editingAccount?: AwsAccountDto;
   activeAction: ActionState;
-  canManageAccounts: boolean;
+  manageCapability: ActionCapability;
   teams?: any[];
   allowedRegions?: string[];
   onChange: (form: AccountFormState) => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const canManageAccounts = manageCapability.allowed;
   return (
     <Section title={editingAccount ? "Edit account" : "Register account"} description="CloudShield registry metadata only. Do not enter credentials or secrets." icon={<Plus size={16} />} variant="action">
       <div className="cs-account-form gap-6">
@@ -586,6 +603,24 @@ function AccountFormPanel({
           <select disabled={!canManageAccounts} value={form.environment} onChange={(event) => onChange({ ...form, environment: event.target.value as AwsAccountEnvironment })}>
             {environmentOptions.map((environment) => <option key={environment} value={environment}>{environment}</option>)}
           </select>
+        </label>
+        <Field
+          label="Scanner IAM Role ARN"
+          value={form.roleArn}
+          disabled={!canManageAccounts}
+          onChange={(value) => onChange({ ...form, roleArn: value })}
+        />
+        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <input
+            checked={form.externalIdConfigured}
+            disabled={!canManageAccounts}
+            onChange={(event) => onChange({ ...form, externalIdConfigured: event.target.checked })}
+            type="checkbox"
+          />
+          <span>
+            <strong className="block text-sm text-slate-900">External ID configured securely</strong>
+            <small className="mt-1 block text-xs text-slate-600">CloudShield stores only this configured marker. The External ID value belongs in the secure runtime environment and is never returned by the API.</small>
+          </span>
         </label>
         <label>
           <span>Owner team</span>
@@ -623,10 +658,10 @@ function AccountFormPanel({
           <textarea className="min-h-[120px]" disabled={!canManageAccounts} value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} />
         </label>
         <div className="cs-form-actions mt-4 gap-4">
-          <button className="cs-button" disabled={!canManageAccounts || Boolean(activeAction)} onClick={onSave} type="button">
+          <GuardedAction capability={manageCapability} className="cs-button" disabled={Boolean(activeAction)} onClick={onSave}>
             {actionMatches(activeAction, "save", form.id) ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
             {actionMatches(activeAction, "save", form.id) ? "Saving registry metadata..." : editingAccount ? "Save changes" : "Register account"}
-          </button>
+          </GuardedAction>
           {form.id ? <button className="cs-button-secondary" onClick={onCancel} type="button">Cancel</button> : null}
         </div>
       </div>
@@ -707,7 +742,9 @@ function toPayload(form: AccountFormState): CreateAwsAccountRequest | UpdateAwsA
     environment: form.environment,
     ownerTeamId: form.ownerTeamId.trim() || null,
     regions: form.regions.split(",").map((region) => region.trim()).filter(Boolean),
-    description: form.description.trim() || null
+    description: form.description.trim() || null,
+    roleArnPlaceholder: form.roleArn.trim() || null,
+    externalIdConfigured: form.externalIdConfigured
   };
 }
 
@@ -719,18 +756,93 @@ function fromAccount(account: AwsAccountDto): AccountFormState {
     environment: account.environment,
     ownerTeamId: account.ownerTeamId ?? "",
     regions: account.regions.join(", "),
-    description: account.description ?? ""
+    description: account.description ?? "",
+    roleArn: account.roleArnDisplay ?? "",
+    externalIdConfigured: account.externalIdConfigured
   };
 }
 
-function identityTone(status: AwsIdentityValidationResponse["status"]): Feedback["tone"] {
+function OnboardingJourney({
+  preflight
+}: {
+  preflight: FrontendAwsAccountOnboardingPreflight;
+}) {
+  const completed = {
+    registered: true,
+    iam: preflight.iam.roleAgreement === "MATCH" &&
+      preflight.iam.externalIdConfigured &&
+      preflight.iam.runtimeExternalIdConfigured,
+    validated: preflight.validation.status === "VALIDATED",
+    synced: preflight.readiness.phase === "SYNC_COMPLETE",
+    review: preflight.readiness.phase === "SYNC_COMPLETE"
+  };
+  const steps = [
+    { label: "Register account", complete: completed.registered },
+    { label: "Configure IAM role", complete: completed.iam },
+    { label: "Validate identity", complete: completed.validated },
+    { label: "Run inventory sync", complete: completed.synced },
+    { label: "Review governance posture", complete: completed.review }
+  ];
+
+  return (
+    <Section
+      title="AWS onboarding preflight"
+      description="Authoritative, read-only readiness from account metadata and runtime configuration. No AWS call is made by this check."
+      icon={<ShieldCheck size={16} />}
+      variant="insight"
+    >
+      <div className="grid gap-3 md:grid-cols-5">
+        {steps.map((step, index) => (
+          <div className="rounded-xl border border-slate-200 bg-white p-4" key={step.label}>
+            <span className="text-xs font-black text-slate-400">0{index + 1}</span>
+            <strong className="mt-2 block text-sm text-slate-900">{step.label}</strong>
+            <p className={`mt-2 text-xs font-bold ${step.complete ? "text-emerald-700" : "text-amber-700"}`}>
+              {step.complete ? "Complete" : "Action required"}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        <DetailList items={[
+          { label: "Current phase", value: <StatusBadge status={preflight.readiness.phase} /> },
+          { label: "Role agreement", value: <StatusBadge status={preflight.iam.roleAgreement} /> },
+          { label: "External ID", value: preflight.iam.runtimeExternalIdConfigured ? "Configured securely" : "Not configured" }
+        ]} />
+        <DetailList items={[
+          { label: "Validation", value: <StatusBadge status={preflight.validation.status} /> },
+          { label: "Latest scan", value: preflight.scan.latestStatus ? <StatusBadge status={preflight.scan.latestStatus} /> : "No scan" },
+          { label: "Resources", value: preflight.scan.resourceCount }
+        ]} />
+        <div>
+          <strong className="text-sm text-slate-900">Next recommended action</strong>
+          <p className="mt-2 text-sm text-slate-600">{preflight.readiness.nextAction.label}</p>
+          <Link className="cs-button mt-3 inline-flex" href={preflight.readiness.nextAction.href}>Continue workflow</Link>
+        </div>
+      </div>
+      {preflight.readiness.blockedReasons.length ? (
+        <InlineNotice title="Readiness blockers" tone="warning">
+          {preflight.readiness.blockedReasons.join(" ")}
+        </InlineNotice>
+      ) : null}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Link className="cs-link" href={preflight.links.scans}>Scans</Link>
+        <Link className="cs-link" href={preflight.links.inventory}>Inventory</Link>
+        <Link className="cs-link" href={preflight.links.findings}>Findings</Link>
+        <Link className="cs-link" href={preflight.links.compliance}>Compliance</Link>
+        <Link className="cs-link" href={preflight.links.executiveDashboard}>Executive dashboard</Link>
+      </div>
+    </Section>
+  );
+}
+
+function identityTone(status: FrontendAwsIdentityValidation["status"]): Feedback["tone"] {
   if (status === "VALIDATION_SUCCEEDED" || status === "CONNECTED") return "success";
   if (status === "BLOCKED_DISABLED" || status === "NOT_CONFIGURED" || status === "READY_FOR_VALIDATION") return "warning";
   if (status === "AUTH_FAILED" || status === "UNREACHABLE" || status === "VALIDATION_FAILED" || status === "PERMISSION_DENIED" || status === "ACCESS_DENIED") return "danger";
   return "info";
 }
 
-function identityMessage(result: AwsIdentityValidationResponse) {
+function identityMessage(result: FrontendAwsIdentityValidation) {
   const parts = [result.message];
   if (result.status === "BLOCKED_DISABLED") parts.push("Connector mode is disabled, so no STS call was executed.");
   if (result.status === "AUTH_FAILED") parts.push("Authentication failed while validating the STS identity.");
@@ -744,7 +856,7 @@ function identityStateCopy(status: AwsAccountDto["connectionStatus"]) {
   const copy: Record<AwsAccountDto["connectionStatus"], string> = {
     NOT_CONFIGURED: "Not configured",
     READY_FOR_VALIDATION: "Ready for validation",
-    VALIDATION_NOT_IMPLEMENTED: "Registry validation is available; live STS validation depends on connector mode.",
+    VALIDATION_NOT_IMPLEMENTED: "Legacy registry state. Recheck registry readiness before STS validation.",
     VALIDATION_SUCCEEDED: "STS identity validation succeeded.",
     VALIDATION_FAILED: "Validation failed. Review backend message and connector configuration.",
     CONNECTED_DEMO_ONLY: "Sample-only connection state.",

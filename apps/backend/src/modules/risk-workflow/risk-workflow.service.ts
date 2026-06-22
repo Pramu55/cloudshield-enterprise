@@ -8,22 +8,46 @@ import type {
   ReopenFindingRequest,
   ResolveFindingRequest,
   RiskFindingDto,
+  RiskAcceptanceRegistryItem,
+  RiskAcceptanceRegistryQuery,
+  RiskWorkflowActionName,
   RiskWorkflowStatus
 } from "@cloudshield/contracts";
-import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
 import { createRiskWorkflowAuditEvent, toRiskAuditEventDto } from "./risk-workflow.audit.js";
 import {
+  availableRiskWorkflowActions,
+  isRiskWorkflowTransitionAllowed,
   RiskWorkflowMessages,
   RiskWorkflowSafety,
   evidenceSummary
 } from "./risk-workflow.policy.js";
+import type { RiskWorkflowAuditActionName } from "./risk-workflow.types.js";
 
 type ActorContext = {
   organizationId: string;
   userId: string;
 };
 
+type WorkflowClient = Pick<
+  Prisma.TransactionClient,
+  "auditEvent" | "riskAcceptance" | "securityFinding" | "securityFindingEvidenceSnapshot" | "team" | "user"
+>;
+
 type FindingWithRelations = Awaited<ReturnType<typeof getFindingRecord>>;
+
+type WorkflowInput = {
+  action: RiskWorkflowActionName;
+  auditAction: RiskWorkflowAuditActionName;
+  status: RiskWorkflowStatus;
+  data: Prisma.SecurityFindingUncheckedUpdateManyInput;
+  metadata: Record<string, unknown>;
+  message: string;
+  riskAcceptance?: {
+    businessJustification: string;
+    expiresAt: Date;
+  };
+};
 
 export async function listRiskFindings(organizationId: string) {
   const findings = await prisma.securityFinding.findMany({
@@ -46,7 +70,7 @@ export async function getRiskFindingDetail(
   organizationId: string,
   findingId: string
 ) {
-  const finding = await getFindingRecord(organizationId, findingId);
+  const finding = await getFindingRecord(prisma, organizationId, findingId);
   if (!finding) {
     return null;
   }
@@ -60,10 +84,136 @@ export async function getRiskFindingDetail(
     orderBy: { createdAt: "desc" },
     take: 50
   });
+  const findingDto = toRiskFindingDto(finding);
 
   return {
-    ...toRiskFindingDto(finding),
-    auditEvents: auditEvents.map(toRiskAuditEventDto)
+    ...findingDto,
+    auditEvents: auditEvents.map(toRiskAuditEventDto),
+    availableActions: availableRiskWorkflowActions(findingDto.workflowStatus)
+  };
+}
+
+export async function listRiskAcceptances(
+  organizationId: string,
+  query: RiskAcceptanceRegistryQuery,
+  now = new Date()
+) {
+  const expiringSoonAt = new Date(now.getTime() + 30 * 86_400_000);
+  const cursor = decodeAcceptanceCursor(query.cursor);
+  const expiryWhere =
+    query.status === "expired"
+      ? { expiresAt: { lt: now } }
+      : query.status === "expiring-soon"
+        ? { expiresAt: { gte: now, lte: expiringSoonAt } }
+        : query.status === "active"
+          ? { expiresAt: { gt: expiringSoonAt } }
+          : {};
+  const where: Prisma.RiskAcceptanceWhereInput = {
+    organizationId,
+    securityFindingId: { not: null },
+    ...expiryWhere,
+    ...(query.severity ? { securityFinding: { severity: query.severity } } : {}),
+    ...(cursor
+      ? {
+          OR: [
+            { createdAt: { lt: cursor.createdAt } },
+            { createdAt: cursor.createdAt, id: { lt: cursor.id } }
+          ]
+        }
+      : {})
+  };
+  const [rows, total] = await Promise.all([
+    prisma.riskAcceptance.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: query.limit + 1,
+      include: {
+        ownerTeam: { select: { name: true } },
+        evidenceSnapshot: {
+          select: {
+            id: true,
+            capturedAt: true,
+            ruleId: true,
+            ruleVersion: true
+          }
+        },
+        securityFinding: {
+          include: {
+            resource: { select: { source: true } },
+            assignedToUser: { select: { name: true, email: true } }
+          }
+        }
+      }
+    }),
+    prisma.riskAcceptance.count({ where })
+  ]);
+  const hasMore = rows.length > query.limit;
+  const page = rows.slice(0, query.limit);
+  const approverIds = [...new Set(page.map((row) => row.approver))];
+  const approvers = approverIds.length
+    ? await prisma.user.findMany({
+        where: { organizationId, id: { in: approverIds } },
+        select: { id: true, name: true, email: true }
+      })
+    : [];
+  const approverNames = new Map(
+    approvers.map((user) => [user.id, user.name ?? user.email])
+  );
+
+  const items = page.flatMap((acceptance): RiskAcceptanceRegistryItem[] => {
+    const finding = acceptance.securityFinding;
+    if (!finding) return [];
+    const expiry = riskAcceptanceExpiry(acceptance.expiresAt, now, expiringSoonAt);
+    return [{
+      riskAcceptanceId: acceptance.id,
+      findingId: finding.id,
+      findingTitle: finding.title,
+      findingDescription: finding.description,
+      severity: finding.severity,
+      workflowStatus: normalizeWorkflowStatus(finding.workflowStatus),
+      status: finding.status,
+      ownerTeamId: acceptance.ownerTeamId,
+      ownerTeamName: acceptance.ownerTeam?.name ?? null,
+      assignedToUserId: finding.assignedToUserId,
+      assignedToUserName:
+        finding.assignedToUser?.name ??
+        finding.assignedToUser?.email ??
+        null,
+      acceptedByUserId: acceptance.approver,
+      acceptedByName: approverNames.get(acceptance.approver) ?? null,
+      acceptedAt: acceptance.createdAt.toISOString(),
+      expiresAt: acceptance.expiresAt.toISOString(),
+      expiryStatus: expiry.status,
+      daysUntilExpiry: expiry.daysUntilExpiry,
+      justification: acceptance.businessJustification,
+      evidenceSnapshotId: acceptance.evidenceSnapshot?.id ?? null,
+      evidenceCapturedAt:
+        acceptance.evidenceSnapshot?.capturedAt.toISOString() ?? null,
+      evidenceRuleId: acceptance.evidenceSnapshot?.ruleId ?? null,
+      evidenceRuleVersion: acceptance.evidenceSnapshot?.ruleVersion ?? null,
+      findingSource: finding.source,
+      resourceSource: finding.resource?.source ?? null,
+      sampleData: finding.resource?.source === "SAMPLE",
+      createdAt: acceptance.createdAt.toISOString(),
+      updatedAt: acceptance.updatedAt.toISOString()
+    }];
+  });
+  const last = page.at(-1);
+
+  return {
+    items,
+    total,
+    nextCursor: hasMore && last
+      ? Buffer.from(JSON.stringify({
+          createdAt: last.createdAt.toISOString(),
+          id: last.id
+        })).toString("base64url")
+      : null,
+    hasMore,
+    generatedAt: now.toISOString(),
+    awsApiCallExecuted: false as const,
+    mutationExecuted: false as const,
+    remediationExecuted: false as const
   };
 }
 
@@ -73,7 +223,8 @@ export async function acknowledgeFinding(
   body: AcknowledgeFindingRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.acknowledged",
+    action: "acknowledge",
+    auditAction: "risk.finding.acknowledged",
     status: "ACKNOWLEDGED",
     data: {},
     metadata: { note: body.note ?? null },
@@ -86,10 +237,9 @@ export async function assignFinding(
   findingId: string,
   body: AssignFindingRequest
 ) {
-  await validateTeamAndUser(actor.organizationId, body.ownerTeamId, body.assignedToUserId);
-
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.assigned",
+    action: "assign",
+    auditAction: "risk.finding.assigned",
     status: "ASSIGNED",
     data: {
       ownerTeamId: body.ownerTeamId,
@@ -117,7 +267,8 @@ export async function planRemediation(
   body: PlanRemediationRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.remediation_planned",
+    action: "plan-remediation",
+    auditAction: "risk.finding.remediation_planned",
     status: "REMEDIATION_PLANNED",
     data: {
       remediationPlan: body.remediationPlan,
@@ -142,8 +293,9 @@ export async function acceptRisk(
 ) {
   const acceptedUntil = new Date(body.riskAcceptedUntil);
 
-  const result = await updateWorkflow(actor, findingId, {
-    action: "risk.finding.risk_accepted",
+  return updateWorkflow(actor, findingId, {
+    action: "accept-risk",
+    auditAction: "risk.finding.risk_accepted",
     status: "RISK_ACCEPTED",
     data: {
       riskAcceptedUntil: acceptedUntil,
@@ -156,30 +308,12 @@ export async function acceptRisk(
       riskAcceptedUntil: body.riskAcceptedUntil,
       riskAcceptanceReason: body.riskAcceptanceReason
     },
+    riskAcceptance: {
+      businessJustification: body.riskAcceptanceReason,
+      expiresAt: acceptedUntil
+    },
     message: RiskWorkflowMessages.acceptRisk
   });
-
-  if (!result) {
-    return null;
-  }
-
-  await prisma.riskAcceptance.create({
-    data: {
-      organizationId: actor.organizationId,
-      securityFindingId: result.finding.id,
-      businessJustification: body.riskAcceptanceReason,
-      approver: actor.userId,
-      owner: result.finding.assignedToUserEmail || result.finding.ownerTeamName || "Unassigned",
-      ownerTeamId: result.finding.ownerTeamId,
-      evidence: {
-        sampleData: result.finding.sampleData,
-        source: "risk workflow action"
-      },
-      expiresAt: acceptedUntil
-    }
-  });
-
-  return result;
 }
 
 export async function markFalsePositive(
@@ -188,7 +322,8 @@ export async function markFalsePositive(
   body: FalsePositiveRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.false_positive_marked",
+    action: "false-positive",
+    auditAction: "risk.finding.false_positive_marked",
     status: "FALSE_POSITIVE",
     data: {},
     metadata: { reason: body.reason },
@@ -202,7 +337,8 @@ export async function resolveFinding(
   body: ResolveFindingRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.resolved",
+    action: "resolve",
+    auditAction: "risk.finding.resolved",
     status: "RESOLVED",
     data: { resolvedAt: new Date() },
     metadata: { resolutionNote: body.resolutionNote ?? null },
@@ -216,7 +352,8 @@ export async function archiveFinding(
   body: ArchiveFindingRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.archived",
+    action: "archive",
+    auditAction: "risk.finding.archived",
     status: "ARCHIVED",
     data: { archivedAt: new Date() },
     metadata: { archiveReason: body.archiveReason ?? null },
@@ -230,12 +367,15 @@ export async function reopenFinding(
   body: ReopenFindingRequest
 ) {
   return updateWorkflow(actor, findingId, {
-    action: "risk.finding.reopened",
+    action: "reopen",
+    auditAction: "risk.finding.reopened",
     status: "REOPENED",
     data: {
+      reopenedAt: new Date(),
       archivedAt: null,
       resolvedAt: null,
       riskAcceptedUntil: null,
+      riskAcceptanceReason: null,
       riskAcceptedAt: null,
       riskAcceptedByUserId: null
     },
@@ -247,56 +387,164 @@ export async function reopenFinding(
 async function updateWorkflow(
   actor: ActorContext,
   findingId: string,
-  input: {
-    action: string;
-    status: RiskWorkflowStatus;
-    data: Record<string, unknown>;
-    metadata: Record<string, unknown>;
-    message: string;
-  }
+  input: WorkflowInput
 ) {
-  const existing = await getFindingRecord(actor.organizationId, findingId);
+  const existing = await getFindingRecord(prisma, actor.organizationId, findingId);
   if (!existing) {
     return null;
   }
 
-  const now = new Date();
-  const finding = await prisma.securityFinding.update({
-    where: { id: existing.id },
-    data: {
-      ...input.data,
-      status: input.status,
-      workflowStatus: input.status,
-      lastWorkflowActionAt: now
-    },
-    include: riskFindingInclude
-  });
+  const fromStatus = normalizeWorkflowStatus(existing.workflowStatus);
+  if (!isRiskWorkflowTransitionAllowed(fromStatus, input.action)) {
+    throw workflowConflict(
+      `The ${input.action} action is not available from ${fromStatus}.`
+    );
+  }
 
-  const auditEvent = await createRiskWorkflowAuditEvent({
-    organizationId: actor.organizationId,
-    actorUserId: actor.userId,
-    findingId: finding.id,
-    action: input.action,
-    metadata: {
-      fromStatus: existing.workflowStatus,
-      toStatus: input.status,
-      ...input.metadata,
-      awsApiCallExecuted: false,
-      mutationExecuted: false,
-      remediationExecuted: false
+  if (input.action === "accept-risk" && !existing.ownerTeamId && !existing.assignedToUserId) {
+    throw workflowConflict("Risk acceptance requires a current owner.");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (input.action === "assign") {
+      await validateTeamAndUser(
+        tx,
+        actor.organizationId,
+        input.data.ownerTeamId as string | undefined,
+        input.data.assignedToUserId as string | undefined
+      );
     }
-  });
 
+    const now = new Date();
+    const updateResult = await tx.securityFinding.updateMany({
+      where: {
+        id: existing.id,
+        organizationId: actor.organizationId,
+        status: existing.status,
+        workflowStatus: existing.workflowStatus,
+        updatedAt: existing.updatedAt
+      },
+      data: {
+        ...input.data,
+        status: input.status,
+        workflowStatus: input.status,
+        lastWorkflowActionAt: now
+      }
+    });
+
+    if (updateResult.count !== 1) {
+      throw workflowConflict(
+        "The finding workflow changed before this action could be applied."
+      );
+    }
+
+    const finding = await getFindingRecord(tx, actor.organizationId, existing.id);
+    if (!finding) {
+      throw workflowConflict("The finding is no longer available.");
+    }
+
+    const auditEvent = await createRiskWorkflowAuditEvent(tx, {
+      organizationId: actor.organizationId,
+      actorUserId: actor.userId,
+      findingId: finding.id,
+      action: input.auditAction,
+      metadata: {
+        action: input.action,
+        fromStatus,
+        toStatus: input.status,
+        ...input.metadata,
+        awsApiCallExecuted: false,
+        mutationExecuted: false,
+        remediationExecuted: false
+      }
+    });
+
+    if (input.riskAcceptance) {
+      const evidenceSnapshot = await tx.securityFindingEvidenceSnapshot.findFirst({
+        where: {
+          organizationId: actor.organizationId,
+          securityFindingId: finding.id
+        },
+        orderBy: [{ capturedAt: "desc" }, { id: "desc" }],
+        select: { id: true }
+      });
+      await tx.riskAcceptance.create({
+        data: {
+          organizationId: actor.organizationId,
+          securityFindingId: finding.id,
+          businessJustification: input.riskAcceptance.businessJustification,
+          approver: actor.userId,
+          owner:
+            finding.assignedToUser?.email ||
+            finding.ownerTeam?.name ||
+            "Unassigned",
+          ownerTeamId: finding.ownerTeamId,
+          evidenceSnapshotId: evidenceSnapshot?.id ?? null,
+          evidence: {
+            sampleData: finding.resource?.source === "SAMPLE",
+            source: "risk workflow action"
+          },
+          expiresAt: input.riskAcceptance.expiresAt
+        }
+      });
+    }
+
+    return {
+      finding: toRiskFindingDto(finding),
+      auditEvent: toRiskAuditEventDto(auditEvent),
+      ...RiskWorkflowSafety,
+      message: input.message
+    };
+  });
+}
+
+function riskAcceptanceExpiry(
+  expiresAt: Date,
+  now: Date,
+  expiringSoonAt: Date
+) {
+  const millisecondsUntilExpiry = expiresAt.getTime() - now.getTime();
   return {
-    finding: toRiskFindingDto(finding),
-    auditEvent: toRiskAuditEventDto(auditEvent),
-    ...RiskWorkflowSafety,
-    message: input.message
+    status:
+      expiresAt < now
+        ? "EXPIRED" as const
+        : expiresAt <= expiringSoonAt
+          ? "EXPIRING_SOON" as const
+          : "ACTIVE" as const,
+    daysUntilExpiry: Math.ceil(millisecondsUntilExpiry / 86_400_000)
   };
 }
 
-async function getFindingRecord(organizationId: string, findingId: string) {
-  return prisma.securityFinding.findFirst({
+function decodeAcceptanceCursor(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.createdAt !== "string" ||
+      typeof parsed.id !== "string" ||
+      parsed.id.length < 1 ||
+      parsed.id.length > 128
+    ) {
+      throw new Error("invalid");
+    }
+    const createdAt = new Date(parsed.createdAt);
+    if (Number.isNaN(createdAt.getTime())) throw new Error("invalid");
+    return { createdAt, id: parsed.id };
+  } catch {
+    throw Object.assign(new Error("Risk acceptance cursor is invalid."), {
+      statusCode: 400
+    });
+  }
+}
+
+async function getFindingRecord(
+  client: Pick<WorkflowClient, "securityFinding">,
+  organizationId: string,
+  findingId: string
+) {
+  return client.securityFinding.findFirst({
     where: {
       organizationId,
       id: findingId
@@ -306,36 +554,58 @@ async function getFindingRecord(organizationId: string, findingId: string) {
 }
 
 async function validateTeamAndUser(
+  client: Pick<WorkflowClient, "team" | "user">,
   organizationId: string,
   ownerTeamId: string | undefined,
   assignedToUserId: string | undefined
 ) {
+  if (!ownerTeamId && !assignedToUserId) {
+    throw Object.assign(
+      new Error("Assignment requires an owner team or assigned user."),
+      { statusCode: 400 }
+    );
+  }
+
   if (ownerTeamId) {
-    const team = await prisma.team.findFirst({
+    const team = await client.team.findFirst({
       where: { organizationId, id: ownerTeamId },
       select: { id: true }
     });
 
     if (!team) {
-      throw new Error("Owner team must belong to the authenticated organization.");
+      throw Object.assign(new Error("Owner team is unavailable for this workspace."), {
+        statusCode: 400
+      });
     }
   }
 
   if (assignedToUserId) {
-    const user = await prisma.user.findFirst({
+    const user = await client.user.findFirst({
       where: { organizationId, id: assignedToUserId },
       select: { id: true }
     });
 
     if (!user) {
-      throw new Error("Assigned user must belong to the authenticated organization.");
+      throw Object.assign(new Error("Assigned user is unavailable for this workspace."), {
+        statusCode: 400
+      });
     }
   }
 }
 
+function normalizeWorkflowStatus(status: string): RiskWorkflowStatus {
+  return status === "ACCEPTED_RISK"
+    ? "RISK_ACCEPTED"
+    : (status as RiskWorkflowStatus);
+}
+
+function workflowConflict(message: string) {
+  return Object.assign(new Error(message), { statusCode: 409 });
+}
+
 const riskFindingInclude = {
   awsAccount: { select: { name: true } },
-  resource: { select: { name: true, resourceType: true } },
+  resource: { select: { name: true, resourceType: true, source: true } },
   ownerTeam: { select: { name: true } },
   assignedToUser: { select: { email: true, name: true } },
   riskAcceptedByUser: { select: { email: true } }
@@ -343,10 +613,7 @@ const riskFindingInclude = {
 
 function toRiskFindingDto(finding: NonNullable<FindingWithRelations>): RiskFindingDto {
   const evidence = (finding.evidence as Record<string, unknown>) || {};
-  const workflowStatus =
-    finding.workflowStatus === "ACCEPTED_RISK"
-      ? "RISK_ACCEPTED"
-      : finding.workflowStatus;
+  const workflowStatus = normalizeWorkflowStatus(finding.workflowStatus);
 
   return {
     id: finding.id,
@@ -356,6 +623,8 @@ function toRiskFindingDto(finding: NonNullable<FindingWithRelations>): RiskFindi
     resourceId: finding.resourceId,
     resourceName: finding.resource?.name ?? null,
     resourceType: finding.resource?.resourceType ?? null,
+    findingSource: finding.source,
+    resourceSource: finding.resource?.source ?? null,
     ruleId: finding.ruleId,
     title: finding.title,
     description: finding.description,
@@ -382,8 +651,9 @@ function toRiskFindingDto(finding: NonNullable<FindingWithRelations>): RiskFindi
     complianceRefs: (finding.complianceRefs as string[]) || [],
     firstSeenAt: finding.firstSeenAt.toISOString(),
     lastSeenAt: finding.lastSeenAt.toISOString(),
+    updatedAt: finding.updatedAt.toISOString(),
     lastWorkflowActionAt: finding.lastWorkflowActionAt?.toISOString() ?? null,
     archivedAt: finding.archivedAt?.toISOString() ?? null,
-    sampleData: Boolean(evidence.sampleData) || finding.title.includes("Sample demo data")
+    sampleData: finding.resource?.source === "SAMPLE"
   };
 }

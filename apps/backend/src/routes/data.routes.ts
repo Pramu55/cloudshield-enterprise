@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 
 const DEFAULT_LIMIT = 50;
@@ -7,6 +8,7 @@ const DEFAULT_LIMIT = 50;
 export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/v1/dashboard/summary", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     const organization = await getOrganization(auth.organizationId);
     const organizationScope = scopeByOrganization(auth.organizationId);
 
@@ -146,6 +148,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/v1/organizations/overview", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     const organizationScope = scopeByOrganization(auth.organizationId);
     
     const accounts = await prisma.awsAccount.findMany({ where: organizationScope });
@@ -175,6 +178,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/v1/governance/business-units", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     const organizationScope = scopeByOrganization(auth.organizationId);
     
     const accounts = await prisma.awsAccount.findMany({ where: organizationScope });
@@ -226,6 +230,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/v1/inventory/resources", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
     const {
       accountId,
       account,
@@ -349,6 +354,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/v1/findings/cost", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.FINDINGS_READ);
     const findings = await prisma.costFinding.findMany({
       where: scopeByOrganization(auth.organizationId),
       take: DEFAULT_LIMIT,
@@ -373,6 +379,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/v1/recommendations", { preHandler: requireAuth }, async (request) => {
     const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_READ);
     const recommendations = await prisma.recommendation.findMany({
       where: scopeByOrganization(auth.organizationId),
       take: DEFAULT_LIMIT,

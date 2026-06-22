@@ -1,3 +1,5 @@
+import type { CurrentUserCapabilityKey } from "@cloudshield/contracts";
+
 export type RouteCategory = "Overview" | "Cloud" | "Security" | "Operations" | "Administration";
 
 export interface RouteMetadata {
@@ -6,7 +8,8 @@ export interface RouteMetadata {
   href: string;
   icon: string;
   category: RouteCategory;
-  roles?: string[];
+  // Capability visibility is UX-only and never grants endpoint authority.
+  requiredCapability?: CurrentUserCapabilityKey;
   description?: string;
   keywords: string[];
 }
@@ -85,13 +88,24 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     keywords: ["security", "policies", "remediation", "workflows"]
   },
   {
+    id: "nav-risk-acceptances",
+    label: "Risk Acceptances",
+    href: "/dashboard/risk-acceptances",
+    icon: "governance",
+    category: "Security",
+    requiredCapability: "risks.read",
+    description: "Accepted risk governance, expiry, and evidence linkage.",
+    keywords: ["risk acceptance", "accepted risks", "exceptions", "expiry", "governance"]
+  },
+  {
     id: "nav-compliance",
     label: "Compliance",
     href: "/dashboard/compliance",
     icon: "compliance",
     category: "Security",
-    description: "Compliance frameworks and evidence.",
-    keywords: ["security", "evidence", "frameworks", "audit", "posture"]
+    requiredCapability: "reports.read",
+    description: "Evidence-backed internal control mapping.",
+    keywords: ["security", "evidence", "controls", "audit", "posture", "cis inspired"]
   },
   {
     id: "nav-recommendations",
@@ -135,7 +149,7 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     href: "/dashboard/settings",
     icon: "settings",
     category: "Administration",
-    roles: ["OWNER", "ADMIN"],
+    requiredCapability: "settings.read",
     description: "Workspace and organization settings.",
     keywords: ["workspace", "organization", "preferences", "billing"]
   },
@@ -145,9 +159,18 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     href: "/dashboard/settings/members",
     icon: "members",
     category: "Administration",
-    roles: ["OWNER", "ADMIN"],
+    requiredCapability: "members.read",
     description: "Manage team members and access.",
     keywords: ["team", "users", "access", "rbac", "roles"]
+  },
+  {
+    id: "nav-profile",
+    label: "Profile",
+    href: "/dashboard/profile",
+    icon: "profile",
+    category: "Administration",
+    description: "Personal details, security context, and workspace access.",
+    keywords: ["profile", "personal", "account", "identity", "security"]
   }
 ];
 

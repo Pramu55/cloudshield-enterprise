@@ -11,6 +11,7 @@ export type AwsConnectorConfig = {
   roleArn: string;
   externalId: string;
   executorRoleArn: string;
+  allowedAccountIds: string[];
   allowedRegions: string[];
   executionMode: "disabled" | "simulation" | "staging" | "production";
 };

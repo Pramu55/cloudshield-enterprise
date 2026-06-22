@@ -1,32 +1,70 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchCloudShieldClient } from "../../../lib/client-api";
+import { fetchCloudShieldClient, useCloudShieldData } from "../../../lib/client-api";
 import { RefreshCcw, ShieldAlert, CheckCircle, Activity, AlertTriangle, List, History, CheckCircle2, ServerCrash, Clock, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { ErrorState } from "../../../components/ui/error-state";
+import { LoadingState } from "../../../components/ui/loading-state";
+import { API_ERROR_MESSAGES, ApiRequestError, toApiError, type ApiError } from "../../../lib/api-error";
+import {
+  SecurityAlertLifecycleMutationResponseSchema,
+  type SecurityAlertLifecycleMutationResponse,
+  EvaluateMonitoringResponseSchema,
+  type EvaluateMonitoringResponse
+} from "@cloudshield/contracts";
+import {
+  FrontendMonitoringHealthSchema,
+  FrontendMonitoringRunsListSchema,
+  FrontendSecurityAlertsListSchema,
+  FrontendCapabilitySessionSchema,
+  type FrontendCapabilitySession,
+  type FrontendMonitoringHealth,
+  type FrontendMonitoringRunsList,
+  type FrontendSecurityAlertsList
+} from "../../../lib/response-contracts";
+
+function monitoringActionContractError() {
+  return new ApiRequestError({
+    kind: "CONTRACT_INVALID",
+    safeMessage: API_ERROR_MESSAGES.CONTRACT_INVALID,
+    retryableRead: false,
+    sessionExpired: false
+  });
+}
 
 export default function SecurityMonitoringPage() {
+  const authState = useCloudShieldData<FrontendCapabilitySession | null>("/api/v1/auth/me", null, {
+    schema: FrontendCapabilitySessionSchema
+  });
+  const session = authState.data;
   const [activeTab, setActiveTab] = useState<"overview" | "alerts" | "runs">("overview");
-  const [health, setHealth] = useState<any>(null);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [runs, setRuns] = useState<any[]>([]);
+  const [health, setHealth] = useState<FrontendMonitoringHealth | null>(null);
+  const [alerts, setAlerts] = useState<FrontendSecurityAlertsList["items"]>([]);
+  const [runs, setRuns] = useState<FrontendMonitoringRunsList["items"]>([]);
   const [loading, setLoading] = useState(true);
+  const [readError, setReadError] = useState<ApiError | null>(null);
+  const [actionError, setActionError] = useState<ApiError | null>(null);
 
-  const loadData = async () => {
+  const loadData = async (): Promise<boolean> => {
     setLoading(true);
+    setReadError(null);
     try {
       if (activeTab === "overview") {
-        const h = await fetchCloudShieldClient<any>("/api/v1/security-monitoring/health");
+        const h = await fetchCloudShieldClient<FrontendMonitoringHealth>("/api/v1/security-monitoring/health", { schema: FrontendMonitoringHealthSchema });
         setHealth(h);
       } else if (activeTab === "alerts") {
-        const a = await fetchCloudShieldClient<any>("/api/v1/security-monitoring/alerts");
-        setAlerts(a.items || []);
+        const a = await fetchCloudShieldClient<FrontendSecurityAlertsList>("/api/v1/security-monitoring/alerts", { schema: FrontendSecurityAlertsListSchema });
+        setAlerts(a.items);
       } else if (activeTab === "runs") {
-        const r = await fetchCloudShieldClient<any>("/api/v1/security-monitoring/runs");
-        setRuns(r.items || []);
+        const r = await fetchCloudShieldClient<FrontendMonitoringRunsList>("/api/v1/security-monitoring/runs", { schema: FrontendMonitoringRunsListSchema });
+        setRuns(r.items);
       }
+      return true;
     } catch (error) {
-      console.error(error);
+      const normalized = toApiError(error);
+      if (normalized.kind !== "CANCELLED") setReadError(normalized);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -37,23 +75,61 @@ export default function SecurityMonitoringPage() {
   }, [activeTab]);
 
   const handleEvaluate = async () => {
-    await fetchCloudShieldClient("/api/v1/security-monitoring/evaluate", { method: "POST", body: { trigger: "MANUAL" } });
-    alert("Evaluation queued.");
-    setTimeout(loadData, 2000);
+    setActionError(null);
+    try {
+      const acceptance = await fetchCloudShieldClient<EvaluateMonitoringResponse>("/api/v1/security-monitoring/evaluate", {
+        method: "POST",
+        body: { trigger: "MANUAL" },
+        schema: EvaluateMonitoringResponseSchema
+      });
+      if (!acceptance) throw monitoringActionContractError();
+      const confirmed = await loadData();
+      if (!confirmed) {
+        throw monitoringActionContractError();
+      }
+    } catch (error) {
+      setActionError(toApiError(error));
+    }
   };
 
   const handleAcknowledge = async (id: string) => {
-    await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/${id}/acknowledge`, { method: "PATCH", body: { note: "Acknowledged via UI" } });
-    loadData();
+    setActionError(null);
+    try {
+      const acceptance = await fetchCloudShieldClient<SecurityAlertLifecycleMutationResponse>(`/api/v1/security-monitoring/alerts/${id}/acknowledge`, {
+        method: "PATCH",
+        body: { note: "Acknowledged via UI" },
+        schema: SecurityAlertLifecycleMutationResponseSchema
+      });
+      if (!acceptance) throw monitoringActionContractError();
+      const confirmed = await loadData();
+      if (!confirmed) {
+        throw monitoringActionContractError();
+      }
+    } catch (error) {
+      setActionError(toApiError(error));
+    }
   };
 
   const handleResolve = async (id: string) => {
-    await fetchCloudShieldClient(`/api/v1/security-monitoring/alerts/${id}/resolve`, { method: "PATCH", body: { reason: "Resolved via UI" } });
-    loadData();
+    setActionError(null);
+    try {
+      const acceptance = await fetchCloudShieldClient<SecurityAlertLifecycleMutationResponse>(`/api/v1/security-monitoring/alerts/${id}/resolve`, {
+        method: "PATCH",
+        body: { reason: "Resolved via UI" },
+        schema: SecurityAlertLifecycleMutationResponseSchema
+      });
+      if (!acceptance) throw monitoringActionContractError();
+      const confirmed = await loadData();
+      if (!confirmed) {
+        throw monitoringActionContractError();
+      }
+    } catch (error) {
+      setActionError(toApiError(error));
+    }
   };
 
   const renderOverview = () => {
-    if (loading && !health) return <div className="p-8 text-center text-slate-500">Loading overview...</div>;
+    if (loading && !health) return <LoadingState message="Loading monitoring overview..." />;
     if (!health) return null;
 
     const getHealthIcon = (status: string) => {
@@ -81,6 +157,19 @@ export default function SecurityMonitoringPage() {
 
     return (
       <div className="space-y-6">
+        {["SETUP_INCOMPLETE", "INSUFFICIENT_DATA", "DISABLED"].includes(health.status) ? (
+          <section className="cs-setup-callout">
+            <div>
+              <span>Monitoring prerequisites</span>
+              <h2>Security Monitoring needs registered inventory before it can evaluate posture</h2>
+              <p>Register a non-production AWS account, validate its role-based identity, and explicitly enable approved read-only inventory mode. No AWS call or mutation is performed from this setup message.</p>
+            </div>
+            <div className="cs-action-grid">
+              <Link className="cs-action-primary" href="/dashboard/accounts">Review AWS accounts</Link>
+              <Link className="cs-link" href="/dashboard/settings">Open safe settings</Link>
+            </div>
+          </section>
+        ) : null}
         <div className={`border rounded-xl p-6 ${getHealthColor(health.status)}`}>
           <div className="flex items-center gap-4">
             <div className="p-3 bg-white rounded-xl shadow-sm">
@@ -88,7 +177,7 @@ export default function SecurityMonitoringPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">System Status: {health.status}</h2>
-              <p className="text-slate-600">{health.message}</p>
+              <p className="text-slate-600">{health.message || "Environment monitoring is active"}</p>
             </div>
           </div>
         </div>
@@ -121,7 +210,7 @@ export default function SecurityMonitoringPage() {
               </div>
               <h3 className="font-medium text-slate-900">Active Monitors</h3>
             </div>
-            <p className="text-3xl font-bold text-slate-900">{health.activeMonitors ?? 0}</p>
+            <p className="text-3xl font-bold text-slate-900">{health.monitoredAccounts}</p>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
@@ -129,12 +218,13 @@ export default function SecurityMonitoringPage() {
               <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                 <List className="w-5 h-5" />
               </div>
-              <h3 className="font-medium text-slate-900">Connected Accounts</h3>
+              <h3 className="font-medium text-slate-900">Degraded Accounts</h3>
             </div>
-            <p className="text-3xl font-bold text-slate-900">{health.connectedAccounts ?? 0}</p>
+            <p className="text-3xl font-bold text-slate-900">{health.degradedAccounts}</p>
           </div>
         </div>
       </div>
+
     );
   };
 
@@ -150,7 +240,7 @@ export default function SecurityMonitoringPage() {
           ) : alerts.length === 0 ? (
             <div className="p-8 text-center text-slate-500 flex flex-col items-center">
               <CheckCircle className="w-10 h-10 text-emerald-400 mb-3" />
-              <p>No active alerts.</p>
+              <p>No alerts were returned for the current monitoring view. This does not establish that the environment is secure.</p>
             </div>
           ) : (
             alerts.map((alert) => (
@@ -167,7 +257,7 @@ export default function SecurityMonitoringPage() {
                   </div>
                   <h3 className="text-base font-medium text-slate-900">
                     <Link href={`/dashboard/monitoring/alerts/${alert.id}`} className="hover:underline hover:text-indigo-600">
-                      {alert.title || alert.ruleKey}
+                      {alert.title}
                     </Link>
                   </h3>
                   {alert.description && <p className="text-sm text-slate-600 mt-1 line-clamp-2">{alert.description}</p>}
@@ -177,12 +267,12 @@ export default function SecurityMonitoringPage() {
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   {alert.status === 'OPEN' && (
-                    <button onClick={() => handleAcknowledge(alert.id)} className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-colors">
+                    <button onClick={() => handleAcknowledge(alert.id)} disabled={!session?.capabilities?.["monitoring.alerts.acknowledge"]} className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                       Acknowledge
                     </button>
                   )}
                   {alert.status !== 'RESOLVED' && (
-                    <button onClick={() => handleResolve(alert.id)} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors">
+                    <button onClick={() => handleResolve(alert.id)} disabled={!session?.capabilities?.["monitoring.alerts.resolve"]} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                       Resolve
                     </button>
                   )}
@@ -215,8 +305,8 @@ export default function SecurityMonitoringPage() {
                   </div>
                   <div>
                     <h3 className="font-medium text-slate-900">Evaluation Run</h3>
-                    <p className="text-sm text-slate-500">Started: {new Date(run.startedAt || run.createdAt).toLocaleString()}</p>
-                    {run.errorDetails && <p className="text-xs text-red-500 mt-1">{run.errorDetails}</p>}
+                    <p className="text-sm text-slate-500">Started: {new Date(run.startedAt).toLocaleString()}</p>
+                    {run.errorCode && <p className="text-xs text-red-500 mt-1">Evaluation did not complete.</p>}
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -243,8 +333,8 @@ export default function SecurityMonitoringPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="monitoring-workspace p-6 max-w-7xl mx-auto space-y-6">
+      <div className="monitoring-command-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Security Monitoring</h1>
           <p className="text-slate-500 text-sm mt-1">On-demand deterministic evaluation of persisted AWS inventory and compliance posture.</p>
@@ -254,15 +344,27 @@ export default function SecurityMonitoringPage() {
             <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button onClick={handleEvaluate} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 flex items-center gap-2 shadow-sm transition-colors">
+          <button onClick={handleEvaluate} disabled={!session?.capabilities?.["monitoring.evaluate"]} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 flex items-center gap-2 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Activity className="w-4 h-4" />
             Evaluate Now
           </button>
         </div>
       </div>
 
-      <div className="border-b border-slate-200">
-        <nav className="-mb-px flex space-x-8">
+      {readError ? (
+        <ErrorState
+          title={readError.kind === "FORBIDDEN" ? "Permission required" : readError.kind === "CONTRACT_INVALID" ? "Invalid service response" : "Monitoring unavailable"}
+          message={readError.safeMessage}
+          correlationId={readError.correlationId}
+          onRetry={readError.retryableRead ? loadData : undefined}
+        />
+      ) : null}
+      {actionError ? (
+        <ErrorState title="Action not completed" message={actionError.safeMessage} correlationId={actionError.correlationId} />
+      ) : null}
+
+      <div className="monitoring-tabs-shell border-b border-slate-200">
+        <nav className="monitoring-tabs -mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab("overview")}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -302,9 +404,9 @@ export default function SecurityMonitoringPage() {
       </div>
 
       <div className="pt-2">
-        {activeTab === "overview" && renderOverview()}
-        {activeTab === "alerts" && renderAlerts()}
-        {activeTab === "runs" && renderRuns()}
+        {!readError && activeTab === "overview" && renderOverview()}
+        {!readError && activeTab === "alerts" && renderAlerts()}
+        {!readError && activeTab === "runs" && renderRuns()}
       </div>
     </div>
   );

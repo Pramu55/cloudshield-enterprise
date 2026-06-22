@@ -104,7 +104,8 @@ test("Dashboard Command Center Integration", async (t) => {
         provider: "aws",
         resourceType: "EC2_INSTANCE",
         resourceId: "i-0123456789abcdef0",
-        ownerTeamId: team.id
+        ownerTeamId: team.id,
+        source: "AWS_SYNC"
       }
     });
 
@@ -117,7 +118,8 @@ test("Dashboard Command Center Integration", async (t) => {
         title: "Public SSH Open",
         description: "SSH is open to the world",
         severity: "CRITICAL",
-        workflowStatus: "OPEN"
+        workflowStatus: "OPEN",
+        lastEvaluatedAt: new Date()
       }
     });
 
@@ -127,6 +129,7 @@ test("Dashboard Command Center Integration", async (t) => {
         awsAccountId: account.id,
         jobType: "AWS_FULL_SCAN",
         status: "COMPLETED",
+        source: "AWS_SYNC",
         startedAt: new Date(Date.now() - 3600 * 1000), // 1 hour ago
         completedAt: new Date()
       }
@@ -140,7 +143,8 @@ test("Dashboard Command Center Integration", async (t) => {
         title: "Test Title",
         description: "Test Desc",
         status: "PASS",
-        evidenceCount: 1
+        evidenceCount: 1,
+        lastEvaluatedAt: new Date()
       }
     });
 
@@ -149,7 +153,9 @@ test("Dashboard Command Center Integration", async (t) => {
         organizationId: org.id,
         controlId: control.id,
         status: "PASS",
-        evidenceType: "SCREENSHOT"
+        evidenceType: "SCREENSHOT",
+        sampleData: false,
+        sourceClassification: "AWS_SYNC"
       }
     });
 
@@ -285,6 +291,11 @@ test("Dashboard Command Center Integration", async (t) => {
     assert.strictEqual(validatedData.scanSummary.completed, 1);
     assert.strictEqual(validatedData.governanceSummary.evidenceRecords, 1);
     assert.strictEqual(validatedData.graphSummary.nodeCount, 1);
+    for (const component of validatedData.postureScore.components) {
+      assert.strictEqual(component.scoreStatus, "SCORED");
+      assert.strictEqual(typeof component.score, "number");
+    }
+    assert.strictEqual(typeof validatedData.postureScore.totalScore, "number");
   });
 
   await t.test("Handles empty organization gracefully (Service call)", async () => {
@@ -298,10 +309,75 @@ test("Dashboard Command Center Integration", async (t) => {
     assert.strictEqual(validatedData.executiveSummary.totalAccounts, 0);
     assert.strictEqual(validatedData.inventoryFreshness.status, "CONNECTOR_DISABLED");
     const emptySecurityComp = validatedData.postureScore.components.find(c => c.key === "SECURITY");
+    const emptyComplianceComp = validatedData.postureScore.components.find(c => c.key === "COMPLIANCE");
+    const emptyReadinessComp = validatedData.postureScore.components.find(c => c.key === "READINESS");
     if (!emptySecurityComp) throw new Error("Missing security component");
-    assert.strictEqual(emptySecurityComp.score, 0);
+    if (!emptyComplianceComp) throw new Error("Missing compliance component");
+    if (!emptyReadinessComp) throw new Error("Missing readiness component");
+    assert.strictEqual(emptySecurityComp.scoreStatus, "NOT_EVALUATED");
+    assert.strictEqual(emptySecurityComp.score, null);
+    assert.strictEqual(emptyComplianceComp.scoreStatus, "NOT_EVALUATED");
+    assert.strictEqual(emptyComplianceComp.score, null);
+    assert.strictEqual(emptyReadinessComp.scoreStatus, "NOT_CONNECTED");
+    assert.strictEqual(emptyReadinessComp.score, null);
+    assert.strictEqual(validatedData.postureScore.totalScore, null);
 
     await prisma.organization.delete({ where: { id: emptyOrg.id } });
+  });
+
+  await t.test("sample-only inventory is labeled instead of scored as failed", async () => {
+    const sampleOrg = await prisma.organization.create({
+      data: { name: `sample_org_${Date.now()}`, slug: `sample_org_${Date.now()}` }
+    });
+    try {
+      const account = await prisma.awsAccount.create({
+        data: {
+          organizationId: sampleOrg.id,
+          name: "Sample account",
+          accountId: "444455556666",
+          environment: Environment.sandbox,
+          connectionStatus: "VALIDATION_SUCCEEDED",
+          status: AwsAccountStatus.CONNECTED,
+          regions: ["us-east-1"]
+        }
+      });
+      const resource = await prisma.cloudResource.create({
+        data: {
+          organizationId: sampleOrg.id,
+          awsAccountId: account.id,
+          resourceType: "EC2_INSTANCE",
+          resourceId: "i-sample-dashboard",
+          source: "SAMPLE"
+        }
+      });
+      await prisma.securityFinding.create({
+        data: {
+          organizationId: sampleOrg.id,
+          awsAccountId: account.id,
+          resourceId: resource.id,
+          ruleId: "SAMPLE_DASHBOARD_RULE",
+          title: "Sample dashboard finding",
+          description: "Sample-only posture context.",
+          severity: "HIGH",
+          workflowStatus: "OPEN",
+          source: "RULE_ENGINE",
+          lastEvaluatedAt: new Date()
+        }
+      });
+
+      const validatedData = CommandCenterResponseSchema.parse(
+        await getCommandCenterData(sampleOrg.id)
+      );
+      const security = validatedData.postureScore.components.find(c => c.key === "SECURITY");
+      const freshness = validatedData.postureScore.components.find(c => c.key === "FRESHNESS");
+      if (!security || !freshness) throw new Error("Missing sample-only score components");
+      assert.strictEqual(security.scoreStatus, "SAMPLE_ONLY");
+      assert.strictEqual(security.score, null);
+      assert.strictEqual(freshness.scoreStatus, "SAMPLE_ONLY");
+      assert.strictEqual(freshness.score, null);
+    } finally {
+      await prisma.organization.delete({ where: { id: sampleOrg.id } });
+    }
   });
 
   await t.test("API: Returns 401 for unauthenticated request", async () => {

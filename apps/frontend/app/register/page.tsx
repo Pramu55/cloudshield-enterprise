@@ -92,19 +92,57 @@ function RegisterForm() {
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-brand">
-        <Link href="/">
+    <main className="auth-shell auth-shell-premium">
+      <section className="auth-brand auth-brand-premium">
+        <Link href="/" className="auth-logo-link">
           <span className="auth-brand-mark"><ShieldCheck size={18} /></span>
           <strong>CloudShield</strong>
         </Link>
-        <div>
-          <h1>{invitationToken ? "Join your CloudShield workspace." : "Create a CloudShield workspace."}</h1>
-          <p>Set up console access for cloud posture review, evidence workflows, reports, and governed operations.</p>
+
+        <div className="auth-hero-copy">
+          <span className="auth-eyebrow">Enterprise onboarding</span>
+          <h1>{invitationToken ? "Join your CloudShield workspace." : "Create your CloudShield command center."}</h1>
+          <p>
+            Launch a governed workspace for AWS account readiness, compliance evidence,
+            risk ownership, reports, and secure operational review.
+          </p>
+        </div>
+
+        <div className="auth-signal-card">
+          <div>
+            <span>Tenant model</span>
+            <strong>Workspace scoped</strong>
+          </div>
+          <div>
+            <span>RBAC baseline</span>
+            <strong>Owner access</strong>
+          </div>
+          <div>
+            <span>Audit posture</span>
+            <strong>Evidence ready</strong>
+          </div>
+        </div>
+
+        <div className="auth-security-grid">
+          <article>
+            <span>01</span>
+            <strong>Create workspace</strong>
+            <p>Start with a secure organization profile and owner account.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Connect cloud accounts</strong>
+            <p>Add AWS accounts safely before inventory and posture review.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>Govern operations</strong>
+            <p>Use approvals, evidence, and controlled workflows for remediation.</p>
+          </article>
         </div>
       </section>
 
-      <section className="auth-panel">
+      <section className="auth-panel auth-panel-premium">
         <div className="auth-card">
           <h2>{invitationToken ? "Accept invitation" : "Create workspace"}</h2>
           <p>{invitationToken ? "Create your user account to join the team." : "Start with your organization profile."}</p>

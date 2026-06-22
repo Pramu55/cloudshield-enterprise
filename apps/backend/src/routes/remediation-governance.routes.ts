@@ -10,7 +10,8 @@ import {
   GovernanceApprovalsResponseSchema,
   GovernanceDecisionRequestSchema,
   RemediationPlanListResponseSchema,
-  RemediationPlanMutationResponseSchema
+  RemediationPlanMutationResponseSchema,
+  ResourceStateCaptureResponseSchema
 } from "@cloudshield/contracts";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import {
@@ -33,6 +34,11 @@ import {
   requestGovernedAwsChangeApproval,
   simulateGovernedAwsChange
 } from "../modules/governance/aws-change-execution.service.js";
+import {
+  captureGovernedEc2ResourceState,
+  FingerprintCaptureError,
+  type FingerprintCaptureFailure
+} from "../modules/governance/resource-state-capture.service.js";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 
 const FindingParamsSchema = z.object({
@@ -42,6 +48,8 @@ const FindingParamsSchema = z.object({
 const PlanParamsSchema = z.object({
   planId: z.string().min(1)
 });
+
+const EmptyCaptureBodySchema = z.object({}).strict();
 
 export async function registerRemediationGovernanceRoutes(
   app: FastifyInstance
@@ -203,6 +211,38 @@ export async function registerRemediationGovernanceRoutes(
   );
 
   app.post(
+    "/api/v1/governance/remediation-plans/:planId/capture-resource-state",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const auth = getAuthContext(request);
+      requirePermission(auth.role, PERMISSIONS.OPERATIONS_PREPARE);
+      EmptyCaptureBodySchema.parse(request.body ?? {});
+      try {
+        const result = await captureGovernedEc2ResourceState(
+          auth,
+          PlanParamsSchema.parse(request.params).planId,
+          request.id,
+          app.config
+        );
+        if (!result) {
+          reply.status(404).send({ error: "remediation_plan_not_found", message: "Remediation plan was not found for this organization.", correlationId: request.id });
+          return;
+        }
+        return ResourceStateCaptureResponseSchema.parse(result);
+      } catch (error) {
+        if (!(error instanceof FingerprintCaptureError)) throw error;
+        const statusCode = fingerprintCaptureHttpStatus(error.classification);
+        reply.status(statusCode).send({
+          error: error.classification,
+          message: error.message,
+          correlationId: request.id,
+          awsApiCallExecuted: error.awsApiCallExecuted
+        });
+      }
+    }
+  );
+
+  app.post(
     "/api/v1/governance/remediation-plans/:planId/approve",
     { preHandler: requireAuth },
     async (request, reply) =>
@@ -250,7 +290,8 @@ export async function registerRemediationGovernanceRoutes(
         await queueGovernedAwsChangeExecution(
           auth,
           PlanParamsSchema.parse(request.params).planId,
-          { ...GovernedExecuteRequestSchema.parse(request.body ?? {}), correlationId: request.id } as any
+          GovernedExecuteRequestSchema.parse(request.body ?? {}),
+          { correlationId: request.id }
         )
       );
       }
@@ -296,6 +337,20 @@ export async function registerRemediationGovernanceRoutes(
       message: "Governance audit activity from CloudShield records only."
     });
   });
+}
+
+export function fingerprintCaptureHttpStatus(classification: FingerprintCaptureFailure) {
+  switch (classification) {
+    case "FINGERPRINT_CAPTURE_DISABLED":
+    case "FINGERPRINT_CAPTURE_PROVIDER_FAILED":
+      return 503;
+    case "FINGERPRINT_CAPTURE_PERSISTENCE_FAILED":
+      return 500;
+    case "FINGERPRINT_CAPTURE_RESOURCE_NOT_FOUND":
+      return 404;
+    default:
+      return 409;
+  }
 }
 
 function sendPlanMutation(reply: any, result: unknown) {

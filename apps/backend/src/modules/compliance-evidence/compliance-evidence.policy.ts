@@ -1,4 +1,8 @@
-import type { ComplianceControlDefinition, ComplianceEvaluationSafety } from "./compliance-control.types.js";
+import type {
+  ComplianceControlDefinition,
+  ComplianceControlProjectionDefinition,
+  ComplianceEvaluationSafety
+} from "./compliance-control.types.js";
 
 export const ComplianceEvidenceSafety: ComplianceEvaluationSafety = {
   sampleData: true,
@@ -142,5 +146,62 @@ export const ComplianceControlCatalog: ComplianceControlDefinition[] = [
     severity: "LOW",
     findingRules: ["MISSING_OWNER_COST_CENTER_TAGS"],
     evidenceTypes: ["cost_finding"]
+  }
+];
+
+export const ComplianceControlProjectionCatalog: ComplianceControlProjectionDefinition[] = [
+  {
+    controlId: "CIS_INSPIRED_NETWORK_ADMIN_001",
+    framework: "CIS_INSPIRED",
+    controlCode: "NET-ADMIN-001",
+    title: "Administrative network exposure",
+    description: "Maps stored findings for unrestricted SSH and RDP administrative access.",
+    severity: "HIGH",
+    mappedRuleIds: ["SG_OPEN_SSH_TO_WORLD", "SG_OPEN_RDP_TO_WORLD"]
+  },
+  {
+    controlId: "CIS_INSPIRED_PUBLIC_COMPUTE_001",
+    framework: "CIS_INSPIRED",
+    controlCode: "NET-COMPUTE-001",
+    title: "Public compute exposure",
+    description: "Maps public IP and risky public security-group exposure findings.",
+    severity: "HIGH",
+    mappedRuleIds: ["EC2_PUBLIC_IP_PRESENT", "PUBLIC_NETWORK_WITH_COMPUTE_ATTACHMENT"]
+  },
+  {
+    controlId: "CIS_INSPIRED_ENCRYPTION_001",
+    framework: "CIS_INSPIRED",
+    controlCode: "DATA-ENC-001",
+    title: "Encryption at rest",
+    description: "Maps stored EBS encryption posture findings.",
+    severity: "MEDIUM",
+    mappedRuleIds: ["EBS_UNENCRYPTED"]
+  },
+  {
+    controlId: "INTERNAL_RESOURCE_OWNER_001",
+    framework: "INTERNAL_GOVERNANCE",
+    controlCode: "GOV-OWNER-001",
+    title: "Resource ownership tagging",
+    description: "Maps findings for resources without accountable owner metadata.",
+    severity: "LOW",
+    mappedRuleIds: ["MISSING_OWNER_TAG"]
+  },
+  {
+    controlId: "INTERNAL_ENVIRONMENT_001",
+    framework: "INTERNAL_GOVERNANCE",
+    controlCode: "GOV-ENV-001",
+    title: "Environment classification",
+    description: "Maps findings for resources without environment classification tags.",
+    severity: "LOW",
+    mappedRuleIds: ["MISSING_ENVIRONMENT_TAG"]
+  },
+  {
+    controlId: "INTERNAL_STORAGE_LIFECYCLE_001",
+    framework: "INTERNAL_GOVERNANCE",
+    controlCode: "GOV-STORAGE-001",
+    title: "Storage lifecycle hygiene",
+    description: "Maps unattached EBS volume findings for ownership and retention review.",
+    severity: "LOW",
+    mappedRuleIds: ["EBS_VOLUME_UNATTACHED"]
   }
 ];

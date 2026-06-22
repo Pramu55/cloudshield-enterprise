@@ -48,6 +48,26 @@ export type GovernedLifecycleState = z.infer<
   typeof GovernedLifecycleStateSchema
 >;
 
+export const MutationOutcomeSchema = z.enum([
+  "NOT_ATTEMPTED",
+  "ATTEMPTED",
+  "CONFIRMED_SUCCEEDED",
+  "CONFIRMED_FAILED",
+  "OUTCOME_UNKNOWN",
+  "MANUAL_REVIEW_REQUIRED"
+]);
+export type MutationOutcome = z.infer<typeof MutationOutcomeSchema>;
+
+export const MutationReconciliationStatusSchema = z.enum([
+  "NOT_REQUIRED",
+  "PENDING",
+  "IN_PROGRESS",
+  "RESOLVED",
+  "MANUAL_REVIEW_REQUIRED",
+  "FAILED_RETRYABLE"
+]);
+export type MutationReconciliationStatus = z.infer<typeof MutationReconciliationStatusSchema>;
+
 export const GOVERNED_CONFIRMATION_TOKENS = {
   EC2_APPLY_GOVERNANCE_TAGS: "APPLY_GOVERNANCE_TAGS",
   EC2_REMOVE_PUBLIC_SSH_INGRESS: "REMOVE_PUBLIC_SSH_RULE"
@@ -131,6 +151,33 @@ export type GovernedExecuteRequest = z.infer<
   typeof GovernedExecuteRequestSchema
 >;
 
+export const GovernedAwsChangeJobSchema = z.object({
+  organizationId: z.string().min(1),
+  planId: z.string().min(1),
+  requestedById: z.string().min(1),
+  idempotencyKey: z.string().min(8).max(160),
+  correlationId: z.uuid().optional()
+});
+export type GovernedAwsChangeJob = z.infer<
+  typeof GovernedAwsChangeJobSchema
+>;
+
+export const ResourceStateCaptureResponseSchema = z.object({
+  status: z.literal("CAPTURED"),
+  approvalRequestId: z.string().min(1),
+  resourceId: z.string().min(1),
+  accountId: z.string().regex(/^\d{12}$/),
+  region: z.string().min(1),
+  source: z.literal("PROVIDER_DESCRIBE_INSTANCES"),
+  capturedAt: z.string().datetime(),
+  schemaVersion: z.number().int().positive(),
+  policyVersion: z.string().min(1),
+  providerRequestId: z.string().nullable(),
+  idempotent: z.boolean(),
+  correlationId: z.uuid()
+});
+export type ResourceStateCaptureResponse = z.infer<typeof ResourceStateCaptureResponseSchema>;
+
 export const GovernedExecutionEvidenceResponseSchema = z.object({
   executionMode: AwsChangeExecutionModeSchema,
   lifecycleState: GovernedLifecycleStateSchema,
@@ -154,6 +201,17 @@ export const GovernedExecutionEvidenceResponseSchema = z.object({
   executionCompletedAt: z.string().nullable(),
   awsApiCallExecuted: z.boolean(),
   mutationExecuted: z.boolean(),
+  mutationMayHaveExecuted: z.boolean(),
+  mutationOutcome: MutationOutcomeSchema.nullable(),
+  mutationAttemptedAt: z.string().nullable(),
+  mutationConfirmedAt: z.string().nullable(),
+  providerRequestId: z.string().nullable(),
+  reconciliationStatus: MutationReconciliationStatusSchema.nullable(),
+  reconciliationRequired: z.boolean(),
+  lastReconciliationAt: z.string().nullable(),
+  reconciliationAttemptCount: z.number().int().nonnegative(),
+  manualReviewReason: z.string().nullable(),
+  operatorGuidance: z.string(),
   message: z.string()
 });
 export type GovernedExecutionEvidenceResponse = z.infer<
@@ -403,6 +461,35 @@ export const RiskWorkflowStatusSchema = z.enum([
 ]);
 export type RiskWorkflowStatus = z.infer<typeof RiskWorkflowStatusSchema>;
 
+export const RiskWorkflowActionNameSchema = z.enum([
+  "acknowledge",
+  "assign",
+  "plan-remediation",
+  "accept-risk",
+  "false-positive",
+  "resolve",
+  "archive",
+  "reopen"
+]);
+export type RiskWorkflowActionName = z.infer<
+  typeof RiskWorkflowActionNameSchema
+>;
+
+export const RiskWorkflowAvailableActionSchema = z
+  .array(RiskWorkflowActionNameSchema)
+  .max(RiskWorkflowActionNameSchema.options.length)
+  .superRefine((actions, context) => {
+    if (new Set(actions).size !== actions.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Workflow actions must be unique."
+      });
+    }
+  });
+export type RiskWorkflowAvailableAction = z.infer<
+  typeof RiskWorkflowAvailableActionSchema
+>;
+
 export const RiskPrioritySchema = z.enum(["P0", "P1", "P2", "P3", "P4"]);
 export type RiskPriority = z.infer<typeof RiskPrioritySchema>;
 
@@ -422,6 +509,16 @@ export const ComplianceFrameworkSchema = z.enum([
   "INTERNAL_GOVERNANCE"
 ]);
 export type ComplianceFramework = z.infer<typeof ComplianceFrameworkSchema>;
+
+export const ComplianceControlPostureStatusSchema = z.enum([
+  "FAILING",
+  "ACCEPTED_RISK",
+  "PASSING",
+  "UNKNOWN"
+]);
+export type ComplianceControlPostureStatus = z.infer<
+  typeof ComplianceControlPostureStatusSchema
+>;
 
 export const ScanRunStatusSchema = z.enum([
   "REQUESTED",
@@ -558,10 +655,56 @@ export const LoginResponseSchema = z.object({
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
+export const CurrentUserCapabilitiesSchema = z.object({
+  "organization.read": z.boolean(),
+  "organization.update": z.boolean(),
+  "accounts.read": z.boolean(),
+  "accounts.manage": z.boolean(),
+  "inventory.read": z.boolean(),
+  "inventory.scan.request": z.boolean(),
+  "invitations.read": z.boolean(),
+  "invitations.create": z.boolean(),
+  "invitations.resend": z.boolean(),
+  "invitations.revoke": z.boolean(),
+  "teams.read": z.boolean(),
+  "teams.create": z.boolean(),
+  "teams.update": z.boolean(),
+  "teams.archive": z.boolean(),
+  "teams.members.manage": z.boolean(),
+  "members.read": z.boolean(),
+  "members.invite": z.boolean(),
+  "members.remove": z.boolean(),
+  "members.role.update": z.boolean(),
+  "members.status.update": z.boolean(),
+  "findings.read": z.boolean(),
+  "findings.manage": z.boolean(),
+  "risks.read": z.boolean(),
+  "risks.manage": z.boolean(),
+  "risk.accept": z.boolean(),
+  "recommendations.read": z.boolean(),
+  "recommendations.manage": z.boolean(),
+  "operations.read": z.boolean(),
+  "operations.prepare": z.boolean(),
+  "approvals.read": z.boolean(),
+  "approvals.decide": z.boolean(),
+  "reports.read": z.boolean(),
+  "reports.generate": z.boolean(),
+  "audit.read": z.boolean(),
+  "settings.read": z.boolean(),
+  "settings.update": z.boolean(),
+  "monitoring.read": z.boolean(),
+  "monitoring.evaluate": z.boolean(),
+  "monitoring.alerts.acknowledge": z.boolean(),
+  "monitoring.alerts.resolve": z.boolean()
+}).strict();
+export type CurrentUserCapabilities = z.infer<typeof CurrentUserCapabilitiesSchema>;
+export type CurrentUserCapabilityKey = keyof CurrentUserCapabilities;
+
 export const CurrentUserResponseSchema = z.object({
   user: AuthUserSchema,
-  organization: AuthOrganizationSchema
-});
+  organization: AuthOrganizationSchema,
+  capabilities: CurrentUserCapabilitiesSchema
+}).strict();
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
 
 export const UpdateProfileRequestSchema = z.object({
@@ -777,8 +920,10 @@ export const AwsAccountDtoSchema = z.object({
   costScore: z.number().int().nullable(),
   complianceScore: z.number().int().nullable(),
   description: z.string().nullable(),
-  roleArnPlaceholder: z.string().nullable(),
-  externalIdPlaceholder: z.string().nullable(),
+  roleArnConfigured: z.boolean(),
+  roleArnDisplay: z.string().nullable(),
+  externalIdConfigured: z.boolean(),
+  source: z.enum(["SAMPLE", "AWS_SYNC", "NOT_CONFIGURED"]),
   setupInstructionsViewedAt: z.string().nullable(),
   archivedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -795,15 +940,14 @@ const AwsAccountWriteBaseSchema = z.object({
   regions: AwsRegionsSchema.default(["us-east-1"]),
   description: z.string().trim().max(1000).nullable().optional(),
   roleArnPlaceholder: z.string().trim().max(300).nullable().optional(),
-  externalIdPlaceholder: z.string().trim().max(200).nullable().optional()
+  externalIdConfigured: z.boolean().optional()
 });
 
 export const CreateAwsAccountRequestSchema = AwsAccountWriteBaseSchema
   .refine(
     (value) =>
       doesNotContainCredentialLikeValue(value.description) &&
-      doesNotContainCredentialLikeValue(value.roleArnPlaceholder) &&
-      doesNotContainCredentialLikeValue(value.externalIdPlaceholder),
+      doesNotContainCredentialLikeValue(value.roleArnPlaceholder),
     "Do not store AWS access keys, secret keys, or session tokens in CloudShield."
   );
 export type CreateAwsAccountRequest = z.infer<
@@ -817,8 +961,7 @@ export const UpdateAwsAccountRequestSchema = AwsAccountWriteBaseSchema.partial()
   .refine(
     (value) =>
       doesNotContainCredentialLikeValue(value.description) &&
-      doesNotContainCredentialLikeValue(value.roleArnPlaceholder) &&
-      doesNotContainCredentialLikeValue(value.externalIdPlaceholder),
+      doesNotContainCredentialLikeValue(value.roleArnPlaceholder),
     "Do not store AWS access keys, secret keys, or session tokens in CloudShield."
   )
   .refine((value) => Object.keys(value).length > 0, {
@@ -845,19 +988,126 @@ export type AwsAccountMutationResponse = z.infer<
   typeof AwsAccountMutationResponseSchema
 >;
 
+export const AwsOnboardingRoleAgreementSchema = z.enum([
+  "MATCH",
+  "MISMATCH",
+  "MISSING_ACCOUNT_ROLE",
+  "MISSING_RUNTIME_ROLE"
+]);
+export type AwsOnboardingRoleAgreement = z.infer<
+  typeof AwsOnboardingRoleAgreementSchema
+>;
+
+export const AwsOnboardingValidationStatusSchema = z.enum([
+  "NOT_VALIDATED",
+  "VALIDATED",
+  "FAILED",
+  "STALE",
+  "BLOCKED"
+]);
+export type AwsOnboardingValidationStatus = z.infer<
+  typeof AwsOnboardingValidationStatusSchema
+>;
+
+export const AwsOnboardingReadinessPhaseSchema = z.enum([
+  "REGISTERED",
+  "IAM_CONFIGURATION_REQUIRED",
+  "READY_TO_VALIDATE",
+  "READY_TO_SYNC",
+  "SYNC_COMPLETE",
+  "BLOCKED"
+]);
+export type AwsOnboardingReadinessPhase = z.infer<
+  typeof AwsOnboardingReadinessPhaseSchema
+>;
+
+export const AwsOnboardingNextActionSchema = z.object({
+  kind: z.enum([
+    "CONFIGURE_IAM",
+    "VALIDATE_IDENTITY",
+    "RUN_INVENTORY_SYNC",
+    "REVIEW_SCAN",
+    "REVIEW_FINDINGS"
+  ]),
+  label: z.string().trim().min(1).max(160),
+  href: z.string().startsWith("/dashboard")
+}).strict();
+
+export const AwsAccountOnboardingPreflightResponseSchema = z.object({
+  account: z.object({
+    id: z.string().min(1).max(128),
+    name: z.string().trim().min(1).max(120),
+    environment: AwsAccountEnvironmentSchema,
+    status: AwsAccountStatusSchema,
+    connectionStatus: AwsConnectionStatusSchema,
+    source: z.enum(["SAMPLE", "AWS_SYNC", "NOT_CONFIGURED"]),
+    configuredRegions: z.array(z.string().trim().min(2).max(32)).max(30)
+  }).strict(),
+  iam: z.object({
+    roleArnConfigured: z.boolean(),
+    roleArnDisplay: z.string().trim().min(1).max(300).nullable(),
+    externalIdConfigured: z.boolean(),
+    externalIdReturned: z.literal(false),
+    runtimeScannerRoleConfigured: z.boolean(),
+    runtimeExternalIdConfigured: z.boolean(),
+    roleAgreement: AwsOnboardingRoleAgreementSchema
+  }).strict(),
+  regions: z.object({
+    configured: z.array(z.string().trim().min(2).max(32)).max(30),
+    allowed: z.array(z.string().trim().min(2).max(32)).max(30),
+    blocked: z.array(z.string().trim().min(2).max(32)).max(30)
+  }).strict(),
+  validation: z.object({
+    status: AwsOnboardingValidationStatusSchema
+  }).strict(),
+  scan: z.object({
+    latestScanRunId: z.string().min(1).max(128).nullable(),
+    latestStatus: ScanRunStatusSchema.nullable(),
+    latestStartedAt: z.string().datetime().nullable(),
+    latestCompletedAt: z.string().datetime().nullable(),
+    resourceCount: z.number().int().nonnegative(),
+    failedRegions: z.array(z.object({
+      region: z.string().trim().min(2).max(32),
+      failureClassification: z.string().trim().min(1).max(120),
+      safeSummary: z.string().trim().min(1).max(500)
+    }).strict()).max(30)
+  }).strict(),
+  readiness: z.object({
+    phase: AwsOnboardingReadinessPhaseSchema,
+    blockedReasons: z.array(z.string().trim().min(1).max(500)).max(20),
+    nextAction: AwsOnboardingNextActionSchema
+  }).strict(),
+  links: z.object({
+    account: z.string().startsWith("/dashboard/accounts/"),
+    scans: z.literal("/dashboard/scans"),
+    inventory: z.literal("/dashboard/inventory"),
+    findings: z.literal("/dashboard/security"),
+    compliance: z.literal("/dashboard/compliance"),
+    executiveDashboard: z.literal("/dashboard")
+  }).strict(),
+  safety: z.object({
+    awsApiCallExecuted: z.literal(false),
+    mutationExecuted: z.literal(false),
+    remediationExecuted: z.literal(false),
+    externalIdIncluded: z.literal(false),
+    rawProviderPayloadIncluded: z.literal(false)
+  }).strict()
+}).strict();
+export type AwsAccountOnboardingPreflightResponse = z.infer<
+  typeof AwsAccountOnboardingPreflightResponseSchema
+>;
+
 export const AwsSetupGuideResponseSchema = z.object({
   title: z.string(),
-  safetyMode: z.literal("read_only_planned"),
+  safetyMode: z.literal("read_only_disabled_by_default"),
   message: z.string(),
-  plannedConnectionModel: z.array(z.string()),
+  connectionModel: z.array(z.string()),
   currentLimitations: z.array(z.string()),
   validation: z.object({
-    code: z.literal("VALIDATION_NOT_IMPLEMENTED"),
-    message: z.literal(
-      "Real AWS read-only validation will be added in the AWS read-only connector milestone. No AWS API calls were executed."
-    )
+    code: z.literal("EXPLICIT_STS_VALIDATION_AVAILABLE"),
+    message: z.string()
   })
-});
+}).strict();
 export type AwsSetupGuideResponse = z.infer<
   typeof AwsSetupGuideResponseSchema
 >;
@@ -1046,6 +1296,16 @@ export type AwsInventoryScanStatusResponse = z.infer<
 
 // ── Security Posture Rules ──────────────────────────────────────────────
 
+export const DataSourceClassificationSchema = z.enum([
+  "SAMPLE",
+  "AWS_SYNC",
+  "RULE_ENGINE",
+  "MANUAL",
+  "IMPORT",
+  "SYSTEM"
+]);
+export type DataSourceClassification = z.infer<typeof DataSourceClassificationSchema>;
+
 export const SecurityRuleSeveritySchema = z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]);
 export type SecurityRuleSeverity = z.infer<typeof SecurityRuleSeveritySchema>;
 
@@ -1076,7 +1336,11 @@ export const SecurityRulesResponseSchema = z.object({
 });
 export type SecurityRulesResponse = z.infer<typeof SecurityRulesResponseSchema>;
 
+export const SecurityEvaluationRequestSchema = z.object({}).strict();
+export type SecurityEvaluationRequest = z.infer<typeof SecurityEvaluationRequestSchema>;
+
 export const SecurityEvaluationResponseSchema = z.object({
+  evaluationMode: z.literal("STORED_INVENTORY"),
   evaluatedResourceCount: z.number(),
   findingsCreated: z.number(),
   findingsUpdated: z.number(),
@@ -1106,6 +1370,9 @@ export const SecurityFindingDtoSchema = z.object({
   resourceName: z.string().nullable(),
   resourceType: z.string().nullable(),
   awsAccountName: z.string().nullable(),
+  findingSource: DataSourceClassificationSchema,
+  resourceSource: DataSourceClassificationSchema.nullable(),
+  sampleData: z.boolean(),
   firstSeenAt: z.string(),
   lastSeenAt: z.string()
 });
@@ -1142,6 +1409,8 @@ export const RiskFindingDtoSchema = z.object({
   resourceId: z.string().nullable(),
   resourceName: z.string().nullable(),
   resourceType: z.string().nullable(),
+  findingSource: DataSourceClassificationSchema,
+  resourceSource: DataSourceClassificationSchema.nullable(),
   ruleId: z.string(),
   title: z.string(),
   description: z.string(),
@@ -1168,6 +1437,7 @@ export const RiskFindingDtoSchema = z.object({
   complianceRefs: z.array(z.string()),
   firstSeenAt: z.string(),
   lastSeenAt: z.string(),
+  updatedAt: z.string(),
   lastWorkflowActionAt: z.string().nullable(),
   archivedAt: z.string().nullable(),
   sampleData: z.boolean()
@@ -1175,9 +1445,192 @@ export const RiskFindingDtoSchema = z.object({
 export type RiskFindingDto = z.infer<typeof RiskFindingDtoSchema>;
 
 export const RiskFindingDetailDtoSchema = RiskFindingDtoSchema.extend({
-  auditEvents: z.array(RiskAuditEventDtoSchema)
+  auditEvents: z.array(RiskAuditEventDtoSchema),
+  availableActions: RiskWorkflowAvailableActionSchema
 });
 export type RiskFindingDetailDto = z.infer<typeof RiskFindingDetailDtoSchema>;
+
+const evidenceSnapshotUnsafeKey =
+  /credential|secret|access.?key|token|authorization|password|private.?key|provider.?error|raw.?response|stack/i;
+const evidenceSnapshotUnsafeText =
+  /secretaccesskey|accesskeyid|authorization:\s*bearer|provider\s*error|providererror|raw\s*provider|-----begin .*private key-----|\bat\s+[\w.$<>]+\s*\([^)\r\n]+:\d+:\d+\)/i;
+const evidenceSnapshotControlCharacters = /[\u0000-\u001f\u007f]/;
+
+const BoundedEvidenceSnapshotJsonSchema = z
+  .record(z.string(), z.unknown())
+  .superRefine((value, context) => {
+    let nodes = 0;
+    const visit = (current: unknown, depth: number): boolean => {
+      nodes++;
+      if (nodes > 200 || depth > 6) return false;
+      if (current === null || typeof current === "boolean") return true;
+      if (typeof current === "number") return Number.isFinite(current);
+      if (typeof current === "string") {
+        return (
+          current.length <= 2000 &&
+          !evidenceSnapshotControlCharacters.test(current) &&
+          !evidenceSnapshotUnsafeText.test(current)
+        );
+      }
+      if (Array.isArray(current)) {
+        return current.length <= 50 && current.every((item) => visit(item, depth + 1));
+      }
+      if (typeof current === "object") {
+        const entries = Object.entries(current);
+        return entries.length <= 50 && entries.every(
+          ([key, item]) =>
+            !evidenceSnapshotUnsafeKey.test(key) &&
+            !evidenceSnapshotControlCharacters.test(key) &&
+            visit(item, depth + 1)
+        );
+      }
+      return false;
+    };
+    if (
+      new TextEncoder().encode(JSON.stringify(value)).length > 8192 ||
+      !visit(value, 0)
+    ) {
+      context.addIssue({ code: "custom", message: "Evidence snapshot JSON is unsafe or oversized." });
+    }
+  });
+
+export const SecurityFindingEvidenceSnapshotDtoSchema = z.object({
+  id: z.string().min(1).max(128),
+  securityFindingId: z.string().min(1).max(128),
+  resourceId: z.string().min(1).max(128).nullable(),
+  ruleId: z.string().min(1).max(160),
+  ruleVersion: z.string().min(1).max(40),
+  schemaVersion: z.number().int().positive(),
+  evaluationMode: z.literal("STORED_INVENTORY"),
+  findingSource: z.literal("RULE_ENGINE"),
+  resourceSource: DataSourceClassificationSchema.nullable(),
+  sampleData: z.boolean(),
+  title: z.string().min(1).max(500),
+  summary: z.string().min(1).max(2000),
+  resourceSnapshot: BoundedEvidenceSnapshotJsonSchema,
+  evaluationContext: BoundedEvidenceSnapshotJsonSchema,
+  correlationId: z.string().uuid().nullable(),
+  capturedAt: z.string().datetime(),
+  createdAt: z.string().datetime()
+}).strict().superRefine((value, context) => {
+  if (value.sampleData !== (value.resourceSource === "SAMPLE")) {
+    context.addIssue({
+      code: "custom",
+      path: ["sampleData"],
+      message: "Snapshot sample state must match resource provenance."
+    });
+  }
+});
+export type SecurityFindingEvidenceSnapshotDto = z.infer<
+  typeof SecurityFindingEvidenceSnapshotDtoSchema
+>;
+
+export const EvidenceSnapshotListQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(10)
+}).strict();
+
+export const EvidenceSnapshotListResponseDtoSchema = z.object({
+  items: z.array(SecurityFindingEvidenceSnapshotDtoSchema),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().max(512).nullable(),
+  hasMore: z.boolean(),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false)
+}).strict();
+export type EvidenceSnapshotListResponseDto = z.infer<
+  typeof EvidenceSnapshotListResponseDtoSchema
+>;
+
+export const RiskAcceptanceExpiryStatusSchema = z.enum([
+  "ACTIVE",
+  "EXPIRING_SOON",
+  "EXPIRED"
+]);
+export type RiskAcceptanceExpiryStatus = z.infer<
+  typeof RiskAcceptanceExpiryStatusSchema
+>;
+
+export const RiskAcceptanceRegistryQuerySchema = z.object({
+  status: z.enum(["active", "expiring-soon", "expired", "all"]).default("all"),
+  severity: FindingSeveritySchema.optional(),
+  cursor: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20)
+}).strict();
+export type RiskAcceptanceRegistryQuery = z.infer<
+  typeof RiskAcceptanceRegistryQuerySchema
+>;
+
+export const RiskAcceptanceRegistryItemSchema = z.object({
+  riskAcceptanceId: z.string().min(1).max(128),
+  findingId: z.string().min(1).max(128),
+  findingTitle: z.string().min(1).max(500),
+  findingDescription: z.string().min(1).max(4000),
+  severity: FindingSeveritySchema,
+  workflowStatus: RiskWorkflowStatusSchema,
+  status: RiskStatusSchema,
+  ownerTeamId: z.string().min(1).max(128).nullable(),
+  ownerTeamName: z.string().max(300).nullable(),
+  assignedToUserId: z.string().min(1).max(128).nullable(),
+  assignedToUserName: z.string().max(300).nullable(),
+  acceptedByUserId: z.string().min(1).max(128),
+  acceptedByName: z.string().max(300).nullable(),
+  acceptedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  expiryStatus: RiskAcceptanceExpiryStatusSchema,
+  daysUntilExpiry: z.number().int(),
+  justification: z.string().min(1).max(4000),
+  evidenceSnapshotId: z.string().min(1).max(128).nullable(),
+  evidenceCapturedAt: z.string().datetime().nullable(),
+  evidenceRuleId: z.string().min(1).max(160).nullable(),
+  evidenceRuleVersion: z.string().min(1).max(40).nullable(),
+  findingSource: DataSourceClassificationSchema,
+  resourceSource: DataSourceClassificationSchema.nullable(),
+  sampleData: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}).strict().superRefine((value, context) => {
+  if (value.sampleData !== (value.resourceSource === "SAMPLE")) {
+    context.addIssue({
+      code: "custom",
+      path: ["sampleData"],
+      message: "Acceptance sample state must match resource provenance."
+    });
+  }
+  const evidenceFields = [
+    value.evidenceCapturedAt,
+    value.evidenceRuleId,
+    value.evidenceRuleVersion
+  ];
+  if (
+    (value.evidenceSnapshotId === null && evidenceFields.some((field) => field !== null)) ||
+    (value.evidenceSnapshotId !== null && evidenceFields.some((field) => field === null))
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["evidenceSnapshotId"],
+      message: "Acceptance evidence metadata must be complete when linked."
+    });
+  }
+});
+export type RiskAcceptanceRegistryItem = z.infer<
+  typeof RiskAcceptanceRegistryItemSchema
+>;
+
+export const RiskAcceptanceRegistryResponseSchema = z.object({
+  items: z.array(RiskAcceptanceRegistryItemSchema),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().max(512).nullable(),
+  hasMore: z.boolean(),
+  generatedAt: z.string().datetime(),
+  awsApiCallExecuted: z.literal(false),
+  mutationExecuted: z.literal(false),
+  remediationExecuted: z.literal(false)
+}).strict();
+export type RiskAcceptanceRegistryResponse = z.infer<
+  typeof RiskAcceptanceRegistryResponseSchema
+>;
 
 export const RiskFindingsResponseSchema = z.object({
   sampleData: z.boolean(),
@@ -1207,13 +1660,17 @@ export type AcknowledgeFindingRequest = z.infer<
   typeof AcknowledgeFindingRequestSchema
 >;
 
-export const AssignFindingRequestSchema = z.object({
-  ownerTeamId: z.string().trim().min(1).optional(),
-  assignedToUserId: z.string().trim().min(1).optional(),
-  priority: RiskPrioritySchema.optional(),
-  targetResolutionDate: OptionalFutureDateSchema.optional(),
-  businessImpact: z.string().trim().min(1).max(2000).optional()
-});
+export const AssignFindingRequestSchema = z
+  .object({
+    ownerTeamId: z.string().trim().min(1).optional(),
+    assignedToUserId: z.string().trim().min(1).optional(),
+    priority: RiskPrioritySchema.optional(),
+    targetResolutionDate: OptionalFutureDateSchema.optional(),
+    businessImpact: z.string().trim().min(1).max(2000).optional()
+  })
+  .refine((body) => Boolean(body.ownerTeamId || body.assignedToUserId), {
+    message: "Assignment requires an owner team or assigned user."
+  });
 export type AssignFindingRequest = z.infer<typeof AssignFindingRequestSchema>;
 
 export const PlanRemediationRequestSchema = z.object({
@@ -1227,7 +1684,10 @@ export type PlanRemediationRequest = z.infer<
 
 export const AcceptRiskRequestSchema = z.object({
   riskAcceptanceReason: z.string().trim().min(10).max(4000),
-  riskAcceptedUntil: OptionalFutureDateSchema,
+  riskAcceptedUntil: OptionalFutureDateSchema.refine(
+    (value) => new Date(value).getTime() > Date.now(),
+    "Risk acceptance expiration must be in the future."
+  ),
   businessImpact: z.string().trim().min(1).max(2000).optional()
 });
 export type AcceptRiskRequest = z.infer<typeof AcceptRiskRequestSchema>;
@@ -1407,6 +1867,17 @@ export const RemediationPlanDtoSchema = z.object({
   queuedAt: z.string().nullable().default(null),
   executionStartedAt: z.string().nullable().default(null),
   executionCompletedAt: z.string().nullable().default(null),
+  mutationOutcome: MutationOutcomeSchema.nullable().default(null),
+  mutationAttemptedAt: z.string().nullable().default(null),
+  mutationConfirmedAt: z.string().nullable().default(null),
+  providerRequestId: z.string().nullable().default(null),
+  mutationMayHaveExecuted: z.boolean().default(false),
+  reconciliationStatus: MutationReconciliationStatusSchema.nullable().default(null),
+  reconciliationRequired: z.boolean().default(false),
+  lastReconciliationAt: z.string().nullable().default(null),
+  reconciliationAttemptCount: z.number().int().nonnegative().default(0),
+  manualReviewReason: z.string().nullable().default(null),
+  operatorGuidance: z.string().default("No operator action is currently required."),
   createdById: z.string(),
   createdByEmail: z.string().nullable(),
   approvedById: z.string().nullable(),
@@ -1433,6 +1904,7 @@ export const ApprovalRequestDtoSchema = z.object({
   decisionReason: z.string().nullable(),
   expectedImpact: z.string().nullable().default(null),
   confirmationToken: z.string().nullable().default(null),
+  payloadIntegrityBound: z.boolean().default(false),
   expiresAt: z.string().nullable().default(null),
   createdAt: z.string(),
   decidedAt: z.string().nullable()
@@ -1491,6 +1963,102 @@ export type GovernanceActivityResponse = z.infer<
 >;
 
 // Compliance Evidence Center
+
+export const ComplianceControlProvenanceSchema = z.object({
+  findingSources: z.array(DataSourceClassificationSchema).max(10),
+  resourceSources: z.array(DataSourceClassificationSchema).max(10),
+  sampleData: z.boolean()
+}).strict();
+export type ComplianceControlProvenance = z.infer<
+  typeof ComplianceControlProvenanceSchema
+>;
+
+export const ComplianceMappedFindingSchema = z.object({
+  findingId: z.string().min(1).max(128),
+  title: z.string().min(1).max(500),
+  severity: FindingSeveritySchema,
+  workflowStatus: RiskWorkflowStatusSchema,
+  ruleId: z.string().min(1).max(160),
+  latestEvidenceSnapshotId: z.string().min(1).max(128).nullable(),
+  latestEvidenceCapturedAt: z.string().datetime().nullable()
+}).strict().superRefine((value, context) => {
+  if (
+    (value.latestEvidenceSnapshotId === null) !==
+    (value.latestEvidenceCapturedAt === null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["latestEvidenceSnapshotId"],
+      message: "Mapped finding evidence metadata must be complete when linked."
+    });
+  }
+});
+export type ComplianceMappedFinding = z.infer<
+  typeof ComplianceMappedFindingSchema
+>;
+
+export const ComplianceControlSummarySchema = z.object({
+  controlId: z.string().min(1).max(128),
+  framework: ComplianceFrameworkSchema,
+  controlCode: z.string().min(1).max(80),
+  title: z.string().min(1).max(300),
+  description: z.string().min(1).max(2000),
+  severity: FindingSeveritySchema,
+  status: ComplianceControlPostureStatusSchema,
+  findingCount: z.number().int().nonnegative(),
+  openFindingCount: z.number().int().nonnegative(),
+  acceptedRiskCount: z.number().int().nonnegative(),
+  resolvedFindingCount: z.number().int().nonnegative(),
+  evidenceSnapshotCount: z.number().int().nonnegative(),
+  latestEvidenceCapturedAt: z.string().datetime().nullable(),
+  mappedRuleIds: z.array(z.string().min(1).max(160)).min(1).max(20),
+  provenance: ComplianceControlProvenanceSchema,
+  mappedFindings: z.array(ComplianceMappedFindingSchema).max(100)
+}).strict().superRefine((value, context) => {
+  if (value.findingCount !== value.mappedFindings.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["findingCount"],
+      message: "Control finding count must match mapped findings."
+    });
+  }
+  if (
+    value.openFindingCount + value.acceptedRiskCount + value.resolvedFindingCount >
+    value.findingCount
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["findingCount"],
+      message: "Control finding state counts cannot exceed total findings."
+    });
+  }
+});
+export type ComplianceControlSummary = z.infer<
+  typeof ComplianceControlSummarySchema
+>;
+
+export const ComplianceControlsRegistryResponseSchema = z.object({
+  controls: z.array(ComplianceControlSummarySchema).max(50),
+  generatedAt: z.string().datetime(),
+  total: z.number().int().nonnegative(),
+  safety: z.object({
+    awsApiCallExecuted: z.literal(false),
+    mutationExecuted: z.literal(false),
+    remediationExecuted: z.literal(false),
+    rawEvidenceIncluded: z.literal(false)
+  }).strict()
+}).strict().superRefine((value, context) => {
+  if (value.total !== value.controls.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["total"],
+      message: "Compliance control total must match returned controls."
+    });
+  }
+});
+export type ComplianceControlsRegistryResponse = z.infer<
+  typeof ComplianceControlsRegistryResponseSchema
+>;
 
 export const ComplianceEvidenceDtoSchema = z.object({
   id: z.string(),
@@ -1831,7 +2399,7 @@ export const CloudResourceDtoSchema = z.object({
   ownerTeamName: z.string().nullable().optional(),
   tags: z.record(z.string(), z.any()),
   metadata: z.record(z.string(), z.any()),
-  source: z.string(),
+  source: DataSourceClassificationSchema,
   riskCount: z.number().int(),
   firstSeenAt: z.string(),
   lastSeenAt: z.string().nullable(),
@@ -1963,6 +2531,222 @@ export const AwsIdentityValidationResponseSchema = AwsIdentityValidationSafetyFl
   principalArnMasked: z.string().nullable()
 });
 export type AwsIdentityValidationResponse = z.infer<typeof AwsIdentityValidationResponseSchema>;
+
+export const AwsStsValidationResponseSchema = z.object({
+  status: z.literal("VALIDATED"),
+  accountId: z.string().regex(/^\d{12}$/),
+  maskedPrincipalArn: z.string().min(1).max(256),
+  roleName: z.string().min(1).max(128),
+  validationMode: z.literal("STS_ONLY"),
+  validatedAt: z.iso.datetime(),
+  correlationId: z.uuid(),
+  providerRequestId: z.string().min(1).max(128).optional()
+});
+export type AwsStsValidationResponse = z.infer<typeof AwsStsValidationResponseSchema>;
 export * from './search.js';
 export * from "./dashboard.js";
 export * from "./monitoring.js";
+const InventorySafeIdentifierSchema = z.string()
+  .trim()
+  .min(1)
+  .max(160)
+  .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Identifier contains control characters.")
+  .refine((value) => !/[\\/]/.test(value) && value !== "." && value !== "..", "Identifier cannot be path-like.");
+
+const InventoryDedupeKeySchema = z.string()
+  .trim()
+  .min(1)
+  .max(1024)
+  .refine(
+    (value) => !/[\u0000-\u001f\u007f]/.test(value),
+    "Dedupe key contains control characters."
+  );
+
+const InventorySafeTextSchema = z.string()
+  .trim()
+  .min(1)
+  .max(500)
+  .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Text contains control characters.")
+  .refine(
+    (value) => !/\b(?:AccessKeyId|SecretAccessKey|SessionToken|Authorization|credentials?|providerError|rawError|rawResponse|raw request|raw response|Redis|BullMQ)\b|(?:^|\s)at\s+\S+\s+\([^)]+:\d+:\d+\)/i.test(value),
+    "Text contains restricted internal details."
+  );
+
+const InventoryRegionSchema = z.string()
+  .trim()
+  .min(8)
+  .max(32)
+  .regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/, "Invalid AWS region.");
+
+export const InventoryAccountSummarySchema = z.object({
+  id: InventorySafeIdentifierSchema,
+  name: InventorySafeTextSchema.max(256),
+  accountId: z.string().regex(/^\d{12}$/, "AWS account ID must be exactly 12 digits."),
+  environment: AwsAccountEnvironmentSchema,
+  connectionStatus: AwsConnectionStatusSchema,
+  status: AwsAccountStatusSchema
+}).strict();
+export type InventoryAccountSummary = z.infer<typeof InventoryAccountSummarySchema>;
+
+export const InventoryQueuedItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("QUEUED"),
+  scanRunId: InventorySafeIdentifierSchema,
+  queueJobId: InventorySafeIdentifierSchema,
+  requestedRegions: z.array(InventoryRegionSchema).min(1).max(30),
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryQueuedItem = z.infer<typeof InventoryQueuedItemSchema>;
+
+export const InventoryDuplicateActiveItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("DUPLICATE_ACTIVE"),
+  scanRunId: InventorySafeIdentifierSchema,
+  dedupeKey: InventoryDedupeKeySchema,
+  message: InventorySafeTextSchema
+}).strict();
+export type InventoryDuplicateActiveItem = z.infer<typeof InventoryDuplicateActiveItemSchema>;
+
+export const InventoryConflictItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("CONFLICT"),
+  existingScanRunId: InventorySafeIdentifierSchema,
+  message: InventorySafeTextSchema,
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryConflictItem = z.infer<typeof InventoryConflictItemSchema>;
+
+export const InventoryPersistedBlockedItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("BLOCKED"),
+  scanRunId: InventorySafeIdentifierSchema,
+  requestedRegions: z.array(InventoryRegionSchema).min(1).max(30),
+  blockedReason: InventorySafeTextSchema,
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryPersistedBlockedItem = z.infer<typeof InventoryPersistedBlockedItemSchema>;
+
+export const InventoryDryRunBlockedItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("BLOCKED"),
+  requestedRegions: z.array(InventoryRegionSchema).min(1).max(30),
+  blockedReason: InventorySafeTextSchema,
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryDryRunBlockedItem = z.infer<typeof InventoryDryRunBlockedItemSchema>;
+
+export const InventoryReadyToQueueItemSchema = z.object({
+  account: InventoryAccountSummarySchema,
+  status: z.literal("READY_TO_QUEUE"),
+  requestedRegions: z.array(InventoryRegionSchema).min(1).max(30),
+  dedupeKey: InventoryDedupeKeySchema
+}).strict();
+export type InventoryReadyToQueueItem = z.infer<typeof InventoryReadyToQueueItemSchema>;
+
+export const InventoryOrchestrationItemSchema = z.union([
+  InventoryQueuedItemSchema,
+  InventoryDuplicateActiveItemSchema,
+  InventoryConflictItemSchema,
+  InventoryPersistedBlockedItemSchema,
+  InventoryDryRunBlockedItemSchema,
+  InventoryReadyToQueueItemSchema
+]);
+export type InventoryOrchestrationItem = z.infer<typeof InventoryOrchestrationItemSchema>;
+
+export const InventoryOrchestrationResponseSchema = z.object({
+  status: z.enum(["QUEUED", "PLANNED", "CONFLICT"]),
+  dryRun: z.boolean(),
+  items: z.array(InventoryOrchestrationItemSchema).max(100),
+  awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false)
+}).strict();
+export type InventoryOrchestrationResponse = z.infer<typeof InventoryOrchestrationResponseSchema>;
+
+export const InventoryUnsupportedScannerResponseSchema = z.object({
+  status: z.literal("BLOCKED"),
+  error: z.literal("unsupported_scanner_type"),
+  message: InventorySafeTextSchema,
+  awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false)
+}).strict();
+export type InventoryUnsupportedScannerResponse = z.infer<typeof InventoryUnsupportedScannerResponseSchema>;
+
+export const InventorySyncResponseSchema = z.union([
+  InventoryOrchestrationResponseSchema,
+  InventoryUnsupportedScannerResponseSchema
+]);
+export type InventorySyncResponse = z.infer<typeof InventorySyncResponseSchema>;
+
+export const PlatformOperationsHealthResponseSchema = z.object({
+  api: z.literal("ok"),
+  database: z.literal("configured"),
+  redis: z.enum(["reachable", "degraded"]),
+  workerHeartbeat: z.literal("queue-counts-available"),
+  queues: z.array(z.object({
+    name: z.enum([
+      "cloud-scans",
+      "cloud-inventory-sync",
+      "cloud-assessment",
+      "governed-aws-changes",
+      "security-monitoring"
+    ]),
+    status: z.enum(["ok", "degraded"]),
+    counts: z.object({
+      waiting: z.number().int().nonnegative(),
+      active: z.number().int().nonnegative(),
+      delayed: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      completed: z.number().int().nonnegative(),
+      paused: z.number().int().nonnegative()
+    }).nullable(),
+    paused: z.boolean().nullable(),
+    oldestWaitingAgeMs: z.number().int().nonnegative().nullable()
+  })),
+  inventoryScans: z.object({
+    active: z.number().int().nonnegative(),
+    queued: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    partial: z.number().int().nonnegative(),
+    staleResources: z.number().int().nonnegative(),
+    accountCoverageSummary: z.object({
+      registeredAccounts: z.number().int().nonnegative(),
+      connectedAccounts: z.number().int().nonnegative(),
+      blockedAccounts: z.number().int().nonnegative(),
+      configuredRegions: z.number().int().nonnegative()
+    }),
+    regionFailureSummary: z.object({
+      totalFailures: z.number().int().nonnegative(),
+      affectedRegionCount: z.number().int().nonnegative(),
+      classifications: z.array(z.enum([
+        "NETWORK_UNREACHABLE",
+        "AUTH_FAILED",
+        "PERMISSION_DENIED",
+        "RATE_LIMITED",
+        "UNKNOWN_SAFE_CLASSIFICATION"
+      ]))
+    })
+  }),
+  lastSuccessfulScanAt: z.string().datetime().nullable(),
+  lastFailedScanAt: z.string().datetime().nullable(),
+  lastFailureClassification: z.enum([
+    "NETWORK_UNREACHABLE",
+    "AUTH_FAILED",
+    "PERMISSION_DENIED",
+    "RATE_LIMITED",
+    "UNKNOWN_SAFE_CLASSIFICATION"
+  ]).nullable(),
+  executionMode: AwsChangeExecutionModeSchema,
+  scannerMode: AwsInventoryScannerModeSchema,
+  awsApiCallExecuted: z.literal(false),
+  scannerRun: z.literal(false),
+  mutationExecuted: z.literal(false),
+  terraformApplyExecuted: z.literal(false),
+  automaticRemediationExecuted: z.literal(false)
+}).strict();
+export type PlatformOperationsHealthResponse = z.infer<typeof PlatformOperationsHealthResponseSchema>;

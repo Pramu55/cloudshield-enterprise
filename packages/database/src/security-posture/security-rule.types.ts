@@ -1,5 +1,13 @@
 export type SecurityRuleSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 
+export type SecurityResourceSource =
+  | "SAMPLE"
+  | "AWS_SYNC"
+  | "RULE_ENGINE"
+  | "MANUAL"
+  | "IMPORT"
+  | "SYSTEM";
+
 export type RuleEvaluationResult = {
   status: "finding_created" | "finding_updated" | "not_applicable" | "pass" | "error";
   ruleId: string;
@@ -10,6 +18,7 @@ export type RuleEvaluationResult = {
 
 export type SecurityRuleDefinition = {
   ruleId: string;
+  ruleVersion: string;
   title: string;
   description: string;
   severity: SecurityRuleSeverity;
@@ -32,4 +41,5 @@ export type ResourceForEvaluation = {
   tags: Record<string, unknown>;
   metadata: Record<string, unknown>;
   ownerTeamId: string | null;
+  source: SecurityResourceSource;
 };
