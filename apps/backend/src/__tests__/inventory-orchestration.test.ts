@@ -17,6 +17,9 @@ type Session = {
 };
 process.env.AWS_INVENTORY_SCANNER_MODE = "readonly-scan";
 process.env.AWS_CONNECTOR_MODE = "readonly-validation";
+process.env.AWS_ROLE_ARN = "arn:aws:iam::123456789012:role/scanner";
+process.env.AWS_EXTERNAL_ID = "inventory-orchestration-test-marker";
+process.env.AWS_ALLOWED_REGIONS = "us-east-1,us-west-2";
 
 test("inventory orchestration", async (t) => {
   const app = await buildApp();
@@ -45,9 +48,10 @@ test("inventory orchestration", async (t) => {
       accountId: "123456789012",
       environment: "dev",
       status: "CONNECTED",
-      connectionStatus: "CONNECTED_DEMO_ONLY",
+      connectionStatus: "VALIDATION_SUCCEEDED",
       regions: ["us-east-1"],
       roleArnPlaceholder: "arn:aws:iam::123456789012:role/scanner",
+      externalIdPlaceholder: "configured-outside-cloudshield",
       securityScore: 100,
       costScore: 100,
       complianceScore: 100
@@ -61,9 +65,10 @@ test("inventory orchestration", async (t) => {
       accountId: "123456789013",
       environment: "dev",
       status: "CONNECTED",
-      connectionStatus: "CONNECTED_DEMO_ONLY",
+      connectionStatus: "VALIDATION_SUCCEEDED",
       regions: ["us-west-2"],
-      roleArnPlaceholder: "arn:aws:iam::123456789013:role/scanner",
+      roleArnPlaceholder: "arn:aws:iam::123456789012:role/scanner",
+      externalIdPlaceholder: "configured-outside-cloudshield",
       securityScore: 100,
       costScore: 100,
       complianceScore: 100
@@ -77,9 +82,10 @@ test("inventory orchestration", async (t) => {
       accountId: "123456789014",
       environment: "dev",
       status: "CONNECTED",
-      connectionStatus: "CONNECTED_DEMO_ONLY",
+      connectionStatus: "VALIDATION_SUCCEEDED",
       regions: ["us-east-1"],
-      roleArnPlaceholder: "arn:aws:iam::123456789014:role/scanner",
+      roleArnPlaceholder: "arn:aws:iam::123456789012:role/scanner",
+      externalIdPlaceholder: "configured-outside-cloudshield",
       securityScore: 100,
       costScore: 100,
       complianceScore: 100
@@ -93,7 +99,7 @@ test("inventory orchestration", async (t) => {
       accountId: "123456789015",
       environment: "dev",
       status: "CONNECTED",
-      connectionStatus: "CONNECTED_DEMO_ONLY",
+      connectionStatus: "VALIDATION_SUCCEEDED",
       regions: ["us-east-1"],
       roleArnPlaceholder: null,
       securityScore: 100,
@@ -109,9 +115,10 @@ test("inventory orchestration", async (t) => {
       accountId: "123456789016",
       environment: "dev",
       status: "CONNECTED",
-      connectionStatus: "CONNECTED_DEMO_ONLY",
+      connectionStatus: "VALIDATION_SUCCEEDED",
       regions: ["us-east-1"],
-      roleArnPlaceholder: "arn:aws:iam::123456789016:role/scanner",
+      roleArnPlaceholder: "arn:aws:iam::123456789012:role/scanner",
+      externalIdPlaceholder: "configured-outside-cloudshield",
       securityScore: 100,
       costScore: 100,
       complianceScore: 100
@@ -237,6 +244,64 @@ test("inventory orchestration", async (t) => {
     assert.equal(typeof res.json().items[0].scanRunId, "string");
     assert.equal(addCalls, 0);
     setTestQueueAddMock(null);
+  });
+
+  await t.test("role mismatch, missing runtime role, and missing runtime External ID never enqueue", async () => {
+    let addCalls = 0;
+    setTestQueueAddMock(async () => {
+      addCalls += 1;
+      return { id: "should-not-run" };
+    });
+    const originalRole = app.config.AWS_ROLE_ARN;
+    const originalExternalId = app.config.AWS_EXTERNAL_ID;
+    try {
+      await prisma.awsAccount.update({
+        where: { id: account3.id },
+        data: {
+          roleArnPlaceholder: "arn:aws:iam::123456789014:role/different"
+        }
+      });
+      const mismatch = await app.inject({
+        method: "POST",
+        url: `/api/v1/aws/accounts/${account3.id}/inventory/sync`,
+        headers: { cookie: tenant.sessionCookie, "x-csrf-token": tenant.csrfToken },
+        payload: {}
+      });
+      assert.equal(mismatch.statusCode, 200);
+      assert.match(mismatch.json().items[0].blockedReason, /does not match/);
+
+      await prisma.awsAccount.update({
+        where: { id: account3.id },
+        data: { roleArnPlaceholder: originalRole }
+      });
+      app.config.AWS_ROLE_ARN = "";
+      const missingRole = await app.inject({
+        method: "POST",
+        url: `/api/v1/aws/accounts/${account3.id}/inventory/sync`,
+        headers: { cookie: tenant.sessionCookie, "x-csrf-token": tenant.csrfToken },
+        payload: {}
+      });
+      assert.match(missingRole.json().items[0].blockedReason, /Runtime scanner Role ARN/);
+
+      app.config.AWS_ROLE_ARN = originalRole;
+      app.config.AWS_EXTERNAL_ID = "";
+      const missingExternalId = await app.inject({
+        method: "POST",
+        url: `/api/v1/aws/accounts/${account3.id}/inventory/sync`,
+        headers: { cookie: tenant.sessionCookie, "x-csrf-token": tenant.csrfToken },
+        payload: {}
+      });
+      assert.match(missingExternalId.json().items[0].blockedReason, /External ID/);
+      assert.equal(addCalls, 0);
+    } finally {
+      app.config.AWS_ROLE_ARN = originalRole;
+      app.config.AWS_EXTERNAL_ID = originalExternalId;
+      await prisma.awsAccount.update({
+        where: { id: account3.id },
+        data: { roleArnPlaceholder: originalRole }
+      });
+      setTestQueueAddMock(null);
+    }
   });
 
   await t.test("unsupported connector mode fails closed and does not enqueue", async () => {

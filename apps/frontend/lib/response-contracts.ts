@@ -2,6 +2,7 @@ import {
   AutomationAssessmentModeSchema,
   AutomationAssessmentStatusSchema,
   AutomationSafetyFlagsSchema,
+  AwsAccountOnboardingPreflightResponseSchema,
   AwsAccountListResponseSchema,
   AwsAccountMutationResponseSchema,
   AwsIdentityValidationResponseSchema,
@@ -711,8 +712,10 @@ const FrontendAwsAccountItemSchema = AwsAccountMutationResponseSchema.shape.item
   costScore: account.costScore,
   complianceScore: account.complianceScore,
   description: account.description,
-  roleArnPlaceholder: account.roleArnPlaceholder,
-  externalIdPlaceholder: account.externalIdPlaceholder,
+  roleArnConfigured: account.roleArnConfigured,
+  roleArnDisplay: account.roleArnDisplay,
+  externalIdConfigured: account.externalIdConfigured,
+  source: account.source,
   setupInstructionsViewedAt: account.setupInstructionsViewedAt,
   archivedAt: account.archivedAt,
   createdAt: account.createdAt,
@@ -738,6 +741,12 @@ export const FrontendAwsAccountMutationSchema = AwsAccountMutationResponseSchema
 export const FrontendAwsAccountDetailSchema = z.object({
   item: FrontendAwsAccountItemSchema
 }).transform((data) => ({ item: data.item }));
+
+export const FrontendAwsAccountOnboardingPreflightSchema =
+  AwsAccountOnboardingPreflightResponseSchema;
+export type FrontendAwsAccountOnboardingPreflight = z.infer<
+  typeof FrontendAwsAccountOnboardingPreflightSchema
+>;
 
 export const FrontendAwsIdentityValidationSchema = AwsIdentityValidationResponseSchema
   .extend({

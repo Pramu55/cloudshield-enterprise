@@ -920,8 +920,10 @@ export const AwsAccountDtoSchema = z.object({
   costScore: z.number().int().nullable(),
   complianceScore: z.number().int().nullable(),
   description: z.string().nullable(),
-  roleArnPlaceholder: z.string().nullable(),
-  externalIdPlaceholder: z.string().nullable(),
+  roleArnConfigured: z.boolean(),
+  roleArnDisplay: z.string().nullable(),
+  externalIdConfigured: z.boolean(),
+  source: z.enum(["SAMPLE", "AWS_SYNC", "NOT_CONFIGURED"]),
   setupInstructionsViewedAt: z.string().nullable(),
   archivedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -938,15 +940,14 @@ const AwsAccountWriteBaseSchema = z.object({
   regions: AwsRegionsSchema.default(["us-east-1"]),
   description: z.string().trim().max(1000).nullable().optional(),
   roleArnPlaceholder: z.string().trim().max(300).nullable().optional(),
-  externalIdPlaceholder: z.string().trim().max(200).nullable().optional()
+  externalIdConfigured: z.boolean().optional()
 });
 
 export const CreateAwsAccountRequestSchema = AwsAccountWriteBaseSchema
   .refine(
     (value) =>
       doesNotContainCredentialLikeValue(value.description) &&
-      doesNotContainCredentialLikeValue(value.roleArnPlaceholder) &&
-      doesNotContainCredentialLikeValue(value.externalIdPlaceholder),
+      doesNotContainCredentialLikeValue(value.roleArnPlaceholder),
     "Do not store AWS access keys, secret keys, or session tokens in CloudShield."
   );
 export type CreateAwsAccountRequest = z.infer<
@@ -960,8 +961,7 @@ export const UpdateAwsAccountRequestSchema = AwsAccountWriteBaseSchema.partial()
   .refine(
     (value) =>
       doesNotContainCredentialLikeValue(value.description) &&
-      doesNotContainCredentialLikeValue(value.roleArnPlaceholder) &&
-      doesNotContainCredentialLikeValue(value.externalIdPlaceholder),
+      doesNotContainCredentialLikeValue(value.roleArnPlaceholder),
     "Do not store AWS access keys, secret keys, or session tokens in CloudShield."
   )
   .refine((value) => Object.keys(value).length > 0, {
@@ -988,19 +988,126 @@ export type AwsAccountMutationResponse = z.infer<
   typeof AwsAccountMutationResponseSchema
 >;
 
+export const AwsOnboardingRoleAgreementSchema = z.enum([
+  "MATCH",
+  "MISMATCH",
+  "MISSING_ACCOUNT_ROLE",
+  "MISSING_RUNTIME_ROLE"
+]);
+export type AwsOnboardingRoleAgreement = z.infer<
+  typeof AwsOnboardingRoleAgreementSchema
+>;
+
+export const AwsOnboardingValidationStatusSchema = z.enum([
+  "NOT_VALIDATED",
+  "VALIDATED",
+  "FAILED",
+  "STALE",
+  "BLOCKED"
+]);
+export type AwsOnboardingValidationStatus = z.infer<
+  typeof AwsOnboardingValidationStatusSchema
+>;
+
+export const AwsOnboardingReadinessPhaseSchema = z.enum([
+  "REGISTERED",
+  "IAM_CONFIGURATION_REQUIRED",
+  "READY_TO_VALIDATE",
+  "READY_TO_SYNC",
+  "SYNC_COMPLETE",
+  "BLOCKED"
+]);
+export type AwsOnboardingReadinessPhase = z.infer<
+  typeof AwsOnboardingReadinessPhaseSchema
+>;
+
+export const AwsOnboardingNextActionSchema = z.object({
+  kind: z.enum([
+    "CONFIGURE_IAM",
+    "VALIDATE_IDENTITY",
+    "RUN_INVENTORY_SYNC",
+    "REVIEW_SCAN",
+    "REVIEW_FINDINGS"
+  ]),
+  label: z.string().trim().min(1).max(160),
+  href: z.string().startsWith("/dashboard")
+}).strict();
+
+export const AwsAccountOnboardingPreflightResponseSchema = z.object({
+  account: z.object({
+    id: z.string().min(1).max(128),
+    name: z.string().trim().min(1).max(120),
+    environment: AwsAccountEnvironmentSchema,
+    status: AwsAccountStatusSchema,
+    connectionStatus: AwsConnectionStatusSchema,
+    source: z.enum(["SAMPLE", "AWS_SYNC", "NOT_CONFIGURED"]),
+    configuredRegions: z.array(z.string().trim().min(2).max(32)).max(30)
+  }).strict(),
+  iam: z.object({
+    roleArnConfigured: z.boolean(),
+    roleArnDisplay: z.string().trim().min(1).max(300).nullable(),
+    externalIdConfigured: z.boolean(),
+    externalIdReturned: z.literal(false),
+    runtimeScannerRoleConfigured: z.boolean(),
+    runtimeExternalIdConfigured: z.boolean(),
+    roleAgreement: AwsOnboardingRoleAgreementSchema
+  }).strict(),
+  regions: z.object({
+    configured: z.array(z.string().trim().min(2).max(32)).max(30),
+    allowed: z.array(z.string().trim().min(2).max(32)).max(30),
+    blocked: z.array(z.string().trim().min(2).max(32)).max(30)
+  }).strict(),
+  validation: z.object({
+    status: AwsOnboardingValidationStatusSchema
+  }).strict(),
+  scan: z.object({
+    latestScanRunId: z.string().min(1).max(128).nullable(),
+    latestStatus: ScanRunStatusSchema.nullable(),
+    latestStartedAt: z.string().datetime().nullable(),
+    latestCompletedAt: z.string().datetime().nullable(),
+    resourceCount: z.number().int().nonnegative(),
+    failedRegions: z.array(z.object({
+      region: z.string().trim().min(2).max(32),
+      failureClassification: z.string().trim().min(1).max(120),
+      safeSummary: z.string().trim().min(1).max(500)
+    }).strict()).max(30)
+  }).strict(),
+  readiness: z.object({
+    phase: AwsOnboardingReadinessPhaseSchema,
+    blockedReasons: z.array(z.string().trim().min(1).max(500)).max(20),
+    nextAction: AwsOnboardingNextActionSchema
+  }).strict(),
+  links: z.object({
+    account: z.string().startsWith("/dashboard/accounts/"),
+    scans: z.literal("/dashboard/scans"),
+    inventory: z.literal("/dashboard/inventory"),
+    findings: z.literal("/dashboard/security"),
+    compliance: z.literal("/dashboard/compliance"),
+    executiveDashboard: z.literal("/dashboard")
+  }).strict(),
+  safety: z.object({
+    awsApiCallExecuted: z.literal(false),
+    mutationExecuted: z.literal(false),
+    remediationExecuted: z.literal(false),
+    externalIdIncluded: z.literal(false),
+    rawProviderPayloadIncluded: z.literal(false)
+  }).strict()
+}).strict();
+export type AwsAccountOnboardingPreflightResponse = z.infer<
+  typeof AwsAccountOnboardingPreflightResponseSchema
+>;
+
 export const AwsSetupGuideResponseSchema = z.object({
   title: z.string(),
-  safetyMode: z.literal("read_only_planned"),
+  safetyMode: z.literal("read_only_disabled_by_default"),
   message: z.string(),
-  plannedConnectionModel: z.array(z.string()),
+  connectionModel: z.array(z.string()),
   currentLimitations: z.array(z.string()),
   validation: z.object({
-    code: z.literal("VALIDATION_NOT_IMPLEMENTED"),
-    message: z.literal(
-      "Real AWS read-only validation will be added in the AWS read-only connector milestone. No AWS API calls were executed."
-    )
+    code: z.literal("EXPLICIT_STS_VALIDATION_AVAILABLE"),
+    message: z.string()
   })
-});
+}).strict();
 export type AwsSetupGuideResponse = z.infer<
   typeof AwsSetupGuideResponseSchema
 >;
