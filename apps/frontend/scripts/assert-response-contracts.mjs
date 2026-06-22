@@ -7,6 +7,7 @@ import {
   FrontendAwsAccountListSchema,
   FrontendAwsAccountMutationSchema,
   FrontendAwsAccountDetailSchema,
+  FrontendAwsAccountOnboardingPreflightSchema,
   FrontendAwsIdentityValidationSchema,
   FrontendComplianceEvidenceCenterSchema,
   FrontendComplianceControlsRegistrySchema,
@@ -250,9 +251,21 @@ const commandCenter = {
     ...unsafeFields
   },
   postureScore: {
-    totalScore: 0,
+    totalScore: null,
     assessmentState: "INSUFFICIENT_DATA",
-    components: [],
+    components: [{
+      key: "COMPLIANCE",
+      label: "Compliance Posture",
+      scoreStatus: "NOT_EVALUATED",
+      score: null,
+      weight: 20,
+      weightedContribution: null,
+      supportingCounts: { passed: 0, total: 0 },
+      explanation: "Percentage of passed compliance controls.",
+      reason: "No completed compliance evaluation with real applicable evidence is available.",
+      dataSource: "DATABASE",
+      lastEvaluatedAt: null
+    }],
     dataSource: "DATABASE"
   },
   accountHealth: [],
@@ -340,6 +353,24 @@ const commandCenter = {
   generatedAt: timestamp,
   ...unsafeFields
 };
+assert.equal(FrontendCommandCenterResponseSchema.safeParse(commandCenter).success, true);
+assert.equal(FrontendCommandCenterResponseSchema.safeParse({
+  ...commandCenter,
+  postureScore: {
+    ...commandCenter.postureScore,
+    components: commandCenter.postureScore.components.map(({ scoreStatus, ...component }) => component)
+  }
+}).success, false);
+assert.equal(FrontendCommandCenterResponseSchema.safeParse({
+  ...commandCenter,
+  postureScore: {
+    ...commandCenter.postureScore,
+    components: commandCenter.postureScore.components.map((component) => ({
+      ...component,
+      scoreStatus: "LOOKS_GOOD"
+    }))
+  }
+}).success, false);
 
 const health = {
   status: "HEALTHY",
@@ -453,8 +484,10 @@ const account = {
   costScore: 70,
   complianceScore: 90,
   description: null,
-  roleArnPlaceholder: null,
-  externalIdPlaceholder: null,
+  roleArnConfigured: true,
+  roleArnDisplay: "arn:aws:iam::123456789012:role/CloudShieldScanner",
+  externalIdConfigured: true,
+  source: "AWS_SYNC",
   setupInstructionsViewedAt: timestamp,
   archivedAt: null,
   createdAt: timestamp,
@@ -472,12 +505,96 @@ const parsedResults = [
   [FrontendAwsAccountMutationSchema.parse({ item: account, message: "Account updated.", ...unsafeFields }), "AWS account mutation"]
 ];
 
+const onboardingPreflight = {
+  account: {
+    id: "account-1",
+    name: "Sandbox",
+    environment: "SANDBOX",
+    status: "CONNECTED",
+    connectionStatus: "VALIDATION_SUCCEEDED",
+    source: "AWS_SYNC",
+    configuredRegions: ["us-east-1"]
+  },
+  iam: {
+    roleArnConfigured: true,
+    roleArnDisplay: "arn:aws:iam::123456789012:role/CloudShieldScanner",
+    externalIdConfigured: true,
+    externalIdReturned: false,
+    runtimeScannerRoleConfigured: true,
+    runtimeExternalIdConfigured: true,
+    roleAgreement: "MATCH"
+  },
+  regions: {
+    configured: ["us-east-1"],
+    allowed: ["us-east-1"],
+    blocked: []
+  },
+  validation: { status: "VALIDATED" },
+  scan: {
+    latestScanRunId: "scan-1",
+    latestStatus: "SUCCEEDED",
+    latestStartedAt: timestamp,
+    latestCompletedAt: timestamp,
+    resourceCount: 5,
+    failedRegions: []
+  },
+  readiness: {
+    phase: "SYNC_COMPLETE",
+    blockedReasons: [],
+    nextAction: {
+      kind: "REVIEW_SCAN",
+      label: "Review latest inventory scan",
+      href: "/dashboard/scans/scan-1"
+    }
+  },
+  links: {
+    account: "/dashboard/accounts/account-1",
+    scans: "/dashboard/scans",
+    inventory: "/dashboard/inventory",
+    findings: "/dashboard/security",
+    compliance: "/dashboard/compliance",
+    executiveDashboard: "/dashboard"
+  },
+  safety: {
+    awsApiCallExecuted: false,
+    mutationExecuted: false,
+    remediationExecuted: false,
+    externalIdIncluded: false,
+    rawProviderPayloadIncluded: false
+  }
+};
+assert.equal(FrontendAwsAccountOnboardingPreflightSchema.safeParse(onboardingPreflight).success, true);
+assert.equal(FrontendAwsAccountOnboardingPreflightSchema.safeParse({
+  ...onboardingPreflight,
+  iam: { ...onboardingPreflight.iam, externalId: "must-not-be-returned" }
+}).success, false);
+assert.equal(FrontendAwsAccountOnboardingPreflightSchema.safeParse({
+  ...onboardingPreflight,
+  scan: { ...onboardingPreflight.scan, resourceCount: -1 }
+}).success, false);
+assert.equal(FrontendAwsAccountOnboardingPreflightSchema.safeParse({
+  ...onboardingPreflight,
+  safety: { ...onboardingPreflight.safety, awsApiCallExecuted: true }
+}).success, false);
+assert.equal(FrontendAwsAccountOnboardingPreflightSchema.safeParse({
+  ...onboardingPreflight,
+  readiness: { ...onboardingPreflight.readiness, phase: "PRODUCTION_READY" }
+}).success, false);
+
 const executiveDashboardResponse = {
   generatedAt: timestamp,
   organization: { id: "org-1", name: "CloudShield Demo Organization" },
   posture: {
     overallStatus: "NEEDS_ATTENTION",
+    scoreStatus: "SCORED",
     executiveScore: 72,
+    dataSource: "AWS_SYNC",
+    reason: "Calculated from current AWS-synchronized findings, evidence, and governance records.",
+    lastEvaluatedAt: timestamp,
+    isSampleOnly: false,
+    connectedAccountCount: 1,
+    awsSyncedResourceCount: 3,
+    completedScanCount: 1,
     criticalAttentionCount: 2,
     dataFreshnessStatus: "FRESH",
     scoreFactors: [{
@@ -500,7 +617,7 @@ const executiveDashboardResponse = {
       severity: "HIGH",
       workflowStatus: "OPEN",
       source: "RULE_ENGINE",
-      sampleData: true
+      sampleData: false
     }]
   },
   risk: {
@@ -550,8 +667,8 @@ const executiveDashboardResponse = {
   },
   provenance: {
     findingSources: ["RULE_ENGINE"],
-    resourceSources: ["SAMPLE"],
-    sampleDataPresent: true,
+    resourceSources: ["AWS_SYNC"],
+    sampleDataPresent: false,
     ruleEnginePresent: true
   },
   safety: {
@@ -570,7 +687,8 @@ const executiveDashboardResponse = {
 const parsedExecutiveDashboard =
   FrontendExecutiveDashboardSummarySchema.parse(executiveDashboardResponse);
 assert.equal(parsedExecutiveDashboard.posture.executiveScore, 72);
-assert.equal(parsedExecutiveDashboard.provenance.sampleDataPresent, true);
+assert.equal(parsedExecutiveDashboard.posture.scoreStatus, "SCORED");
+assert.equal(parsedExecutiveDashboard.provenance.sampleDataPresent, false);
 assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
   ...executiveDashboardResponse,
   security: { ...executiveDashboardResponse.security, totalFindings: -1 }
@@ -578,6 +696,18 @@ assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
 assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
   ...executiveDashboardResponse,
   posture: { ...executiveDashboardResponse.posture, overallStatus: "CERTIFIED" }
+}).success, false);
+assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
+  ...executiveDashboardResponse,
+  posture: { ...executiveDashboardResponse.posture, scoreStatus: "READY_ENOUGH" }
+}).success, false);
+assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
+  ...executiveDashboardResponse,
+  posture: {
+    ...executiveDashboardResponse.posture,
+    scoreStatus: "NOT_EVALUATED",
+    executiveScore: 0
+  }
 }).success, false);
 assert.equal(FrontendExecutiveDashboardSummarySchema.safeParse({
   ...executiveDashboardResponse,

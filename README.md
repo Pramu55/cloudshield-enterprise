@@ -1,6 +1,11 @@
 # CloudShield Enterprise
 **Future-Scope Enterprise AWS Governance, Security Posture, and Compliance Platform Foundation**
 
+Current release classification:
+`CLOUDSHIELD_AWS_UNVERIFIED_RELEASE_CANDIDATE_v0.5.0`
+
+This classification means local runtime and mocked read-only scanner behavior are validated. No real AWS account validation or production deployment is claimed.
+
 CloudShield Enterprise is a company IT / client-evaluation-ready governance platform foundation. It provides a real-world deployment architecture for managing AWS account governance, evaluating security posture against CIS/SOC2-inspired controls, maintaining a cloud asset inventory, tracking compliance evidence, and coordinating approval-based remediation planning.
 
 ## What CloudShield Solves

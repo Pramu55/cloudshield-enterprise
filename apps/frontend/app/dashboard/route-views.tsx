@@ -155,30 +155,56 @@ function getScoreColor(score: number) {
   return "var(--danger-color, #ef4444)";
 }
 
+function scoreStatusLabel(status: PostureScoreComponent["scoreStatus"]) {
+  const labels = {
+    SCORED: "Scored",
+    NOT_EVALUATED: "Not evaluated",
+    NOT_CONNECTED: "Not connected",
+    SAMPLE_ONLY: "Demo/sample data",
+    STALE: "Stale data",
+    BLOCKED: "Blocked"
+  };
+  return labels[status];
+}
+
 function PostureBar({ component }: { component: PostureScoreComponent }) {
-  const clampedScore = Math.max(0, Math.min(100, component.score));
+  const scoreAvailable =
+    component.score !== null &&
+    (component.scoreStatus === "SCORED" || component.scoreStatus === "STALE");
+  const clampedScore = scoreAvailable && component.score !== null
+    ? Math.max(0, Math.min(100, component.score))
+    : null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-4">
         <span className="min-w-0 font-medium text-slate-700">{component.label}</span>
-        <span className="shrink-0 font-semibold tabular-nums text-slate-900">{clampedScore}/100</span>
+        <span className="shrink-0 font-semibold tabular-nums text-slate-900">
+          {clampedScore === null ? scoreStatusLabel(component.scoreStatus) : `${clampedScore}/100`}
+        </span>
       </div>
 
-      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${clampedScore}%`, backgroundColor: getScoreColor(clampedScore) }}
-          role="progressbar"
-          aria-valuenow={clampedScore}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        />
-      </div>
+      {clampedScore === null ? null : (
+        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${clampedScore}%`, backgroundColor: getScoreColor(clampedScore) }}
+            role="progressbar"
+            aria-valuenow={clampedScore}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          />
+        </div>
+      )}
 
       <p className="text-sm leading-relaxed text-slate-500">
-        {component.explanation}
+        {component.reason}
       </p>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <SourceBadge source={component.dataSource} />
+        {component.lastEvaluatedAt ? <span>Evaluated {formatDate(component.lastEvaluatedAt)}</span> : null}
+        {component.scoreStatus === "STALE" ? <StatusBadge status="STALE" /> : null}
+      </div>
     </div>
   );
 }
@@ -291,7 +317,7 @@ export function OverviewView() {
                   <div className="text-xs text-slate-400 mt-1 uppercase tracking-wider">{postureScore.assessmentState.replace("_", " ")}</div>
                 </div>
               </>
-            ) : (
+            ) : postureScore.totalScore !== null ? (
               <>
                 <div className="text-5xl font-black" style={{ color: getScoreColor(postureScore.totalScore) }}>
                   {postureScore.totalScore}
@@ -301,7 +327,7 @@ export function OverviewView() {
                   <div className="text-xs text-slate-400 mt-1">Out of 100</div>
                 </div>
               </>
-            )}
+            ) : null}
           </div>
           <div className="flex flex-col gap-4">
             {postureScore.components.map(c => <PostureBar key={c.key} component={c} />)}

@@ -493,12 +493,30 @@ export class InventoryOrchestrationService {
     return existing && existing.dedupeKey !== dedupeKey ? existing : null;
   }
 
-  private checkAccountEligibility(account: { archivedAt: Date | null; connectionStatus: string; status: string; environment: string; roleArnPlaceholder: string | null }) {
+  private checkAccountEligibility(account: {
+    archivedAt: Date | null;
+    connectionStatus: string;
+    status: string;
+    environment: string;
+    roleArnPlaceholder: string | null;
+    externalIdPlaceholder: string | null;
+  }) {
     if (account.archivedAt) return { eligible: false, blockedReason: "AWS account is archived." };
     if (account.environment === "prod") return { eligible: false, blockedReason: "Production account scanning is blocked until policy explicitly permits it." };
     if (!account.roleArnPlaceholder) return { eligible: false, blockedReason: "Scanner role is not configured for this account." };
+    if (!this.env.AWS_ROLE_ARN) return { eligible: false, blockedReason: "Runtime scanner Role ARN is not configured." };
+    if (account.roleArnPlaceholder !== this.env.AWS_ROLE_ARN) {
+      return { eligible: false, blockedReason: "Account scanner Role ARN does not match the configured runtime scanner role." };
+    }
+    if (!account.externalIdPlaceholder) {
+      return { eligible: false, blockedReason: "Account External ID configuration marker is not set." };
+    }
+    if (!this.env.AWS_EXTERNAL_ID) return { eligible: false, blockedReason: "Runtime scanner External ID is not configured." };
     if (account.connectionStatus === "DISABLED") return { eligible: false, blockedReason: "AWS connector mode is disabled for this account." };
     if (account.connectionStatus === "VALIDATION_FAILED" || account.status === "AUTH_FAILED") return { eligible: false, blockedReason: "AWS account validation has failed." };
+    if (account.connectionStatus !== "VALIDATION_SUCCEEDED") {
+      return { eligible: false, blockedReason: "AWS account identity must be validated before inventory sync." };
+    }
     return { eligible: true, blockedReason: null };
   }
 
@@ -553,10 +571,10 @@ export function resolveRequestedRegions(
   envAllowedRegions: string[],
   fallbackRegion: string
 ) {
-  const allowed = envAllowedRegions.length ? envAllowedRegions : accountRegions;
-  const configured = allowed.length ? allowed : [fallbackRegion];
+  const configured = accountRegions.length ? accountRegions : [fallbackRegion];
+  const allowed = envAllowedRegions.length ? envAllowedRegions : configured;
   const regions = [...new Set((requested?.length ? requested : configured).map((region) => region.trim()).filter(Boolean))].sort();
-  const rejected = regions.filter((region) => !configured.includes(region));
+  const rejected = regions.filter((region) => !allowed.includes(region));
   if (rejected.length) {
     return {
       regions,

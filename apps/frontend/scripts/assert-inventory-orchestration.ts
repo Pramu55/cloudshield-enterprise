@@ -10,7 +10,7 @@ const account = {
   name: "Account",
   accountId: "123456789012",
   environment: "DEVELOPMENT" as const,
-  connectionStatus: "CONNECTED_DEMO_ONLY" as const,
+  connectionStatus: "VALIDATION_SUCCEEDED" as const,
   status: "CONNECTED" as const
 };
 const safety = {

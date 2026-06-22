@@ -2,6 +2,7 @@ import {
   AutomationAssessmentModeSchema,
   AutomationAssessmentStatusSchema,
   AutomationSafetyFlagsSchema,
+  AwsAccountOnboardingPreflightResponseSchema,
   AwsAccountListResponseSchema,
   AwsAccountMutationResponseSchema,
   AwsIdentityValidationResponseSchema,
@@ -399,16 +400,21 @@ export const FrontendCommandCenterResponseSchema = CommandCenterResponseSchema.r
     ...data.accountHealth.flatMap((account) => [account.lastValidationAt, account.lastSuccessfulSyncAt, account.lastFailedSyncAt]),
     ...data.priorityActions.map((action) => action.sourceTimestamp),
     ...data.recentActivity.map((activity) => activity.timestamp),
-    ...data.postureScore.components.map((component) => component.dataTimestamp)
+    ...data.postureScore.components.map((component) => component.lastEvaluatedAt)
   ];
   const knownAccountStates = data.accountHealth.every((account) => AwsConnectionStatusSchema.safeParse(account.connectionStatus).success);
-  return [...summaryCounts, ...riskCounts, ...scanCounts, ...graphCounts, ...accountCounts, ...evidenceCounts, ...freshnessCounts, ...governanceCounts, data.postureScore.totalScore].every(isNonNegativeInteger)
+  return [...summaryCounts, ...riskCounts, ...scanCounts, ...graphCounts, ...accountCounts, ...evidenceCounts, ...freshnessCounts, ...governanceCounts].every(isNonNegativeInteger)
+    && (data.postureScore.totalScore === null || isNonNegativeInteger(data.postureScore.totalScore))
     && isNonNegativeFinite(data.evidenceReadiness.coveragePercent)
     && (data.inventoryFreshness.ageMinutes === null || isNonNegativeFinite(data.inventoryFreshness.ageMinutes))
     && (data.inventoryFreshness.threshold === null || isNonNegativeFinite(data.inventoryFreshness.threshold))
     && (data.scanSummary.averageDurationMs === null || isNonNegativeFinite(data.scanSummary.averageDurationMs))
     && data.priorityActions.every((action) => action.ageHours === null || isNonNegativeFinite(action.ageHours))
-    && data.postureScore.components.every((component) => isNonNegativeInteger(component.score) && isNonNegativeInteger(component.weight) && isNonNegativeFinite(component.weightedContribution))
+    && data.postureScore.components.every((component) =>
+      (component.score === null || isNonNegativeInteger(component.score))
+      && isNonNegativeInteger(component.weight)
+      && (component.weightedContribution === null || isNonNegativeFinite(component.weightedContribution))
+    )
     && timestamps.every(isIsoOrNull)
     && knownAccountStates;
 }, { message: "Frontend command-center safety contract failed." }).transform((data) => ({
@@ -711,8 +717,10 @@ const FrontendAwsAccountItemSchema = AwsAccountMutationResponseSchema.shape.item
   costScore: account.costScore,
   complianceScore: account.complianceScore,
   description: account.description,
-  roleArnPlaceholder: account.roleArnPlaceholder,
-  externalIdPlaceholder: account.externalIdPlaceholder,
+  roleArnConfigured: account.roleArnConfigured,
+  roleArnDisplay: account.roleArnDisplay,
+  externalIdConfigured: account.externalIdConfigured,
+  source: account.source,
   setupInstructionsViewedAt: account.setupInstructionsViewedAt,
   archivedAt: account.archivedAt,
   createdAt: account.createdAt,
@@ -738,6 +746,12 @@ export const FrontendAwsAccountMutationSchema = AwsAccountMutationResponseSchema
 export const FrontendAwsAccountDetailSchema = z.object({
   item: FrontendAwsAccountItemSchema
 }).transform((data) => ({ item: data.item }));
+
+export const FrontendAwsAccountOnboardingPreflightSchema =
+  AwsAccountOnboardingPreflightResponseSchema;
+export type FrontendAwsAccountOnboardingPreflight = z.infer<
+  typeof FrontendAwsAccountOnboardingPreflightSchema
+>;
 
 export const FrontendAwsIdentityValidationSchema = AwsIdentityValidationResponseSchema
   .extend({
