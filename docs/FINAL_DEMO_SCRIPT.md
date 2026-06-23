@@ -1,75 +1,263 @@
-# CloudShield Enterprise - Final Demo Script
+# Final CloudShield Demo Script
 
-This script is designed for walking an evaluator, interviewer, or client through the CloudShield platform.
+Audience: recruiters, interviewers, engineering reviewers, or portfolio viewers.
 
-## 1. Landing Page / Login
-**Action**: Open `http://localhost:3100/login`
-**Script**: "Welcome to CloudShield. This is an enterprise-grade AWS governance foundation. It operates entirely locally for this demo. I'll log in using the demo evaluator account, which has tenant-isolated access to our sample organization."
+Goal: show CloudShield as a serious cloud governance platform while keeping the
+safety story crisp: real AWS proof was read-only, sandboxed, and locked down
+after validation.
 
-## 2. Executive Dashboard
-**Action**: Land on `http://localhost:3100/dashboard`
-**Script**: "This is the Executive Dashboard. It provides a high-level view of our cloud posture, including AWS account coverage, resource inventory, high-risk findings, compliance readiness, and governed operations. CloudShield can coordinate remediation planning and approvals while AWS mutations and automated remediations remain intentionally disabled."
+## 0. Pre-Demo Safety Check
 
-## 3. AWS Accounts Registry
-**Action**: Navigate to "AWS Accounts" in the sidebar.
-**Script**: "Here we manage our tenant-scoped AWS environments. In a production rollout, this is where cross-account IAM roles are registered for the read-only connector."
+Before screen sharing, run:
 
-## 4. Resource Inventory
-**Action**: Navigate to "Inventory".
-**Script**: "This acts as our CMDB (Configuration Management Database). It provides a centralized, queryable database of all cloud assets discovered across the registered AWS accounts."
+```powershell
+pnpm.cmd production:preflight
+```
 
-## 5. Security Posture Rules
-**Action**: Navigate to "Security Posture".
-**Script**: "Instead of just listing vulnerabilities, CloudShield uses a deterministic rules engine. It evaluates the inventory against best practices, identifying things like publicly exposed EC2 instances or unrestricted Security Groups."
+Talking point:
 
-## 6. Risk Workflow
-**Action**: Show the Risk/Security findings list.
-**Script**: "Governance requires workflow. When a finding is generated, teams can assign ownership, evaluate the business impact, and track risk acceptance. This moves security from an alert-list to an actionable process."
+> I start with the safety proof. This preflight checks the local backend,
+> readiness, frontend, and sanitized runtime guardrails. It does not call AWS,
+> trigger inventory, run remediation, mutate cloud resources, or print secrets.
 
-## 7. Compliance Evidence Center
-**Action**: Navigate to "Compliance".
-**Script**: "Here, security findings are mapped directly to internal governance frameworks. We use CIS-inspired and SOC2-inspired controls to demonstrate how technical findings translate into audit evidence."
+Expected result: `Preflight status: GREEN`.
 
-## 8. Reports & Exports
-**Action**: Navigate to "Reports".
-**Script**: "For executive reporting and audit preparation, we have the Reports Foundation. Reports include posture evidence, risk workflow state, remediation plans, approvals, and audit activity. Current exports are internal JSON previews, not official audit reports."
+## 1. Opening
 
-## 8.5 Governed Operations
-**Action**: Navigate to "Governance".
-**Script**: "This is where CloudShield becomes an operations platform. An analyst can create a remediation plan from a finding, request approval, approve or reject the plan, and mark manual completion. The platform records every step in the audit trail, but it does not execute AWS mutation or Terraform apply."
+Open `http://localhost:3100`.
 
-## 8.6 Premium Workspace Experience
-**Action**: Move through Dashboard, Accounts, Inventory, Security, Governance, Compliance, Reports, Recommendations, Scans, and Settings.
-**Script**: "The inner console is now structured like a real enterprise product. Each workspace has a command-center hero, status visuals, workflow panels, timelines, detail areas, and action surfaces. This is not just a color refresh; the dashboard content has been redesigned around operator tasks."
+Script:
 
-## 9. Scans & Real AWS Validation
-**Action**: Navigate to "Scans" or "Accounts". Show the confirmation modals and validation banners.
-**Script**: "A core architectural principle of CloudShield is safety. We have implemented a live read-only connection validation path using STS GetCallerIdentity and an EC2 describing scanner. When you trigger validation or scan, a confirmation modal warns you first. In the default disabled mode, the button is safely blocked and reports `awsApiCallExecuted=false`. When configured via environment settings, it performs live, secure, non-mutating checks."
+> CloudShield is an AWS security posture, compliance evidence, and governance
+> workflow platform. The key engineering challenge was to prove real cloud value
+> without creating cloud risk. This demo includes a real read-only AWS sandbox
+> validation path, but the runtime is now locked: inventory is disabled,
+> execution is disabled, and no executor role is configured.
 
-## 10. Enterprise Production Roadmap
-**Action**: Conclude the demo.
-**Script**: "While this is a robust foundation, our future roadmap includes FinOps cost governance integrations, real-time EventBridge listeners for live inventory updates, and enterprise SSO integrations like Okta. This architecture proves out the difficult parts of tenant isolation, deterministic rule evaluation, and safe cloud governance."
+Boundaries to state early:
 
+- No production customer deployment is claimed.
+- AWS usage was sandboxed and read-only.
+- Compliance language is CIS-inspired and SOC2-inspired, not official
+  certification.
+- Remediation and Terraform apply are intentionally disabled.
 
-**Note**: A premium public landing page is now available at / which guides users into the console login flow (/login), highlighting platform capabilities and safety constraints without claiming official compliance or real client deployments.
+## 2. Login
 
-## Dynamic Operations Demo Flow
+Open `http://localhost:3100/login` and sign in with the local demo account.
 
-1. Open `/dashboard` and show live module status, operations timeline, and refresh timestamp.
-2. Open `/dashboard/graph` and explain that the relationship graph is built from CloudShield DB records only.
-3. Open `/dashboard/inventory`, select a resource, and show linked relationships, findings, plans, and evidence.
-4. Open `/dashboard/scans` and show blocked scanner readiness plus scan lifecycle states.
-5. Open `/dashboard/governance` and show approval workflow activity.
-6. Open `/dashboard/reports` and show evidence summary plus internal preview reports.
-7. State clearly that AWS credentials are not configured and no AWS API, scanner, mutation, Terraform apply, or automatic remediation was run.
-## AI Automation Demo Addendum
+Script:
 
-Open `/dashboard/automation` and click `Run CloudShield Automated Assessment`.
+> The console uses authenticated, tenant-scoped access. Mutating requests use
+> CSRF protection, and settings do not accept or expose runtime secrets.
 
-Narrate:
+## 3. Executive Dashboard
 
-- CloudShield checks credential readiness without showing secrets.
-- AWS execution is blocked in evaluation mode.
-- The Intelligence Engine still analyzes DB-backed inventory, findings, compliance controls, cost signals, and governance records.
-- The assessment creates a persisted event timeline, executive summary, top risks, compliance gaps, FinOps opportunities, advisory remediation drafts, and an internal report preview.
-- Safety flags remain false for AWS mutation, scanner execution in disabled mode, Terraform apply, and automatic remediation.
+Open `/dashboard`.
+
+Show:
+
+- account posture summary;
+- security score;
+- evidence and compliance posture;
+- safety/status panels;
+- separation between real AWS_SYNC and sample/demo data.
+
+Script:
+
+> The executive view turns technical inventory and findings into governance
+> posture. For the real Track 2 sandbox, CloudShield calculated an 88/100 account
+> security score and a 72/100 executive governance score from stored evidence.
+> These are internal governance scores, not official compliance certifications.
+
+## 4. Accounts Page
+
+Open `/dashboard/accounts`.
+
+Script:
+
+> This is the AWS account registry. The Track 2 Sandbox account is the real
+> read-only validation target. The registry stores governance metadata and role
+> placeholders; it does not store AWS secret keys or External ID values.
+
+Point out:
+
+- Track 2 Sandbox account.
+- AWS account ID `745055721647`.
+- Region `ap-south-1`.
+- Connection status `VALIDATION_SUCCEEDED`.
+- Scanner mode locked back to disabled after proof.
+
+## 5. Track 2 Sandbox Account Detail
+
+Open the Track 2 Sandbox account detail page.
+
+Script:
+
+> This detail view is where the real proof comes together: STS validation,
+> inventory status, synced resources, findings, and report export access. The
+> real governance proof JSON endpoint is database-only; generating it does not
+> call AWS or trigger another scan.
+
+Show:
+
+- real AWS_SYNC resource counts;
+- validation/inventory context;
+- governance proof JSON/export links if visible.
+
+## 6. Inventory
+
+Open `/dashboard/inventory`.
+
+Script:
+
+> The completed read-only sync persisted six real AWS resources: one VPC, three
+> subnets, and two security groups. This is intentionally a narrow Phase 1
+> EC2/VPC slice, not a claim of full AWS coverage.
+
+Point out:
+
+- `source=AWS_SYNC`;
+- real/sample separation;
+- no raw AWS provider responses shown.
+
+## 7. Security Findings
+
+Open `/dashboard/security`.
+
+Script:
+
+> The local rules engine evaluated the synced resources and generated 12 LOW
+> findings: six missing owner tags and six missing environment tags. These are
+> low-risk governance hygiene issues, which is why the account score remains
+> high at 88/100.
+
+Show filters/counts:
+
+- 12 AWS_SYNC findings.
+- `MISSING_OWNER_TAG`: 6.
+- `MISSING_ENVIRONMENT_TAG`: 6.
+- Severity: LOW.
+- Status: OPEN.
+
+## 8. Compliance Evidence
+
+Open `/dashboard/compliance`.
+
+Script:
+
+> Each finding is mapped into evidence snapshots for internal governance. The
+> real Track 2 sandbox has 12 evidence snapshots and 100% evidence coverage for
+> the evaluated controls. The wording is intentionally CIS-inspired and
+> SOC2-inspired rather than claiming official certification.
+
+Show:
+
+- evidence coverage;
+- control language;
+- evidence generated from CloudShield DB records.
+
+## 9. Governance and Risk Workflow
+
+Open `/dashboard/governance` or a finding detail workflow.
+
+Script:
+
+> CloudShield supports the governance workflow around findings: ownership,
+> review, planning, approval evidence, and audit trail. In this release, that
+> workflow remains non-executing. It can document plans, but it does not run AWS
+> mutation or Terraform apply.
+
+Safety line:
+
+> The platform is designed so visibility and governance can mature before any
+> production execution path is enabled.
+
+## 10. Reports and Governance Proof JSON
+
+Open the account governance proof endpoint or use the download link:
+
+```http
+GET /api/v1/reports/aws/accounts/cmqq8z30d000hpg0z1kpjgpp4/governance-proof
+GET /api/v1/reports/aws/accounts/cmqq8z30d000hpg0z1kpjgpp4/governance-proof?download=1
+```
+
+Saved proof path:
+
+```text
+C:\CloudShield-Secrets\track2-readonly\track2-governance-proof-20260623-214814.json
+```
+
+Script:
+
+> The report is a database-only governance proof package. It records the account
+> identity, STS proof metadata, inventory scan proof, resource counts, finding
+> counts, compliance evidence posture, score explanations, and safety flags. It
+> does not include secrets and does not call AWS during generation.
+
+Do not open or commit secrets directories during a public demo. If showing the
+saved JSON, verify first that it contains only safe exported evidence.
+
+## 11. Production Preflight Proof
+
+Return to terminal and show:
+
+```powershell
+pnpm.cmd production:preflight
+```
+
+Script:
+
+> This is the release lock. Backend health is green, readiness and Postgres
+> migrations are green, the frontend is reachable, scanner mode is disabled,
+> change execution is disabled, the executor role is not configured, and secrets
+> are not returned. This is the state I would use for a portfolio or stakeholder
+> demo.
+
+## 12. Closing Explanation
+
+Script:
+
+> CloudShield proves a careful path from cloud inventory to governance evidence:
+> real read-only AWS validation, normalized resource inventory, deterministic
+> findings, evidence snapshots, governance scoring, and exportable proof. The
+> safety controls are as important as the features: no production customer claim,
+> no broad AWS coverage claim, no official certification claim, and no enabled
+> cloud mutation path.
+
+## Recruiter and Interviewer Talking Points
+
+- Built a TypeScript monorepo with Fastify backend, Next.js frontend, Prisma,
+  PostgreSQL, Redis/BullMQ worker flows, Zod contracts, Docker Compose, and
+  production-readiness scripts.
+- Implemented a real read-only AWS sandbox validation milestone using STS and a
+  narrow EC2/VPC inventory slice.
+- Persisted 6 real AWS resources, generated 12 findings, and created 12
+  evidence snapshots with 100% evidence coverage.
+- Designed explicit runtime safety gates: scanner disabled by default, change
+  execution disabled, executor role disabled, and no secrets in responses.
+- Added governance proof export and release preflight evidence suitable for a
+  portfolio-grade engineering walkthrough.
+
+## Fast Two-Minute Demo Path
+
+1. Run `pnpm.cmd production:preflight`.
+2. Open `/dashboard`.
+3. Open `/dashboard/accounts`.
+4. Open Track 2 Sandbox detail.
+5. Open `/dashboard/security`.
+6. Open `/dashboard/compliance`.
+7. Open governance proof JSON/export link.
+8. Close with safety boundaries and future work.
+
+## Stop Conditions
+
+Stop the demo if any of these appear:
+
+- scanner mode is not `disabled`;
+- change execution mode is not `disabled`;
+- executor role is configured;
+- any secret, token, External ID, credential file, or raw provider payload is
+  visible;
+- a workflow attempts AWS mutation, Terraform apply, remediation execution, or
+  inventory sync without separate approval.
