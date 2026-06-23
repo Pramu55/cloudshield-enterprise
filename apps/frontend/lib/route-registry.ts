@@ -1,6 +1,12 @@
 import type { CurrentUserCapabilityKey } from "@cloudshield/contracts";
 
-export type RouteCategory = "Overview" | "Cloud" | "Security" | "Operations" | "Administration";
+export type RouteCategory =
+  | "Overview"
+  | "Cloud Governance"
+  | "Security"
+  | "Compliance"
+  | "Operations"
+  | "Administration";
 
 export interface RouteMetadata {
   id: string;
@@ -17,37 +23,37 @@ export interface RouteMetadata {
 export const ROUTE_REGISTRY: RouteMetadata[] = [
   {
     id: "nav-dashboard",
-    label: "Dashboard",
+    label: "Executive dashboard",
     href: "/dashboard",
     icon: "overview",
     category: "Overview",
-    description: "Unified security and posture overview.",
-    keywords: ["posture", "overview", "home", "main"]
+    description: "CloudShield console home for posture, evidence, and runtime safety.",
+    keywords: ["posture", "overview", "home", "main", "console", "command center"]
   },
   {
     id: "nav-accounts",
     label: "Accounts",
     href: "/dashboard/accounts",
     icon: "accounts",
-    category: "Cloud",
-    description: "AWS accounts and connection status.",
-    keywords: ["aws accounts", "cloud accounts", "connections", "onboarding"]
+    category: "Cloud Governance",
+    description: "AWS accounts, connection status, validation, and onboarding.",
+    keywords: ["aws accounts", "cloud accounts", "connections", "onboarding", "sts"]
   },
   {
     id: "nav-inventory",
-    label: "Inventory",
+    label: "Inventory explorer",
     href: "/dashboard/inventory",
     icon: "inventory",
-    category: "Cloud",
-    description: "Cloud resource inventory.",
-    keywords: ["resources", "assets", "cloud resources"]
+    category: "Cloud Governance",
+    description: "Resource explorer for AWS_SYNC and sample cloud assets.",
+    keywords: ["resources", "assets", "cloud resources", "aws sync", "explorer"]
   },
   {
     id: "nav-graph",
     label: "Resource graph",
     href: "/dashboard/graph",
     icon: "graph",
-    category: "Cloud",
+    category: "Cloud Governance",
     description: "Visual resource relationships.",
     keywords: ["resources", "topology", "architecture"]
   },
@@ -56,25 +62,25 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     label: "Cost",
     href: "/dashboard/cost",
     icon: "cost",
-    category: "Cloud",
+    category: "Cloud Governance",
     description: "Cloud cost analysis.",
     keywords: ["spend", "billing", "finops"]
   },
   {
     id: "nav-security",
-    label: "Findings",
+    label: "Security findings",
     href: "/dashboard/security",
     icon: "security",
     category: "Security",
-    description: "Security posture and alerts.",
-    keywords: ["security", "posture", "alerts", "vulnerabilities"]
+    description: "Findings, affected resources, evidence, and workflow status.",
+    keywords: ["security", "posture", "alerts", "vulnerabilities", "findings"]
   },
   {
     id: "nav-security-monitoring",
-    label: "Security Monitoring",
+    label: "Monitoring",
     href: "/dashboard/monitoring",
     icon: "activity",
-    category: "Security",
+    category: "Operations",
     description: "Continuous AWS security monitoring and alerting.",
     keywords: ["monitoring", "security monitoring", "alerts", "critical alerts", "drift", "stale inventory", "monitoring health"]
   },
@@ -84,8 +90,8 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     href: "/dashboard/governance",
     icon: "governance",
     category: "Security",
-    description: "Security governance and policies.",
-    keywords: ["security", "policies", "remediation", "workflows"]
+    description: "Review-only governance workflows, approvals, and risk decisions.",
+    keywords: ["security", "policies", "review", "workflows"]
   },
   {
     id: "nav-risk-acceptances",
@@ -102,10 +108,10 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     label: "Compliance",
     href: "/dashboard/compliance",
     icon: "compliance",
-    category: "Security",
+    category: "Compliance",
     requiredCapability: "reports.read",
-    description: "Evidence-backed internal control mapping.",
-    keywords: ["security", "evidence", "controls", "audit", "posture", "cis inspired"]
+    description: "Evidence-backed internal control mapping; readiness, not certification.",
+    keywords: ["security", "evidence", "controls", "audit", "posture", "cis inspired", "soc2 inspired"]
   },
   {
     id: "nav-recommendations",
@@ -113,8 +119,8 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     href: "/dashboard/recommendations",
     icon: "recommendations",
     category: "Security",
-    description: "Security and cost recommendations.",
-    keywords: ["security", "remediation", "advisor", "improvements"]
+    description: "Advisory security and cost recommendations for human review.",
+    keywords: ["security", "advisor", "improvements", "review only"]
   },
   {
     id: "nav-automation",
@@ -122,15 +128,15 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     href: "/dashboard/automation",
     icon: "automation",
     category: "Operations",
-    description: "Automated remediation and operations.",
-    keywords: ["operations", "remediation", "playbooks", "autoops"]
+    description: "Advisory assessment automation and evidence generation; execution disabled.",
+    keywords: ["operations", "assessment", "playbooks", "advisory", "evidence"]
   },
   {
     id: "nav-scans",
     label: "Scans",
     href: "/dashboard/scans",
     icon: "scans",
-    category: "Operations",
+    category: "Cloud Governance",
     description: "Inventory and security scan history.",
     keywords: ["operations", "scan history", "jobs", "sync"]
   },
@@ -139,9 +145,9 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
     label: "Reports",
     href: "/dashboard/reports",
     icon: "reports",
-    category: "Operations",
-    description: "Generated reports and exports.",
-    keywords: ["operations", "evidence", "exports", "downloads"]
+    category: "Compliance",
+    description: "DB-only reports, governance proof, and evidence exports.",
+    keywords: ["operations", "evidence", "exports", "downloads", "governance proof"]
   },
   {
     id: "nav-settings",
@@ -176,8 +182,9 @@ export const ROUTE_REGISTRY: RouteMetadata[] = [
 
 export const NAV_GROUPS: Array<{ label: RouteCategory; items: RouteMetadata[] }> = [
   { label: "Overview", items: ROUTE_REGISTRY.filter(r => r.category === "Overview") },
-  { label: "Cloud", items: ROUTE_REGISTRY.filter(r => r.category === "Cloud") },
+  { label: "Cloud Governance", items: ROUTE_REGISTRY.filter(r => r.category === "Cloud Governance") },
   { label: "Security", items: ROUTE_REGISTRY.filter(r => r.category === "Security") },
+  { label: "Compliance", items: ROUTE_REGISTRY.filter(r => r.category === "Compliance") },
   { label: "Operations", items: ROUTE_REGISTRY.filter(r => r.category === "Operations") },
   { label: "Administration", items: ROUTE_REGISTRY.filter(r => r.category === "Administration") }
 ];

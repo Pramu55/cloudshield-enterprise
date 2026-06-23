@@ -313,6 +313,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ) : null}
           </div>
         </header>
+        <section className="border-b border-slate-200 bg-white px-4 py-2 text-xs text-slate-600 md:px-6" aria-label="CloudShield runtime safety">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-black uppercase tracking-wide text-slate-500">Pilot / local</span>
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-bold text-blue-700">
+              Read-only locked
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-bold text-slate-700">
+              Connector: {readinessState.data?.connectorMode ?? "not reported"}
+            </span>
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-bold text-blue-700">
+              Scanner: {readinessState.data?.scannerMode ?? "not reported"}
+            </span>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-bold text-amber-800">
+              Mutation / remediation / Terraform disabled
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-bold text-slate-700">
+              Reports are DB-only
+            </span>
+          </div>
+        </section>
         <main className="portal-content" id="main-content" tabIndex={-1}>{children}</main>
       </div>
 
