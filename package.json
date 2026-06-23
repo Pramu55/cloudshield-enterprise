@@ -14,6 +14,7 @@
     "cloudshield:start": "pnpm cloudshield start",
     "cloudshield:stop": "pnpm cloudshield stop",
     "cloudshield:status": "pnpm cloudshield status",
+    "production:preflight": "powershell -ExecutionPolicy Bypass -File ./scripts/production-preflight.ps1",
     "prisma:generate": "pnpm --filter @cloudshield/database prisma:generate"
   },
   "devDependencies": {
