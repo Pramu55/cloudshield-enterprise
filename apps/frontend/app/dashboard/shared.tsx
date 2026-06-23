@@ -88,10 +88,58 @@ export function StatusBadge({
 
 export function SourceBadge({ source }: { source?: string | null }) {
   const normalized = source || "UNKNOWN";
+  const label =
+    normalized === "AWS_SYNC"
+      ? "AWS_SYNC"
+      : normalized === "SAMPLE"
+        ? "SAMPLE"
+        : normalized === "DB_ONLY_READ_ONLY"
+          ? "DB ONLY · READ ONLY"
+          : normalized === "DATABASE"
+            ? "DB ONLY"
+            : humanize(normalized);
   return (
     <span className="cs-source" data-source={normalized === "AWS_SYNC" ? "aws" : normalized === "SAMPLE" ? "sample" : "other"}>
-      {normalized === "AWS_SYNC" ? "AWS_SYNC" : normalized === "SAMPLE" ? "SAMPLE" : humanize(normalized)}
+      {label}
     </span>
+  );
+}
+
+export type DataScope = "real" | "sample" | "combined";
+
+export function DataScopeSelector({
+  scope,
+  onChange,
+  realCount,
+  sampleCount
+}: {
+  scope: DataScope;
+  onChange: (scope: DataScope) => void;
+  realCount: number;
+  sampleCount: number;
+}) {
+  const options: Array<{ value: DataScope; label: string; count: number }> = [
+    { value: "real", label: "Real AWS data", count: realCount },
+    { value: "sample", label: "Sample/demo data", count: sampleCount },
+    { value: "combined", label: "Combined organization view", count: realCount + sampleCount }
+  ];
+
+  return (
+    <FilterBar>
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Data scope</span>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={scope === option.value ? "cs-action-primary" : "cs-button-secondary"}
+          aria-pressed={scope === option.value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label} ({option.count})
+        </button>
+      ))}
+      <SourceBadge source="DB_ONLY_READ_ONLY" />
+    </FilterBar>
   );
 }
 

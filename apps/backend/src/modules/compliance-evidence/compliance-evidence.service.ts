@@ -42,7 +42,10 @@ export async function getComplianceEvidenceCenter(organizationId: string) {
   } satisfies ComplianceEvidenceCenterResponse;
 }
 
-export async function listComplianceControls(organizationId: string) {
+export async function listComplianceControls(
+  organizationId: string,
+  resourceSource?: "AWS_SYNC" | "SAMPLE"
+) {
   const mappedRuleIds = [
     ...new Set(
       ComplianceControlProjectionCatalog.flatMap((control) => control.mappedRuleIds)
@@ -50,7 +53,8 @@ export async function listComplianceControls(organizationId: string) {
   ];
   const findings = await loadComplianceProjectionFindings(
     organizationId,
-    mappedRuleIds
+    mappedRuleIds,
+    resourceSource
   );
 
   const controls = ComplianceControlProjectionCatalog.map((definition) => {
@@ -75,13 +79,15 @@ export async function listComplianceControls(organizationId: string) {
 
 async function loadComplianceProjectionFindings(
   organizationId: string,
-  mappedRuleIds: string[]
+  mappedRuleIds: string[],
+  resourceSource?: "AWS_SYNC" | "SAMPLE"
 ) {
   return prisma.securityFinding.findMany({
     where: {
       organizationId,
       ruleId: { in: mappedRuleIds },
-      archivedAt: null
+      archivedAt: null,
+      ...(resourceSource ? { resource: { source: resourceSource } } : {})
     },
     orderBy: [{ severity: "asc" }, { updatedAt: "desc" }, { id: "desc" }],
     include: {

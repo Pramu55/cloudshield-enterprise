@@ -35,6 +35,7 @@ import {
   FrontendGovernanceApprovalsSchema,
   FrontendGovernanceActivitySchema,
   FrontendComplianceEvidenceCenterSchema,
+  FrontendComplianceControlsRegistrySchema,
   FrontendMonitoringHealthSchema,
   FrontendRemediationPlanListSchema,
   FrontendSecurityFindingsResponseSchema,
@@ -43,6 +44,7 @@ import {
   type FrontendGovernanceApprovals,
   type FrontendGovernanceActivity,
   type FrontendComplianceEvidenceCenter,
+  type FrontendComplianceControlsRegistry,
   type FrontendRemediationPlanList,
   type FrontendMonitoringHealth,
   type FrontendSecurityFindingsResponse
@@ -50,6 +52,8 @@ import {
 import { AccountDetailWorkspace, AccountsWorkspace } from "./account-workflows";
 import {
   DataTable,
+  DataScopeSelector,
+  type DataScope,
   DetailList,
   EmptyState,
   ErrorState,
@@ -112,11 +116,31 @@ function text(value: any, fallback = "None") {
 type SourceDescriptor = {
   dataSource?: string | null;
   source?: string | null;
+  resourceSource?: string | null;
   sampleData?: boolean;
 };
 
 function sourceFor(item: SourceDescriptor, parent?: SourceDescriptor | null) {
-  return item.dataSource ?? item.source ?? parent?.dataSource ?? parent?.source ?? null;
+  return item.resourceSource ?? item.dataSource ?? item.source ?? parent?.dataSource ?? parent?.source ?? null;
+}
+
+function isSampleRecord(item: SourceDescriptor, parent?: SourceDescriptor | null) {
+  return item.sampleData === true || sourceFor(item, parent) === "SAMPLE";
+}
+
+function isRealRecord(item: SourceDescriptor, parent?: SourceDescriptor | null) {
+  return sourceFor(item, parent) === "AWS_SYNC" && !isSampleRecord(item, parent);
+}
+
+function scopedRecords<T extends SourceDescriptor>(
+  items: T[],
+  scope: DataScope,
+  parent?: SourceDescriptor | null
+) {
+  if (scope === "combined") return items;
+  return items.filter((item) =>
+    scope === "real" ? isRealRecord(item, parent) : isSampleRecord(item, parent)
+  );
 }
 
 function ErrorAndRefresh({ error, isRefreshing, onRetry }: { error: ApiError | null; isRefreshing: boolean; onRetry?: () => void }) {
@@ -468,6 +492,11 @@ export function InventoryView() {
     sampleDataLabel: ""
   });
   const resources = data?.items || [];
+  const realCount = resources.filter((resource) => isRealRecord(resource, data)).length;
+  const sampleCount = resources.filter((resource) => isSampleRecord(resource, data)).length;
+  const [scope, setScope] = useState<DataScope>("real");
+  const effectiveScope = realCount === 0 && scope === "real" ? "combined" : scope;
+  const visibleResources = scopedRecords(resources, effectiveScope, data);
 
   return (
     <>
@@ -478,15 +507,16 @@ export function InventoryView() {
         secondaryAction={<FilterBar><Search size={14} /> Search and filters are applied by the current API view.</FilterBar>}
       />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <DataScopeSelector scope={effectiveScope} onChange={setScope} realCount={realCount} sampleCount={sampleCount} />
       <StatGroup>
-        <MetricTile label="Resources" value={resources.length} tone="info" />
-        <MetricTile label="Accounts" value={new Set(resources.map((resource: CloudResourceDto) => resource.awsAccountId)).size} />
-        <MetricTile label="Regions" value={new Set(resources.map((resource: CloudResourceDto) => resource.region).filter(Boolean)).size} />
+        <MetricTile label="Resources" value={visibleResources.length} tone="info" />
+        <MetricTile label="Accounts" value={new Set(visibleResources.map((resource: CloudResourceDto) => resource.awsAccountId)).size} />
+        <MetricTile label="Regions" value={new Set(visibleResources.map((resource: CloudResourceDto) => resource.region).filter(Boolean)).size} />
       </StatGroup>
       <Section title="Inventory records">
         <DataTable
           columns={["Resource", "Type", "Account", "Region", "Status", "Source"]}
-          rows={resources.map((resource: CloudResourceDto) => [
+          rows={visibleResources.map((resource: CloudResourceDto) => [
             <ConsoleLink key="name" href={`/dashboard/inventory/${resource.id}`}>{text(resource.name ?? resource.resourceId, "Resource")}</ConsoleLink>,
             text(resource.resourceType),
             <span key="account" className="font-mono text-xs">{text(resource.awsAccountId)}</span>,
@@ -562,20 +592,26 @@ export function SecurityView() {
     mutationExecuted: false
   }, { schema: FrontendSecurityFindingsResponseSchema });
   const findings = data?.items || [];
+  const realCount = findings.filter((finding) => isRealRecord(finding, data)).length;
+  const sampleCount = findings.filter((finding) => isSampleRecord(finding, data)).length;
+  const [scope, setScope] = useState<DataScope>("real");
+  const effectiveScope = realCount === 0 && scope === "real" ? "combined" : scope;
+  const visibleFindings = scopedRecords(findings, effectiveScope, data);
 
   return (
     <>
       <PageHeader breadcrumbs={["Security"]} title="Security findings" description="Prioritized findings and workflow state from CloudShield security analysis." />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <DataScopeSelector scope={effectiveScope} onChange={setScope} realCount={realCount} sampleCount={sampleCount} />
       <StatGroup>
-        <MetricTile label="Open findings" value={findings.filter((finding) => !["RESOLVED", "ARCHIVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="warning" />
-        <MetricTile label="Critical" value={findings.filter((finding) => String(finding.severity).toUpperCase() === "CRITICAL").length} tone="danger" />
-        <MetricTile label="Resolved" value={findings.filter((finding) => ["RESOLVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="success" />
+        <MetricTile label="Open findings" value={visibleFindings.filter((finding) => !["RESOLVED", "ARCHIVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="warning" />
+        <MetricTile label="Critical" value={visibleFindings.filter((finding) => String(finding.severity).toUpperCase() === "CRITICAL").length} tone="danger" />
+        <MetricTile label="Resolved" value={visibleFindings.filter((finding) => ["RESOLVED", "CLOSED"].includes(String(finding.status).toUpperCase())).length} tone="success" />
       </StatGroup>
       <Section title="Finding queue">
         <DataTable
           columns={["Finding", "Severity", "Resource", "Workflow", "Source", "Updated"]}
-          rows={findings.map((finding) => [
+          rows={visibleFindings.map((finding) => [
             <ConsoleLink key="finding" href={`/dashboard/security/${encodeURIComponent(finding.id)}`}>{finding.title}</ConsoleLink>,
             <StatusBadge key="severity" status={finding.severity} />,
             text(finding.resourceName ?? finding.resourceId),
@@ -712,27 +748,42 @@ export function AutomationView() {
 }
 
 export function ComplianceView() {
-  const { data, error, isRefreshing } = useCloudShieldData<FrontendComplianceEvidenceCenter | null>("/api/v1/compliance/evidence-center", null, { schema: FrontendComplianceEvidenceCenterSchema });
-  const controls = data?.controls ?? [];
+  const center = useCloudShieldData<FrontendComplianceEvidenceCenter | null>("/api/v1/compliance/evidence-center", null, { schema: FrontendComplianceEvidenceCenterSchema });
+  const registry = useCloudShieldData<FrontendComplianceControlsRegistry | null>("/api/v1/compliance/controls", null, { schema: FrontendComplianceControlsRegistrySchema });
+  const controls = registry.data?.controls ?? [];
+  const realCount = controls.filter((control) => control.provenance.resourceSources.includes("AWS_SYNC")).length;
+  const sampleCount = controls.filter((control) => control.provenance.sampleData).length;
+  const [scope, setScope] = useState<DataScope>("real");
+  const effectiveScope = realCount === 0 && scope === "real" ? "combined" : scope;
+  const visibleControls = effectiveScope === "combined"
+    ? controls
+    : controls.filter((control) =>
+        effectiveScope === "sample"
+          ? control.provenance.sampleData
+          : control.provenance.resourceSources.includes("AWS_SYNC")
+      );
 
   return (
     <>
       <PageHeader breadcrumbs={["Security", "Compliance"]} title="Compliance evidence" description="Control status, evidence records, and framework mapping produced by the evidence center." />
-      <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <ErrorAndRefresh error={center.error || registry.error} isRefreshing={center.isRefreshing || registry.isRefreshing} />
+      <DataScopeSelector scope={effectiveScope} onChange={setScope} realCount={realCount} sampleCount={sampleCount} />
       <StatGroup>
-        <MetricTile label="Controls" value={controls.length} />
-        <MetricTile label="Passing" value={controls.filter((control) => String(control.status).toUpperCase().includes("PASS")).length} tone="success" />
-        <MetricTile label="Needs review" value={controls.filter((control) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
+        <MetricTile label="Controls" value={visibleControls.length} />
+        <MetricTile label="Evidence records" value={visibleControls.reduce((total, control) => total + control.evidenceSnapshotCount, 0)} />
+        <MetricTile label="Needs review" value={visibleControls.filter((control) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
       </StatGroup>
       <Section title="Control evidence">
         <DataTable
           columns={["Control", "Framework", "Status", "Evidence", "Source"]}
-          rows={controls.map((control) => [
+          rows={visibleControls.map((control) => [
             text(control.title ?? control.controlId, "Control"),
             text(control.framework),
             <StatusBadge key="status" status={control.status} />,
-            text(control.evidenceCount),
-            <SourceBadge key="source" source={sourceFor(control, data)} />
+            text(control.evidenceSnapshotCount),
+            <div key="source" className="flex flex-wrap gap-1">
+              {control.provenance.resourceSources.map((source) => <SourceBadge key={source} source={source} />)}
+            </div>
           ])}
         />
       </Section>
@@ -799,24 +850,35 @@ export function GraphView() {
   const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>("/api/v1/resources/graph", { nodes: [], edges: [] });
   const nodes = pickArray(data, ["nodes", "resources"]);
   const edges = pickArray(data, ["edges", "relationships"]);
+  const realCount = nodes.filter((node: AnyRecord) => isRealRecord(node, data)).length;
+  const sampleCount = nodes.filter((node: AnyRecord) => isSampleRecord(node, data)).length;
+  const [scope, setScope] = useState<DataScope>("real");
+  const effectiveScope = realCount === 0 && scope === "real" ? "combined" : scope;
+  const visibleNodes = scopedRecords(nodes, effectiveScope, data);
+  const visibleNodeIds = new Set(visibleNodes.map((node: AnyRecord) => node.id));
+  const visibleEdges = edges.filter((edge: AnyRecord) =>
+    visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+  );
 
   return (
     <>
       <PageHeader breadcrumbs={["Cloud", "Graph"]} title="Resource graph" description="Relationship map for cloud resources, findings, accounts, and evidence records." />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <DataScopeSelector scope={effectiveScope} onChange={setScope} realCount={realCount} sampleCount={sampleCount} />
       <StatGroup>
-        <MetricTile label="Nodes" value={nodes.length} tone="info" />
-        <MetricTile label="Relationships" value={edges.length} />
-        <MetricTile label="Resource types" value={new Set(nodes.map((node: AnyRecord) => node.type ?? node.resourceType).filter(Boolean)).size} />
+        <MetricTile label="Nodes" value={visibleNodes.length} tone="info" />
+        <MetricTile label="Relationships" value={visibleEdges.length} />
+        <MetricTile label="Resource types" value={new Set(visibleNodes.map((node: AnyRecord) => node.type ?? node.resourceType).filter(Boolean)).size} />
       </StatGroup>
       <Section title="Graph records">
         <DataTable
-          columns={["Node", "Type", "Account", "Status"]}
-          rows={nodes.map((node: AnyRecord) => [
+          columns={["Node", "Type", "Account", "Status", "Source"]}
+          rows={visibleNodes.map((node: AnyRecord) => [
             text(node.label ?? node.name ?? node.id),
             text(node.type ?? node.resourceType),
             text(node.awsAccountId ?? node.accountId),
-            <StatusBadge key="status" status={node.status ?? node.state} />
+            <StatusBadge key="status" status={node.status ?? node.state} />,
+            <SourceBadge key="source" source={sourceFor(node, data)} />
           ])}
           empty={<PrimaryLink href="/dashboard/accounts">Configure inventory ingestion</PrimaryLink>}
         />
@@ -912,6 +974,9 @@ export function ReportsView() {
     <>
       <PageHeader breadcrumbs={["Operations", "Reports"]} title="Reports" description="Generated reports, summaries, and evidence packages for cloud governance stakeholders." />
       <ErrorAndRefresh error={reports.error || summary.error} isRefreshing={reports.isRefreshing || summary.isRefreshing} />
+      <InlineNotice title="Report provenance" tone="info">
+        Reports remain available as a combined library. Each record is labeled SAMPLE or DB ONLY so demo exports cannot be mistaken for real AWS proof.
+      </InlineNotice>
       <StatGroup>
         <MetricTile label="Reports" value={rows.length} />
         <MetricTile label="Completed" value={rows.filter((row: AnyRecord) => String(row.status).toUpperCase().includes("COMPLETED")).length} tone="success" />
@@ -925,7 +990,7 @@ export function ReportsView() {
             text(report.type ?? report.reportType),
             <StatusBadge key="status" status={report.status ?? report.state} />,
             formatDate(report.createdAt ?? report.updatedAt),
-            <SourceBadge key="source" source={sourceFor(report, reports.data)} />
+            <SourceBadge key="source" source={report.sampleData ? "SAMPLE" : "DATABASE"} />
           ])}
           empty={<PrimaryLink href="/dashboard/compliance">Review available evidence</PrimaryLink>}
         />

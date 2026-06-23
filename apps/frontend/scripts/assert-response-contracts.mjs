@@ -738,6 +738,24 @@ assert.equal(executiveDashboardSource.includes("FrontendExecutiveDashboardSummar
 assert.equal(executiveDashboardSource.includes("/api/v1/dashboard/executive-summary"), true);
 assert.equal(executiveDashboardSource.includes("dangerouslySetInnerHTML"), false);
 
+const dashboardRouteViewsSource = await readFile(
+  new URL("../app/dashboard/route-views.tsx", import.meta.url),
+  "utf8"
+);
+const dashboardSharedSource = await readFile(
+  new URL("../app/dashboard/shared.tsx", import.meta.url),
+  "utf8"
+);
+for (const view of ["InventoryView", "SecurityView", "ComplianceView", "GraphView"]) {
+  assert.equal(dashboardRouteViewsSource.includes(`export function ${view}`), true);
+}
+assert.equal(dashboardRouteViewsSource.includes("DataScopeSelector"), true);
+assert.equal(dashboardRouteViewsSource.includes('report.sampleData ? "SAMPLE" : "DATABASE"'), true);
+assert.equal(dashboardSharedSource.includes("Real AWS data"), true);
+assert.equal(dashboardSharedSource.includes("Sample/demo data"), true);
+assert.equal(dashboardSharedSource.includes("Combined organization view"), true);
+assert.equal(dashboardSharedSource.includes("DB ONLY · READ ONLY"), true);
+
 for (const [result, label] of parsedResults) {
   assertUnsafeFieldsRemoved(result, label);
 }

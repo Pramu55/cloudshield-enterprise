@@ -55,19 +55,19 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
       }),
       prisma.securityFinding.findMany({
         where: scope,
-        include: { resource: { select: { id: true, name: true, resourceType: true } } },
+        include: { resource: { select: { id: true, name: true, resourceType: true, source: true } } },
         orderBy: [{ severity: "asc" }, { createdAt: "desc" }],
         take: 100
       }),
       prisma.remediationPlan.findMany({
         where: scope,
-        include: { finding: { select: { id: true, title: true } } },
+        include: { finding: { select: { id: true, title: true, resource: { select: { source: true } } } } },
         orderBy: { updatedAt: "desc" },
         take: 100
       }),
       prisma.approvalRequest.findMany({
         where: scope,
-        include: { remediationPlan: { select: { id: true, title: true } } },
+        include: { remediationPlan: { select: { id: true, title: true, finding: { select: { resource: { select: { source: true } } } } } } },
         orderBy: { createdAt: "desc" },
         take: 100
       }),
@@ -78,7 +78,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
       }),
       prisma.complianceEvidence.findMany({
         where: scope,
-        include: { resource: { select: { id: true, name: true } }, control: { select: { id: true, title: true, controlId: true, framework: true } } },
+        include: { resource: { select: { id: true, name: true, source: true } }, control: { select: { id: true, title: true, controlId: true, framework: true } } },
         orderBy: { collectedAt: "desc" },
         take: 100
       }),
@@ -89,6 +89,19 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
       })
     ]);
 
+    const accountSources = new Map<string, Set<string>>();
+    for (const resource of resources) {
+      const sources = accountSources.get(resource.awsAccountId) ?? new Set<string>();
+      sources.add(resource.source);
+      accountSources.set(resource.awsAccountId, sources);
+    }
+    const sourceForAccount = (accountId: string) => {
+      const sources = accountSources.get(accountId);
+      if (sources?.has("AWS_SYNC")) return "AWS_SYNC";
+      if (sources?.has("SAMPLE")) return "SAMPLE";
+      return "DATABASE";
+    };
+
     const nodes = [
       ...accounts.map((account) => ({
         id: accountNodeId(account.id),
@@ -96,6 +109,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         label: account.name,
         subtitle: account.accountId,
         status: account.connectionStatus,
+        source: sourceForAccount(account.id),
         group: account.environment,
         metadata: {
           businessUnit: account.businessUnit,
@@ -109,6 +123,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         label: resource.name ?? resource.resourceId,
         subtitle: resource.resourceType,
         status: resource.status,
+        source: resource.source,
         group: resource.awsAccount.name,
         metadata: {
           resourceId: resource.resourceId,
@@ -123,6 +138,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         label: finding.title,
         subtitle: finding.ruleId,
         status: finding.status,
+        source: finding.resource?.source ?? "DATABASE",
         group: finding.severity,
         metadata: {
           severity: finding.severity,
@@ -135,6 +151,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         label: plan.title,
         subtitle: plan.implementationMode,
         status: plan.approvalStatus,
+        source: plan.finding.resource?.source ?? "DATABASE",
         group: plan.executionStatus,
         metadata: {
           riskLevel: plan.riskLevel,
@@ -147,6 +164,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         label: approval.remediationPlan?.title ?? "Approval request",
         subtitle: approval.status,
         status: approval.status,
+        source: approval.remediationPlan.finding.resource?.source ?? "DATABASE",
         group: "governance",
         metadata: {
           decidedAt: approval.decidedAt?.toISOString() ?? null
@@ -158,6 +176,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         label: event.action,
         subtitle: event.targetType,
         status: "RECORDED",
+        source: "DATABASE",
         group: "activity",
         metadata: {
           createdAt: event.createdAt.toISOString()
@@ -169,6 +188,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         label: item.control.title,
         subtitle: item.control.controlId,
         status: item.status,
+        source: item.resource?.source ?? (item.sampleData ? "SAMPLE" : "DATABASE"),
         group: item.control.framework,
         metadata: {
           evidenceType: item.evidenceType,
@@ -181,6 +201,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         label: report.title ?? report.reportType,
         subtitle: report.reportType,
         status: report.status,
+        source: report.sampleData ? "SAMPLE" : "DATABASE",
         group: report.format,
         metadata: {
           generatedAt: report.generatedAt?.toISOString() ?? report.createdAt.toISOString(),
@@ -270,7 +291,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         reports: reports.length
       },
       graphSource: "CloudShield database records",
-      sampleData: resources.some((resource) => Boolean((resource.metadata as any)?.sampleData)),
+      sampleData: resources.some((resource) => resource.source === "SAMPLE"),
       ...SafetyFlags
     };
   });

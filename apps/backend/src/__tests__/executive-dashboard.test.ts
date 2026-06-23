@@ -113,6 +113,62 @@ test("executive dashboard is tenant-scoped, read-only, and evidence-backed", asy
     }
   });
 
+  await t.test("real executive metrics exclude coexisting sample findings and evidence", async () => {
+    const sampleResource = await prisma.cloudResource.create({
+      data: {
+        organizationId: tenantA.organizationId,
+        awsAccountId: fixture.accountId,
+        resourceType: "security-group",
+        resourceId: `sg-sample-${randomUUID()}`,
+        name: "Sample executive resource",
+        source: "SAMPLE"
+      }
+    });
+    const sampleFinding = await prisma.securityFinding.create({
+      data: {
+        organizationId: tenantA.organizationId,
+        awsAccountId: fixture.accountId,
+        resourceId: sampleResource.id,
+        ruleId: "SAMPLE_EXECUTIVE_RULE",
+        title: "Sample finding excluded from real metrics",
+        description: "Sample records remain visible through provenance but not real executive metrics.",
+        severity: "CRITICAL",
+        status: "OPEN",
+        workflowStatus: "OPEN",
+        source: "RULE_ENGINE",
+        lastEvaluatedAt: now
+      }
+    });
+    await prisma.securityFindingEvidenceSnapshot.create({
+      data: {
+        organizationId: tenantA.organizationId,
+        securityFindingId: sampleFinding.id,
+        resourceId: sampleResource.id,
+        ruleId: sampleFinding.ruleId,
+        ruleVersion: "1",
+        evaluationMode: "STORED_INVENTORY",
+        findingSource: "RULE_ENGINE",
+        resourceSource: "SAMPLE",
+        sampleData: true,
+        title: "Sample evidence",
+        summary: "Sample evidence remains classified.",
+        resourceSnapshot: { source: "SAMPLE" },
+        evaluationContext: { resultStatus: "finding_created" },
+        capturedAt: now
+      }
+    });
+
+    const summary = ExecutiveDashboardSummaryResponseSchema.parse(
+      await getExecutiveDashboardSummary(tenantA.organizationId, now)
+    );
+    assert.equal(summary.security.totalFindings, 5);
+    assert.equal(summary.security.bySeverity.critical, 1);
+    assert.equal(summary.evidence.totalSnapshots, 3);
+    assert.equal(summary.provenance.sampleDataPresent, true);
+    assert.deepEqual(summary.provenance.resourceSources, ["AWS_SYNC", "SAMPLE"]);
+    assert.equal(summary.posture.dataSource, "AWS_SYNC");
+  });
+
   await t.test("API is tenant scoped", async () => {
     const response = await app.inject({
       method: "GET",
@@ -265,7 +321,7 @@ async function createExecutiveFixture(organizationId: string, now: Date) {
   await createAcceptance(organizationId, findings[3]!.id, new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000));
   await createAcceptance(organizationId, findings[3]!.id, new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000));
   await createAcceptance(organizationId, findings[3]!.id, new Date(now.getTime() - 24 * 60 * 60 * 1000));
-  return { criticalFindingId: findings[0]!.id, latestSnapshotAt };
+  return { accountId: account.id, criticalFindingId: findings[0]!.id, latestSnapshotAt };
 }
 
 async function createCrossTenantFixture(organizationId: string) {

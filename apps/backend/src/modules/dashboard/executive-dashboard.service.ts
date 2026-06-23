@@ -21,22 +21,50 @@ export async function getExecutiveDashboardSummary(
   const dayAgo = new Date(now.getTime() - DAY_MS);
   const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
   const expiringSoonAt = new Date(now.getTime() + 30 * DAY_MS);
+  const [
+    connectedAccountCount,
+    awsSyncedResourceCount,
+    sampleResourceCount,
+    completedScanCount
+  ] = await Promise.all([
+    prisma.awsAccount.count({
+      where: {
+        organizationId,
+        archivedAt: null,
+        connectionStatus: "VALIDATION_SUCCEEDED"
+      }
+    }),
+    prisma.cloudResource.count({
+      where: { organizationId, archivedAt: null, source: "AWS_SYNC" }
+    }),
+    prisma.cloudResource.count({
+      where: { organizationId, archivedAt: null, source: "SAMPLE" }
+    }),
+    prisma.scanRun.count({
+      where: {
+        organizationId,
+        source: "AWS_SYNC",
+        status: { in: ["SUCCEEDED", "COMPLETED"] }
+      }
+    })
+  ]);
+  const executiveResourceSource =
+    awsSyncedResourceCount > 0 ? "AWS_SYNC" as const : undefined;
+  const evidenceScope = executiveResourceSource
+    ? { organizationId, resourceSource: executiveResourceSource }
+    : { organizationId };
 
   const [
     organization,
-    findings,
-    acceptances,
+    allFindings,
+    allAcceptances,
     totalSnapshots,
     latestSnapshot,
     snapshotsLast24h,
     snapshotsLast7d,
     evidenceBackedFindingGroups,
     latestEvaluation,
-    complianceRegistry,
-    connectedAccountCount,
-    awsSyncedResourceCount,
-    sampleResourceCount,
-    completedScanCount
+    complianceRegistry
   ] = await Promise.all([
     prisma.organization.findUniqueOrThrow({
       where: { id: organizationId },
@@ -67,50 +95,46 @@ export async function getExecutiveDashboardSummary(
       }
     }),
     prisma.securityFindingEvidenceSnapshot.count({
-      where: { organizationId }
+      where: evidenceScope
     }),
     prisma.securityFindingEvidenceSnapshot.findFirst({
-      where: { organizationId },
+      where: evidenceScope,
       orderBy: [{ capturedAt: "desc" }, { id: "desc" }],
       select: { capturedAt: true }
     }),
     prisma.securityFindingEvidenceSnapshot.count({
-      where: { organizationId, capturedAt: { gte: dayAgo } }
+      where: { ...evidenceScope, capturedAt: { gte: dayAgo } }
     }),
     prisma.securityFindingEvidenceSnapshot.count({
-      where: { organizationId, capturedAt: { gte: weekAgo } }
+      where: { ...evidenceScope, capturedAt: { gte: weekAgo } }
     }),
     prisma.securityFindingEvidenceSnapshot.groupBy({
       by: ["securityFindingId"],
-      where: { organizationId }
+      where: evidenceScope
     }),
     prisma.securityFinding.findFirst({
-      where: { organizationId, lastEvaluatedAt: { not: null } },
+      where: {
+        organizationId,
+        lastEvaluatedAt: { not: null },
+        ...(executiveResourceSource
+          ? { resource: { source: executiveResourceSource } }
+          : {})
+      },
       orderBy: { lastEvaluatedAt: "desc" },
       select: { lastEvaluatedAt: true }
     }),
-    listComplianceControls(organizationId),
-    prisma.awsAccount.count({
-      where: {
-        organizationId,
-        archivedAt: null,
-        connectionStatus: "VALIDATION_SUCCEEDED"
-      }
-    }),
-    prisma.cloudResource.count({
-      where: { organizationId, archivedAt: null, source: "AWS_SYNC" }
-    }),
-    prisma.cloudResource.count({
-      where: { organizationId, archivedAt: null, source: "SAMPLE" }
-    }),
-    prisma.scanRun.count({
-      where: {
-        organizationId,
-        source: "AWS_SYNC",
-        status: { in: ["SUCCEEDED", "COMPLETED"] }
-      }
-    })
+    listComplianceControls(organizationId, executiveResourceSource)
   ]);
+  const findings = executiveResourceSource
+    ? allFindings.filter((finding) => finding.resource?.source === executiveResourceSource)
+    : allFindings;
+  const executiveFindingIds = new Set(findings.map((finding) => finding.id));
+  const acceptances = executiveResourceSource
+    ? allAcceptances.filter((acceptance) =>
+        acceptance.securityFindingId !== null &&
+        executiveFindingIds.has(acceptance.securityFindingId)
+      )
+    : allAcceptances;
 
   const statusCounts = countBy(findings, (finding) => finding.workflowStatus);
   const unresolvedFindings = findings.filter((finding) =>
@@ -197,10 +221,10 @@ export async function getExecutiveDashboardSummary(
     findings.length > 0
       ? Math.round((evidenceBackedFindings / findings.length) * 100)
       : 0;
-  const findingSources = [...new Set(findings.map((finding) => finding.source))].sort();
+  const findingSources = [...new Set(allFindings.map((finding) => finding.source))].sort();
   const resourceSources = [
     ...new Set(
-      findings
+      allFindings
         .map((finding) => finding.resource?.source)
         .filter((source) => source !== null && source !== undefined)
     )
@@ -333,7 +357,7 @@ export async function getExecutiveDashboardSummary(
     provenance: {
       findingSources,
       resourceSources,
-      sampleDataPresent: resourceSources.includes("SAMPLE"),
+      sampleDataPresent: sampleResourceCount > 0 || resourceSources.includes("SAMPLE"),
       ruleEnginePresent: findingSources.includes("RULE_ENGINE")
     },
     safety: {
