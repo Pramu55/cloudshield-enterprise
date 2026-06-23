@@ -488,6 +488,23 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
               { label: "Inventory mode", value: inventoryPlanState.data.scannerMode },
               { label: "Blocked reasons", value: connectorState.data.blockedReasons.length ? connectorState.data.blockedReasons.join("; ") : "No blockers reported" }
             ]} />
+            {account.source === "AWS_SYNC" ? (
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link
+                  className="cs-button-secondary"
+                  href={`/api/v1/reports/aws/accounts/${account.id}/governance-proof`}
+                  target="_blank"
+                >
+                  View real AWS evidence JSON
+                </Link>
+                <Link
+                  className="cs-link"
+                  href={`/api/v1/reports/aws/accounts/${account.id}/governance-proof?download=1`}
+                >
+                  Download governance proof
+                </Link>
+              </div>
+            ) : null}
           </Section>
         </>
       ) : null}

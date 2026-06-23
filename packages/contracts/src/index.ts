@@ -2335,6 +2335,118 @@ export type ReportSummaryResponse = z.infer<
   typeof ReportSummaryResponseSchema
 >;
 
+export const RealAwsGovernanceReportResponseSchema = z.object({
+  reportType: z.literal("REAL_AWS_GOVERNANCE_PROOF"),
+  title: z.string(),
+  generatedAt: z.string(),
+  format: z.literal("json"),
+  scope: z.object({
+    awsAccountRegistryId: z.string(),
+    awsAccountId: z.string(),
+    resourceSource: z.literal("AWS_SYNC"),
+    sampleDataExcluded: z.literal(true)
+  }),
+  executiveSummary: z.object({
+    securityScore: z.number().int().min(0).max(100),
+    securityScoreSource: z.literal("AWS_SYNC_FINDINGS"),
+    executiveGovernanceScore: z.number().int().min(0).max(100),
+    scoreFactors: z.array(z.object({
+      label: z.string(),
+      impact: z.number().int(),
+      explanation: z.string()
+    }))
+  }),
+  accountIdentity: z.object({
+    id: z.string(),
+    name: z.string(),
+    accountId: z.string(),
+    environment: z.string(),
+    regions: z.array(z.string()),
+    status: z.string(),
+    connectionStatus: z.string(),
+    lastScanAt: z.string().nullable(),
+    source: z.literal("AWS_SYNC")
+  }),
+  stsValidationProof: z.object({
+    status: z.literal("VALIDATION_SUCCEEDED"),
+    validatedAccountId: z.string().nullable(),
+    maskedPrincipalArn: z.string().nullable(),
+    roleName: z.string().nullable(),
+    providerRequestId: z.string().nullable(),
+    auditEventId: z.string().nullable(),
+    validatedAt: z.string().nullable()
+  }),
+  inventoryScanProof: z.object({
+    scanRunId: z.string(),
+    status: z.string(),
+    phase: z.string().nullable(),
+    startedAt: z.string(),
+    completedAt: z.string().nullable(),
+    requestedRegions: z.array(z.string()),
+    completedRegions: z.array(z.string()),
+    failedRegionCount: z.number().int().nonnegative(),
+    resourceCount: z.number().int().nonnegative(),
+    relationshipCount: z.number().int().nonnegative(),
+    failureCount: z.number().int().nonnegative(),
+    retryCount: z.number().int().nonnegative(),
+    rawAwsResponsesStored: z.literal(false),
+    mutationExecuted: z.literal(false)
+  }),
+  resourceInventory: z.object({
+    total: z.number().int().nonnegative(),
+    byType: z.record(z.string(), z.number().int().nonnegative()),
+    source: z.literal("AWS_SYNC")
+  }),
+  securityPosture: z.object({
+    securityScore: z.number().int().min(0).max(100),
+    scoreSource: z.literal("AWS_SYNC_FINDINGS"),
+    findingCount: z.number().int().nonnegative(),
+    openFindingCount: z.number().int().nonnegative(),
+    bySeverity: z.record(z.string(), z.number().int().nonnegative()),
+    byRule: z.record(z.string(), z.number().int().nonnegative()),
+    affectedResourceTypes: z.array(z.string()),
+    source: z.literal("AWS_SYNC_FINDINGS")
+  }),
+  complianceEvidencePosture: z.object({
+    executiveScore: z.number().int().min(0).max(100),
+    totalControls: z.number().int().nonnegative(),
+    failingControls: z.number().int().nonnegative(),
+    unknownControls: z.number().int().nonnegative(),
+    evidenceSnapshots: z.number().int().nonnegative(),
+    evidenceBackedFindings: z.number().int().nonnegative(),
+    evidenceCoveragePercent: z.number().int().min(0).max(100),
+    mode: z.literal("DB_ONLY_READ_ONLY"),
+    source: z.literal("AWS_SYNC")
+  }),
+  safetyControls: z.object({
+    inventoryScannerMode: z.string(),
+    changeExecutionMode: z.string(),
+    executorRoleConfigured: z.boolean(),
+    reportGenerationAwsApiCallExecuted: z.literal(false),
+    scannerRunTriggered: z.literal(false),
+    mutationExecuted: z.literal(false),
+    remediationExecuted: z.literal(false),
+    terraformApplyExecuted: z.literal(false),
+    rawSecretsIncluded: z.literal(false),
+    temporaryBootstrapAccessKeyStatus: z.literal(
+      "OPERATOR_ATTESTED_DELETED_NOT_PROVIDER_VERIFIED"
+    )
+  }),
+  disclaimers: z.array(z.string()),
+  appendices: z.object({
+    stsAuditEventIds: z.array(z.string()),
+    scanAuditEventIds: z.array(z.string()),
+    keyDatabaseCounts: z.object({
+      awsSyncResources: z.number().int().nonnegative(),
+      awsSyncFindings: z.number().int().nonnegative(),
+      evidenceSnapshots: z.number().int().nonnegative()
+    })
+  })
+});
+export type RealAwsGovernanceReportResponse = z.infer<
+  typeof RealAwsGovernanceReportResponseSchema
+>;
+
 // ── Dynamic Platform Readiness & Activity ───────────────────────────────
 
 export const DashboardActivityDtoSchema = z.object({

@@ -23,6 +23,7 @@ import {
   MonitoringRunsListResponseSchema,
   MembersListResponseSchema,
   OrganizationScopedIdSchema,
+  RealAwsGovernanceReportResponseSchema,
   RemediationPlanDtoSchema,
   RemediationPlanListResponseSchema,
   SecurityAlertDtoBaseSchema,
@@ -1024,6 +1025,9 @@ export function createFrontendInventoryAccountSyncResponseSchema(accountRecordId
   });
 }
 
+export const FrontendRealAwsGovernanceReportSchema =
+  RealAwsGovernanceReportResponseSchema;
+
 export type FrontendCommandCenterResponse = ReturnType<typeof FrontendCommandCenterResponseSchema.parse>;
 export type FrontendExecutiveDashboardSummary = ReturnType<
   typeof FrontendExecutiveDashboardSummarySchema.parse
@@ -1043,6 +1047,9 @@ export type FrontendComplianceControlsRegistry = ReturnType<
 >;
 export type FrontendComplianceControl =
   FrontendComplianceControlsRegistry["controls"][number];
+export type FrontendRealAwsGovernanceReport = ReturnType<
+  typeof FrontendRealAwsGovernanceReportSchema.parse
+>;
 export type FrontendAwsIdentityValidation = ReturnType<typeof FrontendAwsIdentityValidationSchema.parse>;
 export type FrontendCapabilitySession = ReturnType<typeof FrontendCapabilitySessionSchema.parse>;
 export type FrontendInventorySyncResponse = ReturnType<typeof FrontendInventorySyncResponseSchema.parse>;
