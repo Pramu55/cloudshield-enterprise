@@ -714,6 +714,7 @@ const FrontendAwsAccountItemSchema = AwsAccountMutationResponseSchema.shape.item
   connectionStatus: account.connectionStatus,
   lastScanAt: account.lastScanAt,
   securityScore: account.securityScore,
+  securityScoreSource: account.securityScoreSource,
   costScore: account.costScore,
   complianceScore: account.complianceScore,
   description: account.description,

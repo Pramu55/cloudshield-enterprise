@@ -916,7 +916,12 @@ export const AwsAccountDtoSchema = z.object({
   status: AwsAccountStatusSchema,
   connectionStatus: AwsConnectionStatusSchema,
   lastScanAt: z.string().nullable(),
-  securityScore: z.number().int().nullable(),
+  securityScore: z.number().int().min(0).max(100).nullable(),
+  securityScoreSource: z.enum([
+    "AWS_SYNC_FINDINGS",
+    "STORED",
+    "NOT_EVALUATED"
+  ]),
   costScore: z.number().int().nullable(),
   complianceScore: z.number().int().nullable(),
   description: z.string().nullable(),

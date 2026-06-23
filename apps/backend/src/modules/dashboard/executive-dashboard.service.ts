@@ -1,4 +1,7 @@
-import { prisma } from "@cloudshield/database";
+import {
+  SECURITY_FINDING_PENALTIES,
+  prisma
+} from "@cloudshield/database";
 import type {
   ExecutiveDashboardSummaryResponse,
   ExecutiveRecommendation
@@ -162,18 +165,23 @@ export async function getExecutiveDashboardSummary(
   const scoreFactors = [
     scoreFactor(
       "Critical findings",
-      -(unresolvedSeverity.CRITICAL ?? 0) * 15,
+      -(unresolvedSeverity.CRITICAL ?? 0) * SECURITY_FINDING_PENALTIES.CRITICAL,
       "Each unresolved critical finding deducts 15 points."
     ),
     scoreFactor(
       "High findings",
-      -(unresolvedSeverity.HIGH ?? 0) * 7,
+      -(unresolvedSeverity.HIGH ?? 0) * SECURITY_FINDING_PENALTIES.HIGH,
       "Each unresolved high finding deducts 7 points."
     ),
     scoreFactor(
       "Medium findings",
-      -(unresolvedSeverity.MEDIUM ?? 0) * 3,
+      -(unresolvedSeverity.MEDIUM ?? 0) * SECURITY_FINDING_PENALTIES.MEDIUM,
       "Each unresolved medium finding deducts 3 points."
+    ),
+    scoreFactor(
+      "Low findings",
+      -(unresolvedSeverity.LOW ?? 0) * SECURITY_FINDING_PENALTIES.LOW,
+      "Each unresolved low finding deducts 1 point."
     ),
     scoreFactor(
       "Expired risk acceptances",

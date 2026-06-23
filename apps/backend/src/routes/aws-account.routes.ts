@@ -4,9 +4,14 @@ import {
   AwsAccountOnboardingPreflightResponseSchema,
   AwsSetupGuideResponseSchema,
   CreateAwsAccountRequestSchema,
-  UpdateAwsAccountRequestSchema
+  UpdateAwsAccountRequestSchema,
+  type AwsAccountDto
 } from "@cloudshield/contracts";
-import { prisma } from "@cloudshield/database";
+import {
+  getAccountSecurityPostures,
+  prisma,
+  type AccountSecurityPosture
+} from "@cloudshield/database";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 
@@ -55,12 +60,18 @@ export async function registerAwsAccountRoutes(
     });
 
     const sampleData = accounts.some(isSampleAccount);
+    const postures = await getAccountSecurityPostures(
+      auth.organizationId,
+      accounts.map((account) => account.id)
+    );
     return {
       sampleData,
       sampleDataLabel: sampleData
         ? "Sample/demo account records are present and explicitly labeled."
         : "Account records are registry metadata until a successful AWS read-only inventory sync.",
-      items: accounts.map(toAwsAccountDto)
+      items: accounts.map((account) =>
+        toAwsAccountDto(account, postures.get(account.id))
+      )
     };
   });
 
@@ -156,7 +167,10 @@ export async function registerAwsAccountRoutes(
       }
 
       return {
-        item: toAwsAccountDto(account)
+        item: toAwsAccountDto(
+          account,
+          await getAccountSecurityPosture(auth.organizationId, account.id)
+        )
       };
     }
   );
@@ -516,7 +530,16 @@ async function ownerTeamBelongsToOrganization(
   return Boolean(ownerTeam);
 }
 
-export function toAwsAccountDto(account: NonNullable<AccountWithOwnerTeam>) {
+export function toAwsAccountDto(
+  account: NonNullable<AccountWithOwnerTeam>,
+  posture?: AccountSecurityPosture
+) {
+  const projectedSecurityScore = posture?.score ?? account.securityScore;
+  const securityScoreSource: AwsAccountDto["securityScoreSource"] = posture
+    ? "AWS_SYNC_FINDINGS"
+    : account.securityScore === null
+      ? "NOT_EVALUATED"
+      : "STORED";
   return {
     id: account.id,
     name: account.name,
@@ -528,7 +551,8 @@ export function toAwsAccountDto(account: NonNullable<AccountWithOwnerTeam>) {
     status: account.status,
     connectionStatus: account.connectionStatus,
     lastScanAt: account.lastScanAt?.toISOString() ?? null,
-    securityScore: account.securityScore,
+    securityScore: projectedSecurityScore,
+    securityScoreSource,
     costScore: account.costScore,
     complianceScore: account.complianceScore,
     description: account.description,
@@ -547,6 +571,14 @@ export function toAwsAccountDto(account: NonNullable<AccountWithOwnerTeam>) {
     updatedAt: account.updatedAt.toISOString(),
     sampleData: isSampleAccount(account)
   };
+}
+
+async function getAccountSecurityPosture(
+  organizationId: string,
+  accountId: string
+) {
+  const postures = await getAccountSecurityPostures(organizationId, [accountId]);
+  return postures.get(accountId);
 }
 
 function buildOnboardingPreflight(

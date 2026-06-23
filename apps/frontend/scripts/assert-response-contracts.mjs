@@ -481,6 +481,7 @@ const account = {
   connectionStatus: "VALIDATION_SUCCEEDED",
   lastScanAt: timestamp,
   securityScore: 80,
+  securityScoreSource: "AWS_SYNC_FINDINGS",
   costScore: 70,
   complianceScore: 90,
   description: null,
@@ -504,6 +505,13 @@ const parsedResults = [
   [FrontendAwsAccountListSchema.parse({ sampleData: false, sampleDataLabel: "Live data", items: [account], ...unsafeFields }), "AWS account list"],
   [FrontendAwsAccountMutationSchema.parse({ item: account, message: "Account updated.", ...unsafeFields }), "AWS account mutation"]
 ];
+assert.equal(
+  FrontendAwsAccountMutationSchema.parse({
+    item: account,
+    message: "Account projected."
+  }).item.securityScoreSource,
+  "AWS_SYNC_FINDINGS"
+);
 
 const onboardingPreflight = {
   account: {

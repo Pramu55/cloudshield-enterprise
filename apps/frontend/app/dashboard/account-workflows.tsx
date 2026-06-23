@@ -459,7 +459,17 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
               <DetailList items={[
                 { label: "Registry status", value: <StatusBadge status={account.status} /> },
                 { label: "Connector state", value: <StatusBadge status={account.connectionStatus} /> },
-                { label: "Security score", value: scoreLabel(account.securityScore) },
+                {
+                  label: "Security score",
+                  value: (
+                    <div className="flex flex-col items-start gap-1">
+                      <strong>{scoreLabel(account.securityScore)}</strong>
+                      <span className="text-xs text-slate-500">
+                        {securityScoreSourceLabel(account.securityScoreSource)}
+                      </span>
+                    </div>
+                  )
+                },
                 { label: "Cost score", value: scoreLabel(account.costScore) },
                 { label: "Compliance score", value: scoreLabel(account.complianceScore) },
                 { label: "Last scan", value: formatDate(account.lastScanAt) }
@@ -869,6 +879,18 @@ function identityStateCopy(status: AwsAccountDto["connectionStatus"]) {
 
 function scoreLabel(score: number | null) {
   return score === null ? "Awaiting assessment" : `${score}/100`;
+}
+
+function securityScoreSourceLabel(
+  source: AwsAccountDto["securityScoreSource"]
+) {
+  if (source === "AWS_SYNC_FINDINGS") {
+    return "Computed from active AWS_SYNC findings";
+  }
+  if (source === "STORED") {
+    return "Stored account assessment";
+  }
+  return "No AWS_SYNC posture evaluation available";
 }
 
 function errorMessage(error: unknown) {
