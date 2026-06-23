@@ -744,6 +744,8 @@ const executiveDashboardSource = await readFile(
 );
 assert.equal(executiveDashboardSource.includes("FrontendExecutiveDashboardSummarySchema"), true);
 assert.equal(executiveDashboardSource.includes("/api/v1/dashboard/executive-summary"), true);
+assert.equal(executiveDashboardSource.includes("Why the executive score differs from account security"), true);
+assert.equal(executiveDashboardSource.includes("Compliance control penalty"), true);
 assert.equal(executiveDashboardSource.includes("dangerouslySetInnerHTML"), false);
 
 const dashboardRouteViewsSource = await readFile(
@@ -759,6 +761,10 @@ for (const view of ["InventoryView", "SecurityView", "ComplianceView", "GraphVie
 }
 assert.equal(dashboardRouteViewsSource.includes("DataScopeSelector"), true);
 assert.equal(dashboardRouteViewsSource.includes('report.sampleData ? "SAMPLE" : "DATABASE"'), true);
+assert.equal(dashboardRouteViewsSource.includes("/api/v1/compliance/controls"), true);
+assert.equal(dashboardRouteViewsSource.includes("/api/v1/compliance/evidence-center"), false);
+assert.equal(dashboardRouteViewsSource.includes("Evidence coverage"), true);
+assert.equal(dashboardRouteViewsSource.includes("no official CIS or SOC 2 certification is claimed"), true);
 assert.equal(dashboardSharedSource.includes("Real AWS data"), true);
 assert.equal(dashboardSharedSource.includes("Sample/demo data"), true);
 assert.equal(dashboardSharedSource.includes("Combined organization view"), true);

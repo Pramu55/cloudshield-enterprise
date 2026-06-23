@@ -72,6 +72,15 @@ export default function DashboardPage() {
   }
 
   const { posture, security, risk, compliance, evidence, operations } = data;
+  const findingPenalty = posture.scoreFactors
+    .filter((factor) => factor.label.toLowerCase().includes("findings"))
+    .reduce((total, factor) => total + factor.impact, 0);
+  const compliancePenalty = posture.scoreFactors
+    .filter((factor) => factor.label.toLowerCase().includes("controls"))
+    .reduce((total, factor) => total + factor.impact, 0);
+  const governancePenalty = posture.scoreFactors
+    .filter((factor) => !factor.label.toLowerCase().includes("findings") && !factor.label.toLowerCase().includes("controls"))
+    .reduce((total, factor) => total + factor.impact, 0);
 
   return (
     <div className="space-y-6">
@@ -130,6 +139,22 @@ export default function DashboardPage() {
           </div>
         </Section>
       </div>
+
+      <Section
+        title="Why the executive score differs from account security"
+        description="The account score measures active AWS_SYNC finding severity. The executive score also includes compliance and governance deductions."
+        icon={<Database size={16} />}
+        variant="evidence"
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <MetricTile label="Security finding penalty" value={findingPenalty} detail="AWS_SYNC findings" tone={findingPenalty < 0 ? "warning" : "success"} />
+          <MetricTile label="Compliance control penalty" value={compliancePenalty} detail="Failing projected controls" tone={compliancePenalty < 0 ? "warning" : "success"} />
+          <MetricTile label="Other governance penalty" value={governancePenalty} detail="Expired acceptances or other factors" tone={governancePenalty < 0 ? "warning" : "success"} />
+        </div>
+        <p className="mt-4 text-sm text-slate-600">
+          Executive score = 100 plus the deductions above. It is a broader governance score, not a duplicate of an individual account security score.
+        </p>
+      </Section>
 
       <StatGroup>
         <MetricTile label="Open findings" value={security.openFindings} detail={`${security.totalFindings} total`} tone={security.openFindings ? "danger" : "success"} icon={<ShieldAlert size={16} />} />

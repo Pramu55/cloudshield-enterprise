@@ -471,7 +471,12 @@ export function AccountDetailWorkspace({ accountId }: { accountId: string }) {
                   )
                 },
                 { label: "Cost score", value: scoreLabel(account.costScore) },
-                { label: "Compliance score", value: scoreLabel(account.complianceScore) },
+                {
+                  label: "Compliance posture",
+                  value: account.complianceScore === null
+                    ? <span className="text-sm text-slate-600">Available in the executive governance projection</span>
+                    : `${account.complianceScore}/100`
+                },
                 { label: "Last scan", value: formatDate(account.lastScanAt) }
               ]} />
             </Section>

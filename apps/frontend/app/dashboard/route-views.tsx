@@ -34,7 +34,6 @@ import {
   FrontendCommandCenterResponseSchema,
   FrontendGovernanceApprovalsSchema,
   FrontendGovernanceActivitySchema,
-  FrontendComplianceEvidenceCenterSchema,
   FrontendComplianceControlsRegistrySchema,
   FrontendMonitoringHealthSchema,
   FrontendRemediationPlanListSchema,
@@ -43,7 +42,6 @@ import {
   type FrontendCapabilitySession,
   type FrontendGovernanceApprovals,
   type FrontendGovernanceActivity,
-  type FrontendComplianceEvidenceCenter,
   type FrontendComplianceControlsRegistry,
   type FrontendRemediationPlanList,
   type FrontendMonitoringHealth,
@@ -748,7 +746,6 @@ export function AutomationView() {
 }
 
 export function ComplianceView() {
-  const center = useCloudShieldData<FrontendComplianceEvidenceCenter | null>("/api/v1/compliance/evidence-center", null, { schema: FrontendComplianceEvidenceCenterSchema });
   const registry = useCloudShieldData<FrontendComplianceControlsRegistry | null>("/api/v1/compliance/controls", null, { schema: FrontendComplianceControlsRegistrySchema });
   const controls = registry.data?.controls ?? [];
   const realCount = controls.filter((control) => control.provenance.resourceSources.includes("AWS_SYNC")).length;
@@ -762,15 +759,38 @@ export function ComplianceView() {
           ? control.provenance.sampleData
           : control.provenance.resourceSources.includes("AWS_SYNC")
       );
+  const mappedFindingCount = visibleControls.reduce(
+    (total, control) => total + control.findingCount,
+    0
+  );
+  const evidenceBackedFindingCount = visibleControls.reduce(
+    (total, control) =>
+      total +
+      control.mappedFindings.filter(
+        (finding) => finding.latestEvidenceSnapshotId !== null
+      ).length,
+    0
+  );
+  const evidenceCoveragePercent = mappedFindingCount
+    ? Math.round((evidenceBackedFindingCount / mappedFindingCount) * 100)
+    : 0;
 
   return (
     <>
       <PageHeader breadcrumbs={["Security", "Compliance"]} title="Compliance evidence" description="Control status, evidence records, and framework mapping produced by the evidence center." />
-      <ErrorAndRefresh error={center.error || registry.error} isRefreshing={center.isRefreshing || registry.isRefreshing} />
+      <ErrorAndRefresh error={registry.error} isRefreshing={registry.isRefreshing} />
       <DataScopeSelector scope={effectiveScope} onChange={setScope} realCount={realCount} sampleCount={sampleCount} />
+      <InlineNotice title="Compliance projection" tone="info">
+        {effectiveScope === "real"
+          ? "These controls are projected from stored AWS_SYNC findings and immutable evidence snapshots. No AWS call is made."
+          : effectiveScope === "sample"
+            ? "This view contains sample/demo control projections only."
+            : "This combined organization view includes both AWS_SYNC and sample/demo control projections."}
+      </InlineNotice>
       <StatGroup>
         <MetricTile label="Controls" value={visibleControls.length} />
-        <MetricTile label="Evidence records" value={visibleControls.reduce((total, control) => total + control.evidenceSnapshotCount, 0)} />
+        <MetricTile label="Mapped findings" value={mappedFindingCount} />
+        <MetricTile label="Evidence coverage" value={`${evidenceCoveragePercent}%`} detail={`${evidenceBackedFindingCount}/${mappedFindingCount} findings`} />
         <MetricTile label="Needs review" value={visibleControls.filter((control) => String(control.status).toUpperCase().includes("FAIL") || String(control.status).toUpperCase().includes("REVIEW")).length} tone="warning" />
       </StatGroup>
       <Section title="Control evidence">
@@ -787,6 +807,9 @@ export function ComplianceView() {
           ])}
         />
       </Section>
+      <InlineNotice title="Governance boundary" tone="info">
+        DB only · read only. Control mappings are internal governance projections; no official CIS or SOC 2 certification is claimed.
+      </InlineNotice>
     </>
   );
 }

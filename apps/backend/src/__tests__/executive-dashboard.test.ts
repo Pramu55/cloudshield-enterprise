@@ -98,6 +98,18 @@ test("executive dashboard is tenant-scoped, read-only, and evidence-backed", asy
     assert.equal(summary.posture.scoreStatus, "SCORED");
     assert.equal(typeof summary.posture.executiveScore, "number");
     assert.ok((summary.posture.executiveScore ?? 100) < 100);
+    assert.equal(
+      summary.posture.scoreFactors.some(
+        (factor) => factor.label === "Critical findings" && factor.impact === -15
+      ),
+      true
+    );
+    assert.equal(
+      summary.posture.scoreFactors.some(
+        (factor) => factor.label === "Failing controls" && factor.impact < 0
+      ),
+      true
+    );
     assert.equal(summary.posture.awsSyncedResourceCount, 1);
     assert.equal(summary.posture.completedScanCount, 1);
     assert.equal(Object.values(summary.safety).every((value) => value === false), true);

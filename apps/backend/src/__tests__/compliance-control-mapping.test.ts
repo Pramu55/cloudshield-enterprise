@@ -12,6 +12,7 @@ import { cloudScanQueue } from "../modules/aws-inventory/aws-inventory.queue.js"
 import { cloudAssessmentQueue } from "../modules/intelligence/assessment.queue.js";
 import { governedAwsChangeQueue } from "../modules/governance/aws-change-execution.queue.js";
 import { securityMonitoringQueue } from "../modules/security-monitoring/monitoring.queue.js";
+import { listComplianceControls } from "../modules/compliance-evidence/compliance-evidence.service.js";
 
 type Session = {
   sessionCookie: string;
@@ -145,6 +146,51 @@ test("compliance control mapping is read-only, tenant-safe, and evidence-backed"
     ]) {
       assert.equal(serialized.includes(forbidden), false);
     }
+  });
+
+  await t.test("AWS_SYNC projection excludes coexisting sample findings", async () => {
+    const awsResource = await prisma.cloudResource.create({
+      data: {
+        organizationId: tenantA.organizationId,
+        awsAccountId: fixture.accountId,
+        resourceType: "security-group",
+        resourceId: `sg-aws-${randomUUID()}`,
+        name: "AWS synchronized compliance resource",
+        source: "AWS_SYNC",
+        metadata: {},
+        tags: {}
+      }
+    });
+    const awsFinding = await createFinding({
+      organizationId: tenantA.organizationId,
+      awsAccountId: fixture.accountId,
+      resourceId: awsResource.id,
+      ruleId: "SG_OPEN_SSH_TO_WORLD",
+      title: "AWS synchronized open SSH",
+      status: "OPEN",
+      workflowStatus: "OPEN"
+    });
+    await createSnapshot(
+      tenantA.organizationId,
+      awsFinding.id,
+      awsResource.id,
+      "SG_OPEN_SSH_TO_WORLD",
+      new Date("2026-06-21T11:00:00.000Z"),
+      "AWS_SYNC"
+    );
+
+    const realRegistry = await listComplianceControls(
+      tenantA.organizationId,
+      "AWS_SYNC"
+    );
+    const network = realRegistry.controls.find(
+      (control) => control.controlId === "CIS_INSPIRED_NETWORK_ADMIN_001"
+    );
+    assert.equal(network?.findingCount, 1);
+    assert.equal(network?.mappedFindings[0]?.findingId, awsFinding.id);
+    assert.deepEqual(network?.provenance.resourceSources, ["AWS_SYNC"]);
+    assert.equal(network?.provenance.sampleData, false);
+    assert.equal(network?.evidenceSnapshotCount, 1);
   });
 
   await t.test("cross-tenant findings do not affect counts", async () => {
@@ -290,6 +336,7 @@ async function createComplianceFixture(organizationId: string) {
     new Date("2026-06-21T08:00:00.000Z")
   );
   return {
+    accountId: account.id,
     openFindingId: openFinding.id,
     latestSnapshotId: latestSnapshot.id,
     latestSnapshotAt
@@ -345,7 +392,8 @@ function createSnapshot(
   securityFindingId: string,
   resourceId: string,
   ruleId: string,
-  capturedAt: Date
+  capturedAt: Date,
+  resourceSource: "AWS_SYNC" | "SAMPLE" = "SAMPLE"
 ) {
   return prisma.securityFindingEvidenceSnapshot.create({
     data: {
@@ -357,11 +405,11 @@ function createSnapshot(
       schemaVersion: 1,
       evaluationMode: "STORED_INVENTORY",
       findingSource: "RULE_ENGINE",
-      resourceSource: "SAMPLE",
-      sampleData: true,
+      resourceSource,
+      sampleData: resourceSource === "SAMPLE",
       title: "Stored evidence",
       summary: "Immutable compliance mapping evidence.",
-      resourceSnapshot: { source: "SAMPLE" },
+      resourceSnapshot: { source: resourceSource },
       evaluationContext: { resultStatus: "finding_updated" },
       capturedAt
     }
