@@ -2238,3 +2238,2119 @@ body { line-height: 1.55; }
     grid-template-columns: 1fr;
   }
 }
+
+/* AWS-console-inspired CloudShield shell foundation. Branding remains CloudShield-only. */
+.portal-topbar {
+  min-height: 50px;
+  padding: 0 16px;
+  gap: 12px;
+  background: #111827;
+  color: #f9fafb;
+  box-shadow: none;
+  border-bottom: 1px solid #1f2937;
+}
+
+.portal-topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: max-content;
+  color: #f9fafb;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.portal-topbar-brand span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #1f2937;
+  color: #fb923c;
+}
+
+.portal-topbar .portal-icon-button {
+  width: 34px;
+  height: 34px;
+  border-color: #374151;
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+.portal-topbar .portal-icon-button:hover {
+  transform: none;
+  background: #273449;
+  border-color: #4b5563;
+}
+
+.portal-topbar .portal-org,
+.portal-topbar .portal-user {
+  min-height: 34px;
+  border-color: #374151;
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+.portal-topbar .portal-user strong { color: #f9fafb; }
+.portal-topbar .portal-user p,
+.portal-topbar .portal-org span { color: #d1d5db; }
+
+.portal-topbar .portal-user > span {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #ea580c;
+  color: #fff7ed;
+}
+
+.portal-copilot-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid #475569;
+  border-radius: 7px;
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.portal-copilot-button:hover {
+  background: #273449;
+  border-color: #64748b;
+}
+
+.portal-content {
+  background: #f8fafc;
+  padding: 24px;
+}
+
+.portal-sidebar {
+  background: #111827;
+  border-right: 1px solid #1f2937;
+}
+
+.portal-brand {
+  min-height: 50px;
+  border-bottom-color: #1f2937;
+}
+
+.portal-sidebar .portal-nav { padding: 10px 8px; }
+.portal-nav section { margin-bottom: 8px; }
+
+.portal-nav section p {
+  margin: 12px 10px 5px;
+  color: #9ca3af;
+  font-size: 10px;
+  letter-spacing: .1em;
+}
+
+.portal-nav-link {
+  min-height: 34px;
+  border-radius: 7px;
+  color: #d1d5db;
+}
+
+.portal-nav-link:hover,
+.portal-nav-link[data-active="true"] {
+  background: #1f2937;
+  color: #fff;
+}
+
+.portal-sidebar-footer {
+  border-top-color: #1f2937;
+  background: #0f172a;
+}
+
+.console-command-search {
+  position: relative;
+  z-index: 60;
+  width: min(680px, 52vw);
+  min-width: 260px;
+}
+
+.console-command-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  border: 1px solid #4b5563;
+  border-radius: 7px;
+  background: #f9fafb;
+  color: #374151;
+  padding: 0 10px;
+}
+
+.console-command-search-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #111827;
+  font-size: 13px;
+}
+
+.console-command-search-field input::placeholder { color: #6b7280; }
+
+.console-command-search-field button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+}
+
+.console-command-search-field kbd {
+  min-width: max-content;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  background: #fff;
+  padding: 1px 6px;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.console-command-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  overflow: hidden;
+  max-height: min(560px, calc(100vh - 88px));
+  border: 1px solid #d5dbe5;
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 24px 60px -28px rgba(15, 23, 42, .62);
+}
+
+.console-command-categories {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  border-right: 1px solid #e5e7eb;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.console-command-categories strong {
+  color: #111827;
+  font-size: 12px;
+}
+
+.console-command-categories span {
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.console-command-list {
+  min-width: 0;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.console-command-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.console-command-list-head strong { color: #111827; }
+
+.console-command-list button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 8px;
+  text-align: left;
+}
+
+.console-command-list button:hover,
+.console-command-list button[data-selected="true"] {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.console-command-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.console-command-list button strong {
+  display: block;
+  color: #111827;
+  font-size: 13px;
+}
+
+.console-command-list button em {
+  display: block;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-command-list button small {
+  border: 1px solid #d5dbe5;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #374151;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.console-command-empty {
+  padding: 18px;
+  color: #6b7280;
+}
+
+.console-command-empty strong {
+  display: block;
+  color: #111827;
+}
+
+.console-home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.console-widget {
+  min-height: 240px;
+  border: 1px solid #d5dbe5;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.console-widget-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 10px 14px;
+}
+
+.console-widget-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.console-widget-header button {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.console-widget-header span {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.console-widget-body {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.console-widget-metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #374151;
+  font-size: 13px;
+}
+
+.console-widget-metric strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.copilot-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(15, 23, 42, .34);
+}
+
+.copilot-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 90;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  width: min(420px, 92vw);
+  height: 100vh;
+  transform: translateX(100%);
+  border-left: 1px solid #d5dbe5;
+  background: #fff;
+  box-shadow: -28px 0 60px -36px rgba(15, 23, 42, .7);
+  transition: transform .18s ease;
+}
+
+.copilot-panel[data-open="true"] { transform: translateX(0); }
+
+.copilot-header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #111827;
+  color: #f9fafb;
+  padding: 14px;
+}
+
+.copilot-header > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #1f2937;
+  color: #fb923c;
+}
+
+.copilot-header strong { display: block; }
+.copilot-header p {
+  margin: 3px 0 0;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.copilot-header button {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+.copilot-body {
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.copilot-intro {
+  display: flex;
+  gap: 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  padding: 10px;
+  color: #1e40af;
+  font-size: 13px;
+}
+
+.copilot-intro p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.copilot-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.copilot-prompts button {
+  border: 1px solid #d5dbe5;
+  border-radius: 999px;
+  background: #fff;
+  padding: 7px 10px;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.copilot-prompts button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.copilot-answer {
+  margin-top: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  padding: 14px;
+}
+
+.copilot-answer span {
+  display: block;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.copilot-answer strong {
+  display: block;
+  margin-top: 7px;
+  color: #111827;
+}
+
+.copilot-answer p {
+  margin: 8px 0 12px;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.copilot-input {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid #e5e7eb;
+  padding: 12px;
+}
+
+.copilot-input input {
+  min-width: 0;
+  flex: 1;
+  height: 38px;
+  border: 1px solid #d5dbe5;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.copilot-footnote {
+  margin: 0;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+  padding: 10px 12px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .console-command-search { width: min(520px, 48vw); }
+  .portal-topbar-brand strong,
+  .portal-copilot-button span { display: none; }
+}
+
+@media (max-width: 720px) {
+  .console-command-search {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .console-command-results { grid-template-columns: 1fr; }
+  .console-command-categories { display: none; }
+}
+
+/* CloudShield Cloudscape-grade console shell rewrite. */
+.cs-console-shell {
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #111827;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.cs-console-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  height: 48px;
+  border-bottom: 1px solid #1f2937;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.cs-console-topbar-left,
+.cs-console-topbar-right {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 48px;
+}
+
+.cs-console-topbar-left { gap: 10px; }
+.cs-console-topbar-right { gap: 4px; padding-right: 8px; }
+
+.cs-console-launcher,
+.cs-console-icon-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 48px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #d1d5db;
+}
+
+.cs-console-launcher:hover,
+.cs-console-icon-button:hover,
+.cs-console-copilot-button:hover,
+.cs-console-workspace:hover,
+.cs-console-user:hover {
+  background: #1f2937;
+  color: #fff;
+}
+
+.cs-console-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  color: #f8fafc;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.cs-console-brand span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: #1f2937;
+  color: #fb923c;
+}
+
+.cs-console-copilot-button,
+.cs-console-workspace,
+.cs-console-region,
+.cs-console-user {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #d1d5db;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cs-console-copilot-button { gap: 7px; }
+.cs-console-region {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.cs-console-user {
+  width: 44px;
+  padding: 0;
+}
+
+.cs-console-user > span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #ea580c;
+  color: #fff7ed;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.cs-console-app {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: calc(100vh - 48px);
+}
+
+.cs-console-shell[data-collapsed="true"] .cs-console-app {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.cs-console-desktop-sidebar { min-width: 0; }
+
+.cs-console-sidebar {
+  position: sticky;
+  top: 48px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: calc(100vh - 48px);
+  border-right: 1px solid #1f2937;
+  background: #111827;
+  color: #d1d5db;
+}
+
+.cs-console-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  border-bottom: 1px solid #1f2937;
+  padding: 0 8px 0 16px;
+}
+
+.cs-console-sidebar-head strong {
+  display: block;
+  color: #fff;
+  font-size: 13px;
+}
+
+.cs-console-sidebar-head span {
+  display: block;
+  margin-top: 1px;
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.cs-console-nav {
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.cs-console-nav section { margin-bottom: 10px; }
+
+.cs-console-nav section p,
+.cs-console-sidebar-footer > p {
+  margin: 12px 8px 6px;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.cs-console-nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border-radius: 6px;
+  color: #d1d5db;
+  padding: 0 10px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cs-console-nav-link svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.cs-console-nav-link:hover {
+  background: #1f2937;
+  color: #fff;
+}
+
+.cs-console-nav-link[data-active="true"] {
+  background: #1f2937;
+  color: #fff;
+}
+
+.cs-console-nav-link[data-active="true"]::before {
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 999px;
+  background: #ea580c;
+  content: "";
+}
+
+.cs-console-nav-link em {
+  position: absolute;
+  left: calc(100% + 8px);
+  z-index: 130;
+  min-width: max-content;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #fff;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-style: normal;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cs-console-sidebar[data-collapsed="true"] .cs-console-sidebar-head {
+  justify-content: center;
+  padding: 0;
+}
+
+.cs-console-sidebar[data-collapsed="true"] .cs-console-nav section p,
+.cs-console-sidebar[data-collapsed="true"] .cs-console-sidebar-footer > p,
+.cs-console-sidebar[data-collapsed="true"] .cs-console-nav-link span {
+  display: none;
+}
+
+.cs-console-sidebar[data-collapsed="true"] .cs-console-nav-link {
+  justify-content: center;
+  padding: 0;
+}
+
+.cs-console-sidebar[data-collapsed="true"] .cs-console-nav-link:hover em,
+.cs-console-sidebar[data-collapsed="true"] .cs-console-nav-link:focus-visible em {
+  opacity: 1;
+}
+
+.cs-console-sidebar-footer {
+  border-top: 1px solid #1f2937;
+  padding: 8px;
+}
+
+.cs-console-main {
+  min-width: 0;
+  background: #f8fafc;
+}
+
+.cs-console-safety-strip {
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  padding: 8px 24px;
+  color: #374151;
+  font-size: 12px;
+}
+
+.cs-console-content {
+  min-height: calc(100vh - 91px);
+  padding: 24px;
+  background: #f8fafc;
+}
+
+.console-command-search {
+  width: min(560px, 44vw);
+  min-width: 360px;
+}
+
+.console-command-search-field {
+  height: 34px;
+  border-color: #334155;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.console-command-search-field input {
+  font-size: 13px;
+}
+
+.cs-command-search-results,
+.console-command-results {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  right: auto;
+  display: grid;
+  grid-template-columns: 160px minmax(420px, 1fr);
+  width: min(760px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  background: #0f172a;
+  color: #f8fafc;
+  box-shadow: 0 26px 70px -28px rgba(0, 0, 0, .72);
+}
+
+.cs-command-search-results .console-command-categories,
+.console-command-results .console-command-categories {
+  border-right: 1px solid #1f2937;
+  background: #111827;
+  padding: 10px 0;
+}
+
+.cs-command-search-results .console-command-categories strong,
+.cs-command-search-results .console-command-categories span,
+.console-command-results .console-command-categories strong,
+.console-command-results .console-command-categories span {
+  display: block;
+  padding: 8px 14px;
+  color: #d1d5db;
+  font-size: 13px;
+}
+
+.cs-command-search-results .console-command-categories strong,
+.console-command-results .console-command-categories strong {
+  color: #fff;
+  background: #1f2937;
+}
+
+.cs-command-search-results .console-command-list,
+.console-command-results .console-command-list {
+  background: #fff;
+  color: #111827;
+}
+
+.console-command-list button strong {
+  color: #0969da;
+}
+
+.console-home-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.console-widget {
+  border-radius: 8px;
+}
+
+.cs-page-header {
+  margin-bottom: 16px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.cs-page-header h1 {
+  font-size: 28px;
+}
+
+.cs-section,
+.console-widget {
+  box-shadow: none !important;
+}
+
+.cs-table th {
+  height: 38px;
+}
+
+.cs-table td {
+  height: 44px;
+  padding-block: 8px;
+}
+
+@media (max-width: 1023px) {
+  .cs-console-app { grid-template-columns: minmax(0, 1fr); }
+  .cs-console-desktop-sidebar { display: none; }
+  .portal-mobile-sidebar {
+    position: fixed;
+    inset: 48px auto 0 0;
+    z-index: 120;
+    display: block;
+    width: min(280px, 88vw);
+    transform: translateX(-100%);
+    transition: transform .18s ease;
+  }
+  .portal-mobile-sidebar[data-open="true"] { transform: translateX(0); }
+  .portal-mobile-sidebar .cs-console-sidebar {
+    position: relative;
+    top: 0;
+    height: calc(100vh - 48px);
+  }
+  .console-command-search {
+    min-width: 0;
+    width: min(440px, 48vw);
+  }
+}
+
+@media (max-width: 720px) {
+  .cs-console-brand strong,
+  .cs-console-copilot-button span,
+  .cs-console-workspace,
+  .cs-console-region {
+    display: none;
+  }
+  .console-command-search {
+    width: 100%;
+  }
+  .cs-command-search-results,
+  .console-command-results {
+    grid-template-columns: 1fr;
+    width: calc(100vw - 24px);
+  }
+  .console-command-categories {
+    display: none;
+  }
+  .console-home-grid {
+    grid-template-columns: 1fr;
+  }
+  .cs-console-content {
+    padding: 16px;
+  }
+}
+
+/* Final Cloudscape-style visual alignment pass. */
+.cs-console-shell {
+  background: #f2f3f3;
+  color: #16191f;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cs-console-topbar {
+  height: 40px;
+  min-height: 40px;
+  background: #232f3e;
+  border-bottom: 0;
+}
+
+.cs-console-topbar-left,
+.cs-console-topbar-right {
+  height: 40px;
+}
+
+.cs-console-launcher,
+.cs-console-icon-button,
+.cs-console-copilot-button,
+.cs-console-region,
+.cs-console-workspace,
+.cs-console-user {
+  height: 40px;
+  color: #f2f3f3;
+}
+
+.cs-console-launcher,
+.cs-console-icon-button {
+  width: 40px;
+}
+
+.cs-console-launcher:hover,
+.cs-console-icon-button:hover,
+.cs-console-copilot-button:hover,
+.cs-console-workspace:hover,
+.cs-console-user:hover {
+  background: #2a3f54;
+}
+
+.cs-console-brand {
+  height: 40px;
+  gap: 7px;
+  font-size: 14px;
+}
+
+.cs-console-brand span {
+  width: 22px;
+  height: 22px;
+  border-radius: 2px;
+  background: #1b2a3c;
+  color: #ec7211;
+}
+
+.cs-console-region {
+  color: #f2f3f3;
+}
+
+.cs-console-workspace {
+  max-width: 170px;
+  background: #1b2a3c;
+}
+
+.cs-console-user > span {
+  width: 24px;
+  height: 24px;
+  background: #ec7211;
+  color: #fff;
+}
+
+.cs-console-app {
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: calc(100vh - 40px);
+}
+
+.cs-console-shell[data-collapsed="true"] .cs-console-app {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.cs-console-sidebar {
+  top: 40px;
+  height: calc(100vh - 40px);
+  background: #fff;
+  color: #16191f;
+  border-right: 1px solid #d5dbdb;
+}
+
+.cs-console-sidebar-head {
+  min-height: 56px;
+  border-bottom: 1px solid #eaeded;
+  padding: 8px 8px 8px 20px;
+}
+
+.cs-console-sidebar-head strong {
+  color: #16191f;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.cs-console-sidebar-head span {
+  color: #545b64;
+  font-size: 12px;
+}
+
+.cs-console-sidebar .cs-console-icon-button {
+  width: 32px;
+  height: 32px;
+  color: #545b64;
+}
+
+.cs-console-sidebar .cs-console-icon-button:hover {
+  background: #f2f3f3;
+  color: #16191f;
+}
+
+.cs-console-nav {
+  padding: 10px 0;
+}
+
+.cs-console-nav section {
+  margin-bottom: 10px;
+}
+
+.cs-console-nav section p,
+.cs-console-sidebar-footer > p {
+  margin: 12px 20px 4px;
+  color: #545b64;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.cs-console-nav-link {
+  min-height: 28px;
+  border-radius: 0;
+  color: #16191f;
+  padding: 0 12px 0 20px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.cs-console-nav-link svg {
+  width: 16px;
+  height: 16px;
+  color: #545b64;
+}
+
+.cs-console-nav-link:hover,
+.cs-console-nav-link[data-active="true"] {
+  background: #f2f3f3;
+  color: #16191f;
+}
+
+.cs-console-nav-link[data-active="true"] {
+  font-weight: 700;
+}
+
+.cs-console-nav-link[data-active="true"]::before {
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0;
+  background: #ec7211;
+}
+
+.cs-console-sidebar-footer {
+  border-top: 1px solid #eaeded;
+  background: #fff;
+}
+
+.cs-console-safety-strip {
+  padding: 6px 20px;
+  border-bottom: 1px solid #d5dbdb;
+  background: #fff;
+  font-size: 12px;
+}
+
+.cs-console-content {
+  min-height: calc(100vh - 75px);
+  padding: 20px;
+  background: #f2f3f3;
+}
+
+.console-command-search {
+  width: min(560px, 45vw);
+  min-width: 420px;
+}
+
+.console-command-search-field {
+  height: 30px;
+  border: 1px solid #879596;
+  border-radius: 4px;
+  background: #1b2a3c;
+  color: #fff;
+}
+
+.console-command-search-field input {
+  color: #fff;
+  font-size: 14px;
+}
+
+.console-command-search-field input::placeholder {
+  color: #d5dbdb;
+}
+
+.console-command-search-field kbd {
+  border: 0;
+  background: transparent;
+  color: #d5dbdb;
+}
+
+.console-command-search-field:focus-within {
+  border-color: #44b9d6;
+  box-shadow: 0 0 0 1px #44b9d6;
+}
+
+.cs-command-search-results,
+.console-command-results {
+  top: calc(100% + 8px);
+  grid-template-columns: 260px minmax(560px, 1fr);
+  width: min(1120px, calc(100vw - 48px));
+  border: 0;
+  border-radius: 2px;
+  background: #161e2d;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .35);
+}
+
+.cs-command-search-results .console-command-categories,
+.console-command-results .console-command-categories {
+  background: #161e2d;
+  border-right: 1px solid #3f4a5a;
+  padding: 76px 0 20px;
+}
+
+.cs-command-search-results .console-command-categories strong,
+.cs-command-search-results .console-command-categories span,
+.console-command-results .console-command-categories strong,
+.console-command-results .console-command-categories span {
+  padding: 5px 24px;
+  color: #d5dbdb;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cs-command-search-results .console-command-categories strong,
+.console-command-results .console-command-categories strong {
+  border-left: 3px solid #44b9d6;
+  background: transparent;
+  color: #44b9d6;
+}
+
+.cs-command-search-results .console-command-list,
+.console-command-results .console-command-list {
+  background: #161e2d;
+  padding: 24px 28px;
+}
+
+.console-command-list-head {
+  color: #d5dbdb;
+}
+
+.console-command-list-head strong {
+  color: #fff;
+  font-size: 22px;
+}
+
+.console-command-list button {
+  min-height: 76px;
+  border: 1px solid #3f4a5a;
+  border-radius: 12px;
+  background: #1b2636;
+  margin-bottom: 10px;
+  padding: 14px 18px;
+}
+
+.console-command-list button:hover,
+.console-command-list button[data-selected="true"] {
+  border-color: #44b9d6;
+  background: #1b2636;
+}
+
+.console-command-icon {
+  border-radius: 2px;
+  background: #ec7211;
+  color: #fff;
+}
+
+.console-command-list button strong {
+  color: #44b9d6;
+  font-size: 16px;
+}
+
+.console-command-list button em {
+  color: #d5dbdb;
+  font-size: 14px;
+}
+
+.console-command-list button small {
+  border: 0;
+  color: #44b9d6;
+}
+
+.cs-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 16px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.cs-breadcrumbs {
+  margin-bottom: 14px;
+  color: #545b64;
+  font-size: 14px;
+}
+
+.cs-page-eyebrow {
+  margin: 0 0 3px;
+  color: #545b64;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.cs-page-header h1 {
+  margin: 0;
+  color: #16191f;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.cs-page-header p {
+  color: #545b64;
+  font-size: 14px;
+}
+
+.cs-page-actions {
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-button,
+.cs-action-primary {
+  min-height: 30px;
+  border: 1px solid #ec7211;
+  border-radius: 16px;
+  background: #ec7211;
+  color: #16191f;
+  padding: 4px 18px;
+  font-weight: 700;
+}
+
+.cs-button:hover,
+.cs-action-primary:hover {
+  background: #eb5f07;
+}
+
+.cs-button:disabled,
+.cs-action-primary:disabled,
+.cs-button-secondary:disabled {
+  cursor: not-allowed;
+  opacity: .72;
+}
+
+.cs-button-secondary {
+  min-height: 30px;
+  border: 1px solid #aab7b8;
+  border-radius: 16px;
+  background: #fff;
+  color: #16191f;
+  padding: 4px 16px;
+  font-weight: 700;
+}
+
+.cs-link,
+a {
+  color: #0073bb;
+}
+
+.cs-section,
+.console-widget {
+  border: 1px solid #d5dbdb;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: none !important;
+}
+
+.cs-section:hover {
+  border-color: #d5dbdb;
+  box-shadow: none;
+}
+
+.cs-section[data-variant],
+.cs-section[data-variant="operational"],
+.cs-section[data-variant="status"],
+.cs-section[data-variant="insight"],
+.cs-section[data-variant="warning"],
+.cs-section[data-variant="action"],
+.cs-section[data-variant="evidence"] {
+  border-top: 1px solid #d5dbdb;
+}
+
+.cs-section-header,
+.console-widget-header {
+  min-height: 44px;
+  border-bottom: 1px solid #eaeded;
+  background: #fff;
+  padding: 12px 20px;
+}
+
+.cs-section-title > span {
+  display: none;
+}
+
+.cs-section-header h2,
+.console-widget-header h2 {
+  color: #16191f;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.cs-section-header p {
+  color: #545b64;
+  font-size: 13px;
+}
+
+.cs-section-body,
+.console-widget-body {
+  padding: 16px 20px;
+}
+
+.console-home-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.console-widget {
+  min-height: auto;
+}
+
+.console-widget-metric {
+  min-height: 30px;
+  border-bottom: 1px solid #eaeded;
+  font-size: 14px;
+}
+
+.console-widget-metric strong {
+  font-size: 14px;
+}
+
+.cs-filter-bar {
+  gap: 8px;
+  border-bottom: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.cs-filter-bar input,
+.cs-filter-bar select,
+.cs-search-input input {
+  height: 32px;
+  border-color: #aab7b8;
+  border-radius: 2px;
+  font-size: 14px;
+}
+
+.cs-table {
+  min-width: 960px;
+}
+
+.cs-table th {
+  height: 36px;
+  border-bottom: 1px solid #aab7b8;
+  background: #fff;
+  color: #16191f;
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.cs-table td {
+  height: 42px;
+  border-bottom: 1px solid #eaeded;
+  padding: 8px 20px;
+  color: #16191f;
+  font-size: 14px;
+}
+
+.cs-status,
+.cs-source {
+  gap: 4px;
+  border-radius: 2px;
+  padding: 1px 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cs-source[data-source="aws"] {
+  border-color: #b7e3bc;
+  background: #f2fff3;
+  color: #1d8102;
+}
+
+.aws-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 12px;
+  color: #545b64;
+  font-size: 12px;
+}
+
+.cs-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #d5dbdb;
+  margin: 0 0 16px;
+}
+
+.cs-tabs .cs-button-secondary,
+.cs-tabs .cs-action-primary {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #16191f;
+  min-height: 38px;
+  padding: 0 16px;
+}
+
+.cs-tabs .cs-action-primary {
+  border-bottom: 3px solid #ec7211;
+  color: #16191f;
+}
+
+.copilot-panel {
+  width: min(420px, 92vw);
+  border-left: 1px solid #d5dbdb;
+  border-radius: 0;
+  box-shadow: -12px 0 28px rgba(0, 0, 0, .18);
+}
+
+.copilot-header {
+  background: #232f3e;
+}
+
+.copilot-prompts button,
+.copilot-answer,
+.copilot-input input {
+  border-radius: 2px;
+}
+
+@media (max-width: 1100px) {
+  .console-home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1023px) {
+  .cs-console-app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .portal-mobile-sidebar {
+    inset: 40px auto 0 0;
+  }
+  .portal-mobile-sidebar .cs-console-sidebar {
+    height: calc(100vh - 40px);
+  }
+}
+
+@media (max-width: 760px) {
+  .console-command-search {
+    min-width: 0;
+  }
+  .console-home-grid {
+    grid-template-columns: 1fr;
+  }
+  .cs-console-content {
+    padding: 14px;
+  }
+}
+
+/* Screenshot-review correction: remove old hero rails and normalize every module header. *//* --- Authoritative Shell Override --- */
+/* Consolidated from previous duplicate blocks. */
+
+.cs-console-shell { background: var(--cs-bg-base, #f2f3f3) !important; color: var(--cs-text-base, #16191f) !important; font-family: Arial, Helvetica, sans-serif !important; }
+.cs-console-topbar { height: 48px !important; min-height: 48px !important; background: #161e2d !important; z-index: 120 !important; }
+.cs-console-topbar-left, .cs-console-topbar-right { height: 48px !important; }
+.cs-console-app { grid-template-columns: 252px minmax(0, 1fr) !important; min-height: calc(100vh - 48px) !important; }
+.cs-console-shell[data-collapsed="true"] .cs-console-app { grid-template-columns: 64px minmax(0, 1fr) !important; }
+.cs-console-sidebar { top: 48px !important; height: calc(100vh - 48px) !important; border-right: 1px solid var(--cs-border-divider, #d5dbdb) !important; background: var(--cs-bg-panel, #fff) !important; color: var(--cs-text-base, #16191f) !important; z-index: 110 !important; }
+.cs-console-sidebar-head { min-height: 64px !important; border-bottom: 1px solid var(--cs-border-light, #eaeded) !important; padding: 12px 14px 12px 24px !important; }
+.cs-console-nav, .cs-console-sidebar-footer { padding: 16px 18px !important; }
+.cs-console-nav-link { min-height: 36px !important; gap: 10px !important; padding: 8px 12px !important; color: var(--cs-text-base, #16191f) !important; }
+.cs-console-nav-link[data-active="true"] { border-left: 4px solid #ec7211 !important; background: var(--cs-bg-active, #f2f3f3) !important; font-weight: 700 !important; }
+.cs-console-main { min-width: 0 !important; background: var(--cs-bg-base, #f2f3f3) !important; }
+.cs-console-safety-strip { min-height: 44px !important; padding: 7px 26px !important; border-bottom: 1px solid var(--cs-border-divider, #d5dbdb) !important; background: var(--cs-bg-panel, #fff) !important; overflow-x: auto !important; white-space: nowrap !important; }
+.cs-console-content { width: 100% !important; max-width: none !important; min-height: calc(100vh - 92px) !important; padding: 24px 26px !important; background: var(--cs-bg-base, #f2f3f3) !important; }
+.cs-console-content .cs-page-header { margin: 0 0 18px !important; padding: 0 0 14px !important; position: static !important; display: flex !important; align-items: flex-start !important; justify-content: space-between !important; gap: 18px !important; width: 100% !important; border: 0 !important; border-bottom: 1px solid var(--cs-border-light, #eaeded) !important; border-left: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; overflow: visible !important; flex-wrap: wrap !important; }
+.cs-console-content .cs-page-header::before, .cs-console-content .cs-page-header::after { content: none !important; display: none !important; }
+.cs-console-content .cs-page-header > .min-w-0, .cs-console-content .cs-page-header > div:first-child { min-width: 0 !important; max-width: min(980px, 100%) !important; margin: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; }
+.cs-console-content .cs-page-eyebrow { margin: 0 0 4px !important; color: var(--cs-text-muted, #545b64) !important; font-size: 13px !important; font-weight: 700 !important; letter-spacing: 0 !important; text-transform: none !important; }
+.cs-console-content .cs-page-header h1 { margin: 0 !important; color: var(--cs-text-base, #16191f) !important; font-size: clamp(24px, 2vw, 30px) !important; font-weight: 700 !important; line-height: 1.25 !important; letter-spacing: 0 !important; }
+.cs-console-content .cs-page-header p { max-width: 920px !important; margin: 8px 0 0 !important; color: var(--cs-text-muted, #545b64) !important; font-size: 14px !important; line-height: 1.55 !important; }
+.cs-console-content .cs-page-meta { display: flex !important; flex-wrap: wrap !important; gap: 8px !important; margin-top: 12px !important; }
+.cs-console-content .cs-page-meta > span, .cs-console-content .cs-status, .cs-console-content .cs-source { min-height: 22px !important; border-radius: 2px !important; padding: 2px 8px !important; font-size: 12px !important; line-height: 1.25 !important; }
+.cs-console-content .cs-page-actions { display: flex !important; flex-wrap: wrap !important; justify-content: flex-end !important; gap: 10px !important; min-width: max-content !important; margin-left: auto !important; }
+.cs-console-nav section { margin-bottom: 16px !important; }
+.cs-console-nav p, .cs-console-sidebar-footer p { margin: 0 0 8px !important; color: var(--cs-text-muted, #5f6b7a) !important; font-size: 12px !important; font-weight: 800 !important; letter-spacing: .04em !important; }
+.cs-console-nav-link svg { width: 17px !important; height: 17px !important; }
+.cs-console-safety-strip span { min-height: 28px !important; line-height: 1.2 !important; }
+.cs-console-content .cs-section, .cs-console-content .console-widget { border-radius: 2px !important; }
+.cs-console-content .cs-section-header, .cs-console-content .console-widget-header { padding: 12px 24px !important; }
+.cs-console-content .cs-section-body, .cs-console-content .console-widget-body { padding: 18px 24px !important; }
+.cs-console-content .cs-filter-bar { align-items: center !important; gap: 10px !important; padding: 10px 0 14px !important; }
+.cs-console-content .cs-table th, .cs-console-content .cs-table td { padding-left: 18px !important; padding-right: 18px !important; }
+.portal-runtime-status { top: 52px; right: 540px; width: 340px; border: 1px solid #3f4a5a; background: #161e2d; color: #d5dbdb; }
+.portal-shell-head { display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #3f4a5a; padding: 14px 16px; }
+.portal-shell-head strong { display: block; color: #fff; }
+.portal-shell-head p { margin: 2px 0 0; color: #aab7b8; font-size: 12px; }
+.portal-shell-list { padding: 10px 16px; }
+.portal-shell-list p { display: flex; justify-content: space-between; gap: 12px; margin: 0; border-bottom: 1px solid rgba(170, 183, 184, .25); padding: 9px 0; font-size: 13px; }
+.portal-shell-list span { color: #aab7b8; }
+.portal-shell-list strong { color: #fff; text-align: right; }
+.portal-runtime-status a { display: flex; align-items: center; gap: 6px; border-top: 1px solid #3f4a5a; padding: 12px 16px; color: #44b9d6; font-weight: 700; }
+.portal-region { top: 52px; right: 230px; width: 320px; border: 1px solid #3f4a5a; background: #161e2d; color: #d5dbdb; padding: 14px 16px; }
+.portal-region strong { display: block; color: #fff; font-size: 15px; }
+.portal-region p { margin: 8px 0 12px; color: #d5dbdb; font-size: 13px; line-height: 1.45; }
+.portal-region a { color: #44b9d6; font-weight: 700; }
+@media (max-width: 1023px) { .cs-console-app { grid-template-columns: minmax(0, 1fr) !important; } .portal-mobile-sidebar { inset: 48px auto 0 0 !important; } .portal-mobile-sidebar .cs-console-sidebar { height: calc(100vh - 48px) !important; } }
+@media (max-width: 980px) { .cs-console-content .cs-page-header { flex-direction: column !important; } .cs-console-content .cs-page-actions { justify-content: flex-start !important; min-width: 0 !important; margin-left: 0 !important; } .portal-runtime-status { right: 12px; } }
+/* Premium enhancements */
+.cs-console-copilot-button { position: relative; border: 1px solid #3f4a5a !important; border-radius: 6px !important; background: rgba(255, 255, 255, 0.05) !important; overflow: hidden; margin: 4px; height: 40px !important; }
+.cs-console-copilot-button:hover { background: rgba(255, 255, 255, 0.1) !important; border-color: #44b9d6 !important; }
+.cs-console-copilot-button::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(68, 185, 214, 0.5), transparent); }
+.cs-app-launcher-menu { position: absolute; z-index: 150; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: min(360px, 92vw); top: 52px; left: 16px; border: 1px solid #3f4a5a; border-radius: 6px; background: #161e2d; padding: 16px; color: #f2f3f3; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+.cs-app-launcher-menu a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid transparent; border-radius: 6px; font-weight: 700; font-size: 13px; color: #d5dbdb; }
+.cs-app-launcher-menu a:hover { background: #1b2636; border-color: #3f4a5a; color: #fff; }
+.cs-app-launcher-menu a svg { color: #ec7211; }
+.cs-settings-menu { position: absolute; z-index: 150; top: 52px; right: 180px; width: min(320px, 92vw); border: 1px solid #3f4a5a; border-radius: 6px; background: #161e2d; color: #d5dbdb; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+.cs-settings-menu-group { padding: 12px 16px; border-bottom: 1px solid #3f4a5a; }
+.cs-settings-menu-group strong { display: block; color: #fff; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.cs-settings-menu-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+.cs-settings-menu-item select { background: #1b2636; border: 1px solid #3f4a5a; color: #fff; border-radius: 4px; padding: 4px 8px; font-size: 12px; }
+.cs-settings-menu-item[data-disabled] { opacity: 0.5; }
+.cs-settings-menu > a { display: flex; align-items: center; gap: 6px; padding: 14px 16px; color: #44b9d6; font-weight: 700; font-size: 13px; }
+.cs-settings-menu > a:hover { background: #1b2636; }
+/* Theme variables (dynamically applied) */
+:root { --cs-bg-base: #f2f3f3; --cs-bg-panel: #fff; --cs-text-base: #16191f; --cs-text-muted: #545b64; --cs-border-divider: #d5dbdb; --cs-border-light: #eaeded; --cs-bg-active: #f2f3f3; }
+:root[data-theme="dark"] { --cs-bg-base: #0f172a; --cs-bg-panel: #1e293b; --cs-text-base: #f8fafc; --cs-text-muted: #94a3b8; --cs-border-divider: #334155; --cs-border-light: #1e293b; --cs-bg-active: #0f172a; }
+/* Fix specific popovers for dark topbar */
+.portal-notifications { top: 52px; right: 130px; }
+.portal-workspace { top: 52px; right: 64px; }
+.portal-profile { top: 52px; right: 16px; }
+.portal-help { top: 52px; right: 90px; }
+/* Remove previous overrides to let this final block rule */
+/* EOF */
+
+/* === Slice: console shell, theme, density, and global Cloudscape-like tokens === */
+:root {
+  --cs-bg-app: #f2f3f3;
+  --cs-bg-panel: #ffffff;
+  --cs-bg-elevated: #ffffff;
+  --cs-bg-active: #f2f3f3;
+  --cs-text-primary: #16191f;
+  --cs-text-secondary: #545b64;
+  --cs-text-muted: #697386;
+  --cs-border: #d5dbdb;
+  --cs-border-strong: #aab7b8;
+  --cs-accent: #ec7211;
+  --cs-link: #0073bb;
+  --cs-warning-bg: #fff7ed;
+  --cs-danger-bg: #fff1f2;
+  --cs-success-bg: #f2fff3;
+  --cs-topbar-height: 48px;
+  --cs-sidebar-width: 252px;
+  --cs-sidebar-collapsed-width: 64px;
+  --cs-density-row: 36px;
+  --cs-density-gap: 12px;
+  --cs-density-padding: 16px;
+}
+
+:root[data-theme="dark"] {
+  --cs-bg-app: #0f141f;
+  --cs-bg-panel: #161e2d;
+  --cs-bg-elevated: #1b2636;
+  --cs-bg-active: #232f3e;
+  --cs-text-primary: #f2f3f3;
+  --cs-text-secondary: #c7d0d9;
+  --cs-text-muted: #9ba7b6;
+  --cs-border: #3f4a5a;
+  --cs-border-strong: #5f6b7a;
+  --cs-link: #44b9d6;
+  --cs-warning-bg: #2d2418;
+  --cs-danger-bg: #321c23;
+  --cs-success-bg: #15251e;
+}
+
+:root[data-density="comfortable"] {
+  --cs-density-row: 42px;
+  --cs-density-gap: 16px;
+  --cs-density-padding: 20px;
+}
+
+:root[data-density="compact"] {
+  --cs-density-row: 30px;
+  --cs-density-gap: 8px;
+  --cs-density-padding: 12px;
+}
+
+html,
+body {
+  background: var(--cs-bg-app);
+  color: var(--cs-text-primary);
+}
+
+.cs-console-shell {
+  background: var(--cs-bg-app) !important;
+  color: var(--cs-text-primary) !important;
+  font-family: Arial, Helvetica, sans-serif !important;
+}
+
+.cs-console-topbar {
+  height: var(--cs-topbar-height) !important;
+  min-height: var(--cs-topbar-height) !important;
+  background: #161e2d !important;
+  border-bottom: 1px solid #2f3b4d !important;
+}
+
+.cs-console-topbar-left,
+.cs-console-topbar-right {
+  height: var(--cs-topbar-height) !important;
+  gap: 6px !important;
+}
+
+.cs-console-app {
+  grid-template-columns: var(--cs-sidebar-width) minmax(0, 1fr) !important;
+  min-height: calc(100vh - var(--cs-topbar-height)) !important;
+}
+
+.cs-console-shell[data-collapsed="true"] .cs-console-app {
+  grid-template-columns: var(--cs-sidebar-collapsed-width) minmax(0, 1fr) !important;
+}
+
+.cs-console-sidebar {
+  top: var(--cs-topbar-height) !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  height: calc(100vh - var(--cs-topbar-height)) !important;
+  border-right: 1px solid var(--cs-border) !important;
+  background: var(--cs-bg-panel) !important;
+  color: var(--cs-text-primary) !important;
+}
+
+.cs-console-sidebar-head {
+  min-height: 58px !important;
+  border-bottom: 1px solid var(--cs-border) !important;
+  background: var(--cs-bg-panel) !important;
+  padding: 10px 14px 10px 24px !important;
+}
+
+.cs-console-sidebar-head strong,
+.cs-console-nav-link span,
+.cs-console-content h1,
+.cs-console-content h2,
+.cs-console-content h3 {
+  color: var(--cs-text-primary) !important;
+}
+
+.cs-console-sidebar-head span,
+.cs-console-nav p,
+.cs-console-content p,
+.console-widget-header span,
+.cs-section-header p {
+  color: var(--cs-text-secondary) !important;
+}
+
+.cs-console-nav {
+  overflow-y: auto !important;
+  padding: 14px 18px !important;
+}
+
+.cs-console-sidebar-footer {
+  display: none !important;
+}
+
+.cs-console-nav section {
+  margin: 0 0 var(--cs-density-gap) !important;
+}
+
+.cs-console-nav p {
+  margin: 0 0 6px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: .04em !important;
+  text-transform: uppercase !important;
+}
+
+.cs-console-nav-link {
+  min-height: var(--cs-density-row) !important;
+  border-radius: 0 !important;
+  border-left: 4px solid transparent !important;
+  color: var(--cs-text-primary) !important;
+  padding: 6px 10px !important;
+}
+
+.cs-console-nav-link:hover {
+  background: var(--cs-bg-active) !important;
+}
+
+.cs-console-nav-link[data-active="true"] {
+  border-left-color: var(--cs-accent) !important;
+  background: var(--cs-bg-active) !important;
+}
+
+.cs-console-main,
+.cs-console-content {
+  background: var(--cs-bg-app) !important;
+}
+
+.cs-console-safety-strip {
+  min-height: 44px !important;
+  border-bottom: 1px solid var(--cs-border) !important;
+  background: var(--cs-bg-panel) !important;
+  padding: 7px 26px !important;
+}
+
+.cs-console-content {
+  min-height: calc(100vh - var(--cs-topbar-height) - 44px) !important;
+  padding: calc(var(--cs-density-padding) + 6px) 26px !important;
+}
+
+.cs-console-content .cs-page-header {
+  border-bottom: 1px solid var(--cs-border) !important;
+  background: transparent !important;
+}
+
+.cs-section,
+.console-widget,
+.cs-console-content footer {
+  border: 1px solid var(--cs-border) !important;
+  border-radius: 2px !important;
+  background: var(--cs-bg-panel) !important;
+  color: var(--cs-text-primary) !important;
+  box-shadow: none !important;
+}
+
+.cs-section-header,
+.console-widget-header {
+  min-height: var(--cs-density-row) !important;
+  border-bottom: 1px solid var(--cs-border) !important;
+  background: var(--cs-bg-panel) !important;
+  padding: 12px var(--cs-density-padding) !important;
+}
+
+.cs-section-body,
+.console-widget-body {
+  padding: var(--cs-density-padding) !important;
+}
+
+.console-widget-metric,
+.cs-table td {
+  min-height: var(--cs-density-row) !important;
+  border-color: var(--cs-border) !important;
+}
+
+.cs-table th {
+  height: var(--cs-density-row) !important;
+  border-color: var(--cs-border-strong) !important;
+  background: var(--cs-bg-panel) !important;
+  color: var(--cs-text-primary) !important;
+}
+
+.cs-table td {
+  background: var(--cs-bg-panel) !important;
+  color: var(--cs-text-primary) !important;
+}
+
+.cs-filter-bar {
+  gap: var(--cs-density-gap) !important;
+}
+
+.cs-filter-bar input,
+.cs-filter-bar select,
+.cs-search-input input,
+.cs-button,
+.cs-button-secondary,
+.cs-action-primary {
+  min-height: calc(var(--cs-density-row) - 2px) !important;
+  border-color: var(--cs-border-strong) !important;
+  border-radius: 2px !important;
+}
+
+.cs-button {
+  background: var(--cs-accent) !important;
+  color: #111827 !important;
+}
+
+.cs-button:disabled,
+.cs-button-secondary:disabled {
+  cursor: not-allowed !important;
+  opacity: .65 !important;
+}
+
+.cs-button-secondary {
+  background: var(--cs-bg-panel) !important;
+  color: var(--cs-text-primary) !important;
+}
+
+.cs-link,
+a {
+  color: var(--cs-link);
+}
+
+:root[data-theme="dark"] .bg-white,
+:root[data-theme="dark"] .bg-slate-50,
+:root[data-theme="dark"] .bg-blue-50\/50 {
+  background-color: var(--cs-bg-panel) !important;
+}
+
+:root[data-theme="dark"] .text-slate-950,
+:root[data-theme="dark"] .text-slate-900,
+:root[data-theme="dark"] .text-slate-800,
+:root[data-theme="dark"] .text-slate-700 {
+  color: var(--cs-text-primary) !important;
+}
+
+:root[data-theme="dark"] .text-slate-600,
+:root[data-theme="dark"] .text-slate-500,
+:root[data-theme="dark"] .text-slate-400 {
+  color: var(--cs-text-secondary) !important;
+}
+
+:root[data-theme="dark"] .border-slate-200,
+:root[data-theme="dark"] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--cs-border) !important;
+}
+
+.cs-console-copilot-button {
+  height: 32px !important;
+  min-height: 32px !important;
+  border: 1px solid #4b5a6c !important;
+  border-radius: 4px !important;
+  background: #1b2636 !important;
+  color: #f2f3f3 !important;
+  padding: 0 10px !important;
+}
+
+.cs-console-copilot-button[aria-expanded="true"],
+.cs-console-copilot-button:hover {
+  border-color: #44b9d6 !important;
+  background: #223247 !important;
+}
+
+.cs-app-launcher-menu {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  width: min(520px, 92vw) !important;
+  background: #161e2d !important;
+}
+
+.cs-app-launcher-head {
+  grid-column: 1 / -1;
+  border-bottom: 1px solid #3f4a5a;
+  padding: 0 0 10px;
+}
+
+.cs-app-launcher-head strong,
+.cs-settings-menu-head strong {
+  display: block;
+  color: #fff;
+}
+
+.cs-app-launcher-head span,
+.cs-settings-menu-head span {
+  color: #aab7b8;
+  font-size: 12px;
+}
+
+.cs-app-launcher-menu a {
+  display: grid !important;
+  grid-template-columns: 32px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto !important;
+  align-items: center !important;
+}
+
+.cs-app-launcher-menu a > span {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 2px;
+  background: #232f3e;
+}
+
+.cs-app-launcher-menu a em {
+  color: #aab7b8;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.cs-settings-menu,
+.portal-region,
+.portal-runtime-status,
+.portal-help,
+.portal-workspace,
+.portal-profile {
+  border: 1px solid #3f4a5a !important;
+  background: #161e2d !important;
+  color: #d5dbdb !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .35) !important;
+}
+
+.cs-settings-menu {
+  padding: 0 !important;
+}
+
+.cs-settings-menu-head {
+  border-bottom: 1px solid #3f4a5a;
+  padding: 14px 16px;
+}
+
+.cs-settings-menu-group {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid #3f4a5a;
+  padding: 12px 16px;
+}
+
+.cs-settings-menu-group > span {
+  color: #d5dbdb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cs-segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.cs-segmented-control button {
+  min-height: 28px;
+  border: 1px solid #3f4a5a;
+  border-radius: 2px;
+  background: #1b2636;
+  color: #d5dbdb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cs-segmented-control button[data-active="true"] {
+  border-color: #44b9d6;
+  background: #223247;
+  color: #fff;
+}
+
+.cs-settings-safety {
+  padding: 8px 16px;
+}
+
+.cs-settings-safety p {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  border-bottom: 1px solid rgba(170, 183, 184, .24);
+  padding: 7px 0;
+  color: #aab7b8;
+  font-size: 12px;
+}
+
+.cs-settings-safety strong {
+  color: #fff;
+}
+
+.copilot-panel {
+  background: var(--cs-bg-panel) !important;
+  color: var(--cs-text-primary) !important;
+}
+
+.copilot-body,
+.copilot-answer,
+.copilot-input {
+  background: var(--cs-bg-panel) !important;
+  color: var(--cs-text-primary) !important;
+  border-color: var(--cs-border) !important;
+}
+
+.copilot-prompts button,
+.copilot-input input {
+  background: var(--cs-bg-elevated) !important;
+  color: var(--cs-text-primary) !important;
+  border-color: var(--cs-border) !important;
+}
+
+.portal-notifications,
+.portal-notifications > div,
+.portal-notifications .sticky {
+  background: var(--cs-bg-panel) !important;
+  color: var(--cs-text-primary) !important;
+  border-color: var(--cs-border) !important;
+}
+
+.portal-notification-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--cs-border);
+  background: var(--cs-bg-panel);
+}
+
+.portal-notification-tabs button {
+  min-height: 34px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--cs-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.portal-notification-tabs button[data-active="true"] {
+  border-bottom-color: var(--cs-link);
+  color: var(--cs-text-primary);
+}
+
+@media (max-width: 1023px) {
+  .cs-console-app {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .portal-mobile-sidebar {
+    inset: var(--cs-topbar-height) auto 0 0 !important;
+  }
+}

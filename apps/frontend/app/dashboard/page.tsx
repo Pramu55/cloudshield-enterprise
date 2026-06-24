@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Ban, Cloud, FileCheck2, FileJson, Network, Settings, ShieldAlert } from "lucide-react";
+import { ArrowRight, Ban, Cloud, MoreVertical, Network, RotateCcw, ShieldAlert } from "lucide-react";
 import { fetchCloudShieldClient } from "../../lib/client-api";
 import { toApiError, type ApiError } from "../../lib/api-error";
 import {
@@ -12,6 +12,13 @@ import {
 import { ErrorState } from "../../components/ui/error-state";
 import { LoadingState } from "../../components/ui/loading-state";
 import { PageHeader, Section, SourceBadge, StatusBadge } from "./shared";
+
+type RecentRoute = {
+  pathname: string;
+  title: string;
+  category: string;
+  timestamp: string;
+};
 
 function scoreStatusLabel(status: FrontendExecutiveDashboardSummary["posture"]["scoreStatus"]) {
   const labels = {
@@ -29,6 +36,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<FrontendExecutiveDashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+  const [recentRoutes, setRecentRoutes] = useState<RecentRoute[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,11 +56,20 @@ export default function DashboardPage() {
     void load();
   }, [load]);
 
-  if (loading) return <LoadingState message="Preparing executive governance posture..." skeleton />;
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem("cloudshield-recent-routes") ?? "[]") as RecentRoute[];
+      setRecentRoutes(parsed.filter((route) => route.pathname && route.title).slice(0, 6));
+    } catch {
+      setRecentRoutes([]);
+    }
+  }, []);
+
+  if (loading) return <LoadingState message="Preparing CloudShield Console Home..." skeleton />;
   if (error) {
     return (
       <ErrorState
-        title="Executive dashboard unavailable"
+        title="Console Home unavailable"
         message={error.safeMessage}
         correlationId={error.correlationId}
         onRetry={error.retryableRead ? () => void load() : undefined}
@@ -60,7 +77,7 @@ export default function DashboardPage() {
     );
   }
   if (!data) {
-    return <Section title="Executive governance dashboard"><p className="text-sm text-slate-600">No organization-scoped dashboard data is available.</p></Section>;
+    return <Section title="CloudShield Console Home"><p className="text-sm text-slate-600">No organization-scoped dashboard data is available.</p></Section>;
   }
 
   const { posture, security, compliance, evidence } = data;
@@ -75,15 +92,15 @@ export default function DashboardPage() {
     .reduce((total, factor) => total + factor.impact, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
-        breadcrumbs={["Dashboard", "Console home"]}
+        breadcrumbs={["Dashboard", "Console Home"]}
         eyebrow="CloudShield Console"
-        title="CloudShield Console"
-        description="Read-only AWS governance, evidence, and compliance readiness for your current workspace."
+        title="CloudShield Console Home"
+        description="Read-only cloud governance, inventory snapshots, evidence, and compliance readiness for this workspace."
         status={<StatusBadge status={posture.overallStatus} />}
-        primaryAction={<Link className="cs-button" href="/dashboard/security">Review security</Link>}
-        secondaryAction={<Link className="cs-button-secondary" href="/dashboard/compliance">Control mapping</Link>}
+        primaryAction={<button className="cs-button" disabled title="Widget customization is future scope.">Add widgets disabled</button>}
+        secondaryAction={<button className="cs-button-secondary" disabled title="Reset layout is future scope for this local console."><RotateCcw size={14} /> Reset layout</button>}
         meta={
           <div className="flex flex-wrap gap-2">
             <SourceBadge source={posture.dataSource} />
@@ -93,89 +110,75 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <ConsoleMetricCard
-          href="/dashboard/reports"
-          label="Governance score"
-          value={posture.executiveScore === null ? scoreStatusLabel(posture.scoreStatus) : `${posture.executiveScore}/100`}
-          detail="Executive posture and report evidence"
-          tone={posture.executiveScore !== null && posture.executiveScore < 80 ? "warning" : "success"}
-        />
-        <ConsoleMetricCard
-          href="/dashboard/inventory"
-          label="Inventory resources"
-          value={posture.awsSyncedResourceCount}
-          detail={`${posture.connectedAccountCount} connected account(s)`}
-          tone={posture.awsSyncedResourceCount ? "success" : "neutral"}
-        />
-        <ConsoleMetricCard
-          href="/dashboard/security"
-          label="Active findings"
-          value={security.openFindings}
-          detail={`${security.bySeverity.low} low · ${security.bySeverity.medium} medium · ${security.bySeverity.high} high`}
-          tone={security.openFindings ? "warning" : "success"}
-        />
-        <ConsoleMetricCard
-          href="/dashboard/compliance"
-          label="Evidence coverage"
-          value={`${evidence.evidenceCoveragePercent}%`}
-          detail={`${evidence.totalSnapshots} immutable snapshots`}
-          tone={evidence.evidenceCoveragePercent === 100 ? "success" : "warning"}
-        />
-        <ConsoleMetricCard
-          href="/dashboard/scans"
-          label="Completed scans"
-          value={posture.completedScanCount}
-          detail={`Freshness: ${posture.dataFreshnessStatus}`}
-          tone={posture.completedScanCount ? "success" : "neutral"}
-        />
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-        <div className="flex flex-wrap items-center gap-3">
-          <strong className="text-slate-900">Why the executive score differs from account security</strong>
-          <span>Security finding penalty: {findingPenalty}</span>
-          <span>Compliance control penalty: {compliancePenalty}</span>
-          <span>Other governance penalty: {governancePenalty}</span>
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_.95fr]">
-        <Section
-          title="Cloud services"
-          description="Compact service entry points backed by existing CloudShield routes."
-          icon={<Cloud size={16} />}
-          variant="action"
-        >
+      <div className="console-home-grid">
+        <ConsoleWidget title="Recently visited" info="Route shortcuts" action={<MoreVertical size={16} />}>
           <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <ServiceRow href="/dashboard/accounts" icon={<Cloud size={17} />} title="AWS Accounts" status="Read-only validation" description="Account posture, onboarding preflight, and scanner gates." />
-            <ServiceRow href="/dashboard/inventory" icon={<Network size={17} />} title="Inventory Explorer" status="AWS_SYNC labeled" description="Stored resources, source labels, regions, and detail routes." />
-            <ServiceRow href="/dashboard/graph" icon={<Network size={17} />} title="Resource Graph" status="DB relationships" description="Topology and resource relationships from CloudShield records." />
-            <ServiceRow href="/dashboard/security" icon={<ShieldAlert size={17} />} title="Security Findings" status={`${security.openFindings} open`} description="Findings, workflow state, affected resources, and evidence history." />
-            <ServiceRow href="/dashboard/compliance" icon={<FileCheck2 size={17} />} title="Compliance Controls" status="Readiness only" description="Internal control mapping; no official certification claim." />
-            <ServiceRow href="/dashboard/reports" icon={<FileJson size={17} />} title="Reports" status="DB-only export" description="Governance proof JSON and report previews." />
+            {recentRoutes.length ? recentRoutes.map((route) => (
+              <ServiceRow
+                key={`${route.pathname}-${route.timestamp}`}
+                href={route.pathname}
+                icon={<ArrowRight size={17} />}
+                title={route.title}
+                status={route.category}
+                description={`Visited ${formatRecentTime(route.timestamp)} · local browser history only`}
+              />
+            )) : (
+              <>
+                <ServiceRow href="/dashboard/accounts" icon={<Cloud size={17} />} title="AWS Accounts" status="Read-only validation" description="Account posture, onboarding preflight, and scanner gates." />
+                <ServiceRow href="/dashboard/inventory" icon={<Network size={17} />} title="Inventory Explorer" status="AWS_SYNC labeled" description="Stored resources, source labels, regions, and detail routes." />
+                <ServiceRow href="/dashboard/security" icon={<ShieldAlert size={17} />} title="Security Findings" status={`${security.openFindings} open`} description="Findings, workflow state, affected resources, and evidence history." />
+              </>
+            )}
           </div>
-        </Section>
+        </ConsoleWidget>
 
-        <Section
-          title="Action center"
-          description="Recommended next clicks. Each row routes to a real workspace."
-          icon={<ArrowRight size={16} />}
-          variant="insight"
-        >
+        <ConsoleWidget title="Governance posture" info="Executive score" action={<Link className="cs-link" href="/dashboard/reports">View reports</Link>}>
+          <p className="m-0 text-xs font-semibold text-slate-600">Why the executive score differs from account security</p>
+          <WidgetMetric label="Score" value={posture.executiveScore === null ? scoreStatusLabel(posture.scoreStatus) : `${posture.executiveScore}/100`} />
+          <WidgetMetric label="Finding penalty" value={findingPenalty} />
+          <WidgetMetric label="Compliance control penalty" value={compliancePenalty} />
+          <WidgetMetric label="Other penalty" value={governancePenalty} />
+        </ConsoleWidget>
+
+        <ConsoleWidget title="Inventory snapshot" info="DB-backed resources" action={<Link className="cs-link" href="/dashboard/inventory">Open</Link>}>
+          <WidgetMetric label="AWS_SYNC resources" value={posture.awsSyncedResourceCount} />
+          <WidgetMetric label="Connected accounts" value={posture.connectedAccountCount} />
+          <WidgetMetric label="Completed scans" value={posture.completedScanCount} />
+          <WidgetMetric label="Freshness" value={posture.dataFreshnessStatus} />
+        </ConsoleWidget>
+
+        <ConsoleWidget title="Security findings" info="Stored posture records" action={<Link className="cs-link" href="/dashboard/security">Review</Link>}>
+          <WidgetMetric label="Open findings" value={security.openFindings} />
+          <WidgetMetric label="Low" value={security.bySeverity.low} />
+          <WidgetMetric label="Medium" value={security.bySeverity.medium} />
+          <WidgetMetric label="High" value={security.bySeverity.high} />
+        </ConsoleWidget>
+
+        <ConsoleWidget title="Compliance readiness" info="Readiness, not certification" action={<Link className="cs-link" href="/dashboard/compliance">Open</Link>}>
+          <WidgetMetric label="Evidence coverage" value={`${evidence.evidenceCoveragePercent}%`} />
+          <WidgetMetric label="Snapshots" value={evidence.totalSnapshots} />
+          <WidgetMetric label="Failing controls" value={compliance.failingControls} />
+          <WidgetMetric label="Unknown controls" value={compliance.unknownControls} />
+        </ConsoleWidget>
+
+        <ConsoleWidget title="Reports and exports" info="DB-only evidence" action={<Link className="cs-link" href="/dashboard/reports">Export</Link>}>
           <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <ActionRow href="/dashboard/compliance" status={compliance.failingControls ? "Needs review" : "Ready"} title="Review failing control mappings" description={`${compliance.failingControls} failing · ${compliance.unknownControls} unknown controls`} />
-            <ActionRow href="/dashboard/security" status={security.openFindings ? "Open" : "Clear"} title="Review active findings" description={`${security.openFindings} open findings from stored posture records`} />
-            <ActionRow href="/dashboard/reports" status="DB-only" title="Export governance proof" description="Open report previews and real governance proof export routes." />
-            <ActionRow href="/dashboard/accounts" status="Posture" title="Review account posture" description={`${posture.connectedAccountCount} connected account(s), ${posture.awsSyncedResourceCount} AWS_SYNC resources`} />
-            <ActionRow href="/dashboard/settings" status="Locked" title="Check runtime safety" description="Scanner, change execution, remediation, and Terraform remain disabled." />
+            <ActionRow href="/dashboard/reports" status="DB-only" title="Governance proof JSON" description="Open governance proof export routes." />
+            <ActionRow href="/dashboard/compliance" status="Readiness" title="Control mapping" description="Internal mapping without certification claims." />
           </div>
-        </Section>
+        </ConsoleWidget>
+
+        <ConsoleWidget title="Operations health" info="Locked runtime" action={<Link className="cs-link" href="/dashboard/settings">Settings</Link>}>
+          <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <ActionRow href="/dashboard/scans" status="Disabled" title="Inventory sync locked" description="Scanner remains disabled outside approved windows." />
+            <ActionRow href="/dashboard/settings" status="Locked" title="Runtime safety" description="Scanner, change execution, remediation, and Terraform remain disabled." />
+          </div>
+        </ConsoleWidget>
       </div>
 
       <Section
         title="Disabled by design"
-        description="CloudShield keeps the review experience useful while high-risk operations stay unavailable."
+        description="CloudShield keeps review workflows useful while high-risk cloud operations stay unavailable."
         icon={<Ban size={16} />}
         variant="warning"
       >
@@ -202,80 +205,66 @@ export default function DashboardPage() {
   );
 }
 
-function ConsoleMetricCard({
-  href,
-  label,
-  value,
-  detail,
-  tone
-}: {
-  href: string;
-  label: string;
-  value: React.ReactNode;
-  detail: string;
-  tone: "success" | "warning" | "danger" | "neutral";
-}) {
+function formatRecentTime(timestamp: string) {
+  const value = new Date(timestamp).getTime();
+  if (!Number.isFinite(value)) return "recently";
+  const minutes = Math.max(0, Math.round((Date.now() - value) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return `${Math.round(hours / 24)} day ago`;
+}
+
+function ConsoleWidget({ title, info, action, children }: { title: string; info: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <Link className="group min-h-[112px] rounded-xl border border-slate-200 bg-white p-3.5 transition hover:border-blue-300 hover:bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" href={href}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</span>
-        <span className="text-slate-400 transition group-hover:text-blue-600"><ArrowRight size={15} /></span>
+    <section className="console-widget">
+      <div className="console-widget-header">
+        <div>
+          <h2>{title}</h2>
+          <button type="button" disabled title="Informational link is future scope.">Info</button>
+        </div>
+        <span>{info}</span>
+        {action ? <div>{action}</div> : null}
       </div>
-      <strong className="mt-2 block text-2xl font-black tracking-tight text-slate-950">{value}</strong>
-      <p className="mt-1 text-xs leading-5 text-slate-600">{detail}</p>
-      <span className="mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold" data-tone={tone}>
-        Open workspace
-      </span>
-    </Link>
+      <div className="console-widget-body">{children}</div>
+    </section>
   );
 }
 
-function ServiceRow({
-  href,
-  icon,
-  title,
-  status,
-  description
-}: {
-  href: string;
-  icon: React.ReactNode;
-  title: string;
-  status: string;
-  description: string;
-}) {
+function WidgetMetric({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Link className="flex min-h-[58px] items-center gap-3 px-4 py-3 transition hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500" href={href}>
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-blue-700">{icon}</span>
+    <div className="console-widget-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ServiceRow({ href, icon, title, status, description }: { href: string; icon: React.ReactNode; title: string; status: string; description: string }) {
+  return (
+    <Link className="flex min-h-[52px] items-center gap-3 px-4 py-2.5 transition hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500" href={href}>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-blue-700">{icon}</span>
       <span className="min-w-0">
         <span className="flex flex-wrap items-center gap-2">
           <strong className="text-sm text-slate-950">{title}</strong>
           <em className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] not-italic font-bold text-slate-600">{status}</em>
         </span>
-        <span className="mt-1 block text-sm leading-5 text-slate-600">{description}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-slate-600">{description}</span>
       </span>
     </Link>
   );
 }
 
-function ActionRow({
-  href,
-  status,
-  title,
-  description
-}: {
-  href: string;
-  status: string;
-  title: string;
-  description: string;
-}) {
+function ActionRow({ href, status, title, description }: { href: string; status: string; title: string; description: string }) {
   return (
-    <Link className="flex min-h-[58px] items-center justify-between gap-4 px-4 py-3 transition hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500" href={href}>
+    <Link className="flex min-h-[52px] items-center justify-between gap-4 px-4 py-2.5 transition hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500" href={href}>
       <span className="min-w-0">
         <span className="flex flex-wrap items-center gap-2">
           <strong className="text-sm text-slate-950">{title}</strong>
           <em className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] not-italic font-bold text-slate-600">{status}</em>
         </span>
-        <span className="mt-1 block text-sm leading-5 text-slate-600">{description}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-slate-600">{description}</span>
       </span>
       <ArrowRight className="shrink-0 text-slate-400" size={15} />
     </Link>

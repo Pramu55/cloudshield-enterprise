@@ -19,6 +19,7 @@ import {
   RefreshCw,
   ScanLine,
   Search,
+  Settings,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -139,6 +140,16 @@ function scopedRecords<T extends SourceDescriptor>(
   return items.filter((item) =>
     scope === "real" ? isRealRecord(item, parent) : isSampleRecord(item, parent)
   );
+}
+
+function uniqueOptions(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b));
+}
+
+function highestSeverity(items: AnyRecord[]) {
+  const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
+  const severities = new Set(items.map((item) => String(item.severity ?? "").toUpperCase()));
+  return order.find((severity) => severities.has(severity)) ?? "NONE";
 }
 
 function ErrorAndRefresh({ error, isRefreshing, onRetry }: { error: ApiError | null; isRefreshing: boolean; onRetry?: () => void }) {
@@ -493,36 +504,147 @@ export function InventoryView() {
   const realCount = resources.filter((resource) => isRealRecord(resource, data)).length;
   const sampleCount = resources.filter((resource) => isSampleRecord(resource, data)).length;
   const [scope, setScope] = useState<DataScope>("real");
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [accountFilter, setAccountFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const effectiveScope = realCount === 0 && scope === "real" ? "combined" : scope;
-  const visibleResources = scopedRecords(resources, effectiveScope, data);
+  const scopedResources = scopedRecords(resources, effectiveScope, data);
+  const typeOptions = useMemo(() => uniqueOptions(resources.map((resource) => resource.resourceType)), [resources]);
+  const accountOptions = useMemo(() => uniqueOptions(resources.map((resource) => resource.awsAccountName ?? resource.awsAccountId)), [resources]);
+  const regionOptions = useMemo(() => uniqueOptions(resources.map((resource) => resource.region)), [resources]);
+  const visibleResources = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return scopedResources.filter((resource) => {
+      const source = text(sourceFor(resource, data), "").toUpperCase();
+      const searchable = [
+        resource.name,
+        resource.resourceId,
+        resource.resourceType,
+        resource.awsAccountId,
+        resource.awsAccountName,
+        resource.region,
+        resource.arn
+      ].map((value) => text(value, "").toLowerCase()).join(" ");
+      return (!needle || searchable.includes(needle))
+        && (typeFilter === "all" || resource.resourceType === typeFilter)
+        && (sourceFilter === "all" || source === sourceFilter)
+        && (accountFilter === "all" || resource.awsAccountId === accountFilter || resource.awsAccountName === accountFilter)
+        && (regionFilter === "all" || resource.region === regionFilter);
+    });
+  }, [accountFilter, data, query, regionFilter, scopedResources, sourceFilter, typeFilter]);
+  const clearFilters = () => {
+    setQuery("");
+    setTypeFilter("all");
+    setSourceFilter("all");
+    setAccountFilter("all");
+    setRegionFilter("all");
+  };
+  const toggleSelected = (id: string) => {
+    setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+  const sourceCounts = {
+    awsSync: resources.filter((resource) => sourceFor(resource, data) === "AWS_SYNC").length,
+    sample: resources.filter((resource) => isSampleRecord(resource, data)).length
+  };
 
   return (
     <>
       <PageHeader
         breadcrumbs={["Cloud", "Inventory"]}
-        title="Resource inventory"
-        description="Browse AWS resource records captured by CloudShield inventory syncs."
-        secondaryAction={<FilterBar><Search size={14} /> Search and filters are applied by the current API view.</FilterBar>}
+        eyebrow="Cloud governance"
+        title={`Inventory resources (${scopedResources.length})`}
+        description="Real AWS snapshot and sample resources from the CloudShield database. Browsing is DB-backed and safe; no live AWS refresh or scanner job is triggered."
+        status={<div className="flex flex-wrap gap-2"><SourceBadge source="AWS_SYNC" /><SourceBadge source="SAMPLE" /><StatusBadge status="DB_ONLY_READ_ONLY" /></div>}
+        primaryAction={<button type="button" className="cs-button" disabled title="Refresh is disabled because scanner mode is locked off.">Refresh disabled</button>}
+        secondaryAction={<PrimaryLink href="/dashboard/graph">View resource graph</PrimaryLink>}
       />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
+      <div className="aws-status-line" aria-label="Inventory safety state">
+        <SourceBadge source="AWS_SYNC" />
+        <SourceBadge source="DB_ONLY_READ_ONLY" />
+        <StatusBadge status="NO_LIVE_AWS_CALL" />
+        <StatusBadge status="SCANNER_DISABLED" />
+      </div>
       <DataScopeSelector scope={effectiveScope} onChange={setScope} realCount={realCount} sampleCount={sampleCount} />
-      <StatGroup>
-        <MetricTile label="Resources" value={visibleResources.length} tone="info" />
-        <MetricTile label="Accounts" value={new Set(visibleResources.map((resource: CloudResourceDto) => resource.awsAccountId)).size} />
-        <MetricTile label="Regions" value={new Set(visibleResources.map((resource: CloudResourceDto) => resource.region).filter(Boolean)).size} />
-      </StatGroup>
-      <Section title="Inventory records">
+      <Section
+        title="Inventory records"
+        description={`Showing ${visibleResources.length} of ${scopedResources.length} resources in the current data scope. ${resources.length} total loaded from the database.`}
+        icon={<Boxes size={16} />}
+        variant="operational"
+        noPadding
+      >
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <strong className="text-sm text-slate-900">Resources</strong>
+              <p className="m-0 text-xs text-slate-600">Showing {visibleResources.length} of {scopedResources.length} resources</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className="cs-button-secondary" disabled title="Refresh is disabled because AWS_INVENTORY_SCANNER_MODE is locked off."><RefreshCw size={14} /> Refresh disabled</button>
+              <button type="button" className="cs-button-secondary" title="Column settings are visual only in this slice."><Settings size={14} /> Settings</button>
+              <span className="text-xs font-bold text-slate-600">1-{visibleResources.length} of {scopedResources.length}</span>
+              <StatusBadge status={`${sourceCounts.awsSync} AWS_SYNC`} />
+              <StatusBadge status={`${sourceCounts.sample} SAMPLE`} />
+              <StatusBadge status="NO_AWS_CALL" />
+            </div>
+          </div>
+          <FilterBar>
+            <Search size={14} />
+            <input
+              aria-label="Search resources"
+              className="min-w-[260px] flex-1"
+              placeholder="Search resource name, type, account, region..."
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <select aria-label="Filter source" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+              <option value="all">All sources</option>
+              <option value="AWS_SYNC">AWS_SYNC</option>
+              <option value="SAMPLE">SAMPLE</option>
+            </select>
+            <select aria-label="Filter type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+              <option value="all">All types</option>
+              {typeOptions.map((type) => <option key={type} value={type}>{humanize(type)}</option>)}
+            </select>
+            <select aria-label="Filter account" value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)}>
+              <option value="all">All accounts</option>
+              {accountOptions.map((account) => <option key={account} value={account}>{account}</option>)}
+            </select>
+            <select aria-label="Filter region" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}>
+              <option value="all">All regions</option>
+              {regionOptions.map((region) => <option key={region} value={region}>{region}</option>)}
+            </select>
+            <button type="button" className="cs-button-secondary" onClick={clearFilters}>Clear filters</button>
+          </FilterBar>
+        </div>
         <DataTable
-          columns={["Resource", "Type", "Account", "Region", "Status", "Source"]}
+          columns={["", "Resource name", "Type", "Account", "Region", "Source", "Status", "Findings", "Last seen", "Actions"]}
           rows={visibleResources.map((resource: CloudResourceDto) => [
-            <ConsoleLink key="name" href={`/dashboard/inventory/${resource.id}`}>{text(resource.name ?? resource.resourceId, "Resource")}</ConsoleLink>,
+            <input key="select" type="checkbox" aria-label={`Select ${text(resource.name ?? resource.resourceId, "resource")}`} checked={selectedIds.includes(resource.id)} onChange={() => toggleSelected(resource.id)} />,
+            <div key="resource" className="flex flex-col gap-1">
+              <ConsoleLink href={`/dashboard/inventory/${resource.id}`}>{text(resource.name ?? resource.resourceId, "Resource")}</ConsoleLink>
+              <span className="font-mono text-xs text-slate-500">{text(resource.resourceId)}</span>
+            </div>,
             text(resource.resourceType),
-            <span key="account" className="font-mono text-xs">{text(resource.awsAccountId)}</span>,
+            <div key="account" className="flex flex-col">
+              <span>{text(resource.awsAccountName ?? resource.awsAccountId)}</span>
+              <span className="font-mono text-xs text-slate-500">{text(resource.awsAccountId)}</span>
+            </div>,
             text(resource.region),
-            <StatusBadge key="status" status={resource.status} />,
-            <SourceBadge key="source" source={sourceFor(resource, data)} />
+            <SourceBadge key="source" source={sourceFor(resource, data)} />,
+            <StatusBadge key="status" status={resource.status ?? "ACTIVE"} />,
+            <StatusBadge key="findings" status={resource.riskCount > 0 ? `${resource.riskCount} OPEN` : "NONE"} />,
+            formatDate(resource.lastSeenAt ?? resource.lastVerifiedAt ?? resource.firstSeenAt),
+            <div key="actions" className="flex flex-wrap gap-2">
+              <Link className="cs-button-secondary" href={`/dashboard/inventory/${resource.id}`}>Details</Link>
+              <Link className="cs-button-secondary" href="/dashboard/graph">Graph</Link>
+              <Link className="cs-button-secondary" href="/dashboard/security" title="Opens the findings workspace; resource-specific deep-linking is not available in this slice.">Findings</Link>
+            </div>
           ])}
-          empty={<PrimaryLink href="/dashboard/accounts">Configure read-only inventory</PrimaryLink>}
+          empty={<EmptyState title="No matching resources" description="Clear filters or confirm the database has inventory records." action={<button type="button" className="cs-button-secondary" onClick={clearFilters}>Clear filters</button>} />}
         />
       </Section>
     </>
@@ -530,53 +652,141 @@ export function InventoryView() {
 }
 
 export function ResourceDetailView({ resourceId }: { resourceId: string }) {
-  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>(`/api/v1/platform/resources/${resourceId}/detail`, emptyObject);
+  const { data, error, isRefreshing } = useCloudShieldData<AnyRecord>(`/api/v1/inventory/resources/${resourceId}/context`, emptyObject);
   const resource = data.resource ?? data;
-  const context = data.context ?? {};
+  const findings = pickArray(data, ["findings", "securityFindings"]);
   const relationships = pickArray(data, ["relationships", "edges", "connectedResources"]);
+  const [activeTab, setActiveTab] = useState("overview");
+  const source = data.sampleData ? "SAMPLE" : (resource.source ?? "AWS_SYNC");
+  const relationshipRows = relationships.map((item: AnyRecord) => {
+    const currentIsSource = item.source?.id === resourceId || item.sourceResourceId === resourceId;
+    const peer = currentIsSource ? item.target : item.source;
+    return {
+      resource: peer ?? item.targetResource ?? item.sourceResource ?? item,
+      relationship: item.relationshipType ?? item.relationship ?? item.type,
+      direction: currentIsSource ? "Outbound" : "Inbound"
+    };
+  });
 
   return (
     <>
       <PageHeader
         breadcrumbs={["Cloud", "Inventory", text(resource.resourceType ?? resource.type, "Resource")]}
+        eyebrow="Resource detail"
         title={text(resource.name ?? resource.resourceId ?? resource.arn ?? resourceId)}
-        description="Resource metadata, relationships, and security context returned by the API."
-        status={<StatusBadge status={resource.status ?? resource.state} />}
+        description="Database-backed resource metadata, relationships, findings, and governance context."
+        status={<div className="flex flex-wrap gap-2"><SourceBadge source={source} /><StatusBadge status="READ_ONLY" /></div>}
+        primaryAction={<button type="button" className="cs-button" disabled title="Remediation is disabled because change execution is locked off.">Remediation disabled</button>}
+        secondaryAction={<PrimaryLink href="/dashboard/inventory">Back to Inventory Explorer</PrimaryLink>}
       />
       <ErrorAndRefresh error={error} isRefreshing={isRefreshing} />
-      <div className="cs-two-column">
-        <Section title="Resource details">
-          <DetailList
-            items={[
-              { label: "Resource ID", value: <span className="font-mono text-xs">{text(resource.resourceId ?? resource.id ?? resourceId)}</span> },
-              { label: "ARN", value: <span className="font-mono text-xs">{text(resource.arn)}</span> },
-              { label: "Type", value: text(resource.type ?? resource.resourceType) },
-              { label: "Account", value: text(resource.awsAccountId ?? resource.accountId) },
-              { label: "Region", value: text(resource.region) },
-              { label: "Source", value: <SourceBadge source={sourceFor(resource, data)} /> }
-            ]}
-          />
-        </Section>
-        <Section title="Context">
-          <DetailList
-            items={[
-              { label: "Risk", value: <StatusBadge status={context.riskLevel ?? context.severity} /> },
-              { label: "Owner", value: text(context.owner ?? resource.owner) },
-              { label: "Updated", value: formatDate(resource.updatedAt ?? context.updatedAt) }
-            ]}
-          />
-        </Section>
+      <div className="aws-status-line" aria-label="Resource safety state">
+        <SourceBadge source="DB_ONLY_READ_ONLY" />
+        <StatusBadge status="NO_LIVE_AWS_CALL" />
+        <StatusBadge status="MUTATION_DISABLED" />
+        <StatusBadge status="REMEDIATION_DISABLED" />
       </div>
-      <Section title="Relationships">
-        <DataTable
-          columns={["Resource", "Relationship", "Status"]}
-          rows={relationships.map((item: AnyRecord) => [
-            text(item.name ?? item.targetResourceId ?? item.resourceId),
-            text(item.relationship ?? item.type),
-            <StatusBadge key="status" status={item.status ?? item.state} />
-          ])}
+      <Section title="Summary" description="Key resource metadata from the CloudShield inventory record." icon={<Boxes size={16} />} variant="detail">
+        <DetailList
+          items={[
+            { label: "Type", value: text(resource.type ?? resource.resourceType) },
+            { label: "Account", value: text(resource.awsAccount?.name ?? data.awsAccount?.name ?? resource.awsAccountId ?? resource.accountId) },
+            { label: "Region", value: text(resource.region) },
+            { label: "Findings", value: findings.length },
+            { label: "Relationships", value: relationships.length },
+            { label: "Last seen", value: formatDate(resource.lastSeenAt ?? data.lastSeenAt) }
+          ]}
         />
       </Section>
+      <div className="cs-tabs">
+        {[
+          { id: "overview", label: "Overview" },
+          { id: "relationships", label: "Relationships" },
+          { id: "findings", label: "Findings" },
+          { id: "metadata", label: "Tags / metadata" },
+          { id: "safety", label: "Safety policy" }
+        ].map(({ id, label }) => (
+          <button key={id} type="button" className={activeTab === id ? "cs-action-primary" : "cs-button-secondary"} onClick={() => setActiveTab(id)}>{label}</button>
+        ))}
+      </div>
+      {activeTab === "overview" ? <div className="cs-two-column">
+        <Section title="Resource details" icon={<Boxes size={16} />} variant="detail">
+          <DetailList
+            items={[
+              { label: "Resource ID", value: <span className="font-mono text-xs">{text(resource.resourceId ?? data.resourceId ?? resource.id ?? resourceId)}</span> },
+              { label: "ARN", value: <span className="font-mono text-xs">{text(resource.arn)}</span> },
+              { label: "Type", value: text(resource.type ?? resource.resourceType) },
+              { label: "Account", value: text(resource.awsAccount?.name ?? data.awsAccount?.name ?? resource.awsAccountId ?? resource.accountId) },
+              { label: "Region", value: text(resource.region) },
+              { label: "Source", value: <SourceBadge source={source} /> },
+              { label: "Last seen", value: formatDate(resource.lastSeenAt ?? data.lastSeenAt) }
+            ]}
+          />
+        </Section>
+        <Section title="Security posture" icon={<ShieldAlert size={16} />} variant="detail">
+          <DetailList
+            items={[
+              { label: "Open findings", value: findings.length },
+              { label: "Highest severity", value: <StatusBadge status={highestSeverity(findings)} /> },
+              { label: "Owner team", value: text(resource.ownerTeam?.name ?? data.ownerTeam?.name) },
+              { label: "Scan source", value: text(data.scanSource ?? source) }
+            ]}
+          />
+        </Section>
+      </div> : null}
+      {activeTab === "relationships" ? (
+        <Section title="Relationships" description="Local graph context from stored resource relationships." icon={<Network size={16} />}>
+          <DataTable
+            columns={["Connected resource", "Type", "Relationship", "Direction"]}
+            rows={relationshipRows.map((item: AnyRecord) => [
+              item.resource?.id ? <ConsoleLink key="peer" href={`/dashboard/inventory/${item.resource.id}`}>{text(item.resource.name ?? item.resource.resourceId)}</ConsoleLink> : text(item.resource?.name ?? item.resource?.resourceId),
+              text(item.resource?.resourceType),
+              text(item.relationship),
+              <StatusBadge key="direction" status={item.direction} />
+            ])}
+            empty={<EmptyState title="No relationships stored" description="This resource has no stored local graph relationships yet." />}
+          />
+        </Section>
+      ) : null}
+      {activeTab === "findings" ? (
+        <Section title="Related findings" description="Security findings linked to this resource." icon={<ShieldCheck size={16} />}>
+          <DataTable
+            columns={["Finding", "Severity", "Status", "Rule"]}
+            rows={findings.map((finding: AnyRecord) => [
+              <ConsoleLink key="finding" href={`/dashboard/security/${encodeURIComponent(finding.id)}`}>{text(finding.title)}</ConsoleLink>,
+              <StatusBadge key="severity" status={finding.severity} />,
+              <StatusBadge key="status" status={finding.status} />,
+              text(finding.ruleId)
+            ])}
+            empty={<EmptyState title="No findings linked" description="No security findings are currently associated with this resource." />}
+          />
+        </Section>
+      ) : null}
+      {activeTab === "metadata" ? (
+      <Section title="Metadata and tags" description="Sanitized metadata stored with the resource record." icon={<FileText size={16} />} variant="detail">
+        <DataTable
+          columns={["Field", "Value"]}
+          rows={[
+            ...Object.entries(resource.tags ?? data.tags ?? {}).slice(0, 12).map(([key, value]) => [`tag:${key}`, text(value)]),
+            ...Object.entries(resource.metadata ?? data.metadata ?? {}).slice(0, 12).map(([key, value]) => [`metadata:${key}`, text(value)])
+          ]}
+          empty={<EmptyState title="No metadata fields" description="No tags or metadata are stored for this resource." />}
+        />
+      </Section>
+      ) : null}
+      {activeTab === "safety" ? (
+        <Section title="Safety policy" description="Visible disabled reasons for cloud-side actions." icon={<ShieldAlert size={16} />} variant="warning">
+          <DetailList
+            items={[
+              { label: "Live refresh", value: "Disabled — scanner mode is locked off." },
+              { label: "Mutation", value: "Disabled — change execution mode is disabled." },
+              { label: "Remediation", value: "Disabled — executor role is not configured." },
+              { label: "Terraform apply", value: "Disabled — no apply workflow is exposed." },
+              { label: "Data source", value: "CloudShield database snapshot only." }
+            ]}
+          />
+        </Section>
+      ) : null}
     </>
   );
 }
