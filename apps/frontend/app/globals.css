@@ -4354,3 +4354,103 @@ a {
     inset: var(--cs-topbar-height) auto 0 0 !important;
   }
 }
+
+/* Targeted shell height / Copilot drawer placement fix. Keep this final. */
+:root {
+  --cs-topbar-height: 60px;
+}
+
+.cs-console-topbar {
+  height: var(--cs-topbar-height) !important;
+  min-height: var(--cs-topbar-height) !important;
+}
+
+.cs-console-topbar-left,
+.cs-console-topbar-right {
+  height: var(--cs-topbar-height) !important;
+  align-items: center !important;
+}
+
+.cs-console-app {
+  min-height: calc(100vh - var(--cs-topbar-height)) !important;
+}
+
+.cs-console-sidebar {
+  top: var(--cs-topbar-height) !important;
+  height: calc(100vh - var(--cs-topbar-height)) !important;
+}
+
+.cs-console-content {
+  min-height: calc(100vh - var(--cs-topbar-height) - 44px) !important;
+}
+
+.cs-console-launcher,
+.cs-console-icon-button {
+  width: 40px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  align-self: center !important;
+}
+
+.cs-console-brand,
+.cs-console-region,
+.cs-console-workspace,
+.cs-console-user,
+.cs-console-copilot-button {
+  height: 36px !important;
+  min-height: 36px !important;
+  align-self: center !important;
+}
+
+.console-command-search-field {
+  height: 36px !important;
+}
+
+.cs-app-launcher-menu,
+.portal-runtime-status,
+.portal-region,
+.cs-settings-menu,
+.portal-notifications,
+.portal-help,
+.portal-workspace,
+.portal-profile {
+  top: calc(var(--cs-topbar-height) + 4px) !important;
+}
+
+.copilot-backdrop {
+  inset: var(--cs-topbar-height) 0 0 0 !important;
+  height: calc(100vh - var(--cs-topbar-height)) !important;
+  z-index: 118 !important;
+}
+
+.copilot-panel {
+  top: var(--cs-topbar-height) !important;
+  height: calc(100vh - var(--cs-topbar-height)) !important;
+  max-height: calc(100vh - var(--cs-topbar-height)) !important;
+  z-index: 130 !important;
+}
+
+.copilot-header {
+  min-height: 56px !important;
+  flex-shrink: 0 !important;
+}
+
+.copilot-header button {
+  display: grid !important;
+  place-items: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+@media (max-width: 1023px) {
+  .portal-mobile-sidebar {
+    inset: var(--cs-topbar-height) auto 0 0 !important;
+  }
+
+  .portal-mobile-sidebar .cs-console-sidebar {
+    height: calc(100vh - var(--cs-topbar-height)) !important;
+  }
+}
