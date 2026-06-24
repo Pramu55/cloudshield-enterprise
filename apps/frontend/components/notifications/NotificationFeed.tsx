@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useCloudShieldData } from "../../lib/client-api";
 import { Bell, AlertTriangle, Info, CheckCircle, Clock } from "lucide-react";
@@ -7,6 +7,7 @@ import { formatDate } from "../../app/dashboard/shared";
 
 export function NotificationFeed() {
   const { data, error, isRefreshing } = useCloudShieldData<NotificationListResponse>("/api/v1/notifications", { items: [] });
+  const [tab, setTab] = useState("Most recent");
 
   const notifications = data?.items || [];
 
@@ -30,6 +31,13 @@ export function NotificationFeed() {
         <span className="text-slate-900">Notifications</span>
         <Link href="/dashboard/monitoring" className="text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">Open monitoring</Link>
       </div>
+      <div className="portal-notification-tabs" role="tablist" aria-label="Notification categories">
+        {["Most recent", "User configured", "CloudShield managed"].map((label) => (
+          <button key={label} type="button" role="tab" aria-selected={tab === label} data-active={tab === label} onClick={() => setTab(label)}>
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {error ? (
           <div className="py-10 px-6 text-center text-sm text-slate-600">
@@ -42,8 +50,8 @@ export function NotificationFeed() {
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center">
               <CheckCircle size={24} className="text-emerald-500" />
             </div>
-            <p className="font-semibold text-slate-900">You're all caught up!</p>
-            <p className="text-xs text-slate-400">New alerts and operational updates will appear here.</p>
+            <p className="font-semibold text-slate-900">No {tab.toLowerCase()} notifications</p>
+            <p className="text-xs text-slate-400">Read-only local notifications will appear here. No AWS call is made by this popover.</p>
           </div>
         ) : (
           notifications.map(n => (
