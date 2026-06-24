@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Activity, ArrowRight, Ban, Clock3, Cloud, Database, FileCheck2, FileJson, Lock, Network, Settings, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ArrowRight, Ban, Cloud, FileCheck2, FileJson, Network, Settings, ShieldAlert } from "lucide-react";
 import { fetchCloudShieldClient } from "../../lib/client-api";
 import { toApiError, type ApiError } from "../../lib/api-error";
 import {
@@ -11,15 +11,7 @@ import {
 } from "../../lib/response-contracts";
 import { ErrorState } from "../../components/ui/error-state";
 import { LoadingState } from "../../components/ui/loading-state";
-import { MetricTile, PageHeader, Section, SourceBadge, StatGroup, StatusBadge } from "./shared";
-
-function formatTimestamp(value: string | null) {
-  if (!value) return "No stored evaluation";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
-}
+import { PageHeader, Section, SourceBadge, StatusBadge } from "./shared";
 
 function scoreStatusLabel(status: FrontendExecutiveDashboardSummary["posture"]["scoreStatus"]) {
   const labels = {
@@ -71,7 +63,7 @@ export default function DashboardPage() {
     return <Section title="Executive governance dashboard"><p className="text-sm text-slate-600">No organization-scoped dashboard data is available.</p></Section>;
   }
 
-  const { posture, security, risk, compliance, evidence, operations } = data;
+  const { posture, security, compliance, evidence } = data;
   const findingPenalty = posture.scoreFactors
     .filter((factor) => factor.label.toLowerCase().includes("findings"))
     .reduce((total, factor) => total + factor.impact, 0);
@@ -101,23 +93,7 @@ export default function DashboardPage() {
         }
       />
 
-      <Section
-        title="Runtime safety posture"
-        description="This is a deliberate locked state, not an outage. CloudShield remains useful for review, evidence, and DB-backed governance while dangerous actions stay disabled."
-        icon={<Lock size={16} />}
-        variant="operational"
-      >
-        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <SafetyChip label="Scanner" value="Disabled" tone="info" />
-          <SafetyChip label="Change execution" value="Disabled" tone="warning" />
-          <SafetyChip label="Executor" value="Not configured" tone="warning" />
-          <SafetyChip label="Remediation" value="Disabled" tone="warning" />
-          <SafetyChip label="Terraform apply" value="Disabled" tone="warning" />
-          <SafetyChip label="Reports" value="DB-only" tone="info" />
-        </div>
-      </Section>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <ConsoleMetricCard
           href="/dashboard/reports"
           label="Governance score"
@@ -155,159 +131,73 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_.9fr]">
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+        <div className="flex flex-wrap items-center gap-3">
+          <strong className="text-slate-900">Why the executive score differs from account security</strong>
+          <span>Security finding penalty: {findingPenalty}</span>
+          <span>Compliance control penalty: {compliancePenalty}</span>
+          <span>Other governance penalty: {governancePenalty}</span>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.05fr_.95fr]">
         <Section
-          title="Service hub"
-          description="Open real CloudShield workspaces. Every card routes somewhere useful; no dead service tiles."
+          title="Cloud services"
+          description="Compact service entry points backed by existing CloudShield routes."
           icon={<Cloud size={16} />}
           variant="action"
         >
-          <div className="grid gap-3 md:grid-cols-2">
-            <ServiceHubCard href="/dashboard/accounts" icon={<Cloud size={18} />} title="AWS Accounts" status="Read-only validation" description="Inspect account connection status, onboarding preflight, scanner gates, and registry metadata." />
-            <ServiceHubCard href="/dashboard/inventory" icon={<Network size={18} />} title="Inventory Explorer" status="AWS_SYNC labeled" description="Browse stored resources, provenance labels, regions, and resource detail routes." />
-            <ServiceHubCard href="/dashboard/security" icon={<ShieldAlert size={18} />} title="Security Findings" status={`${security.openFindings} open`} description="Review finding severity, workflow state, affected resources, and evidence history." />
-            <ServiceHubCard href="/dashboard/compliance" icon={<FileCheck2 size={18} />} title="Compliance Controls" status="Readiness only" description="Map internal controls to evidence. No official certification claim is made." />
-            <ServiceHubCard href="/dashboard/reports" icon={<FileJson size={18} />} title="Governance Reports" status="DB-only export" description="Open report previews and real governance proof JSON export when available." />
-            <ServiceHubCard href="/dashboard/settings" icon={<Settings size={18} />} title="Runtime Safety" status="Locked" description="Review workspace settings and operational safety posture." />
+          <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <ServiceRow href="/dashboard/accounts" icon={<Cloud size={17} />} title="AWS Accounts" status="Read-only validation" description="Account posture, onboarding preflight, and scanner gates." />
+            <ServiceRow href="/dashboard/inventory" icon={<Network size={17} />} title="Inventory Explorer" status="AWS_SYNC labeled" description="Stored resources, source labels, regions, and detail routes." />
+            <ServiceRow href="/dashboard/graph" icon={<Network size={17} />} title="Resource Graph" status="DB relationships" description="Topology and resource relationships from CloudShield records." />
+            <ServiceRow href="/dashboard/security" icon={<ShieldAlert size={17} />} title="Security Findings" status={`${security.openFindings} open`} description="Findings, workflow state, affected resources, and evidence history." />
+            <ServiceRow href="/dashboard/compliance" icon={<FileCheck2 size={17} />} title="Compliance Controls" status="Readiness only" description="Internal control mapping; no official certification claim." />
+            <ServiceRow href="/dashboard/reports" icon={<FileJson size={17} />} title="Reports" status="DB-only export" description="Governance proof JSON and report previews." />
           </div>
         </Section>
 
         <Section
-          title="Disabled dangerous actions"
-          description="Visible disabled states explain why risky operations are unavailable."
-          icon={<Ban size={16} />}
-          variant="warning"
+          title="Action center"
+          description="Recommended next clicks. Each row routes to a real workspace."
+          icon={<ArrowRight size={16} />}
+          variant="insight"
         >
-          <div className="space-y-3">
-            <DisabledActionCard title="Inventory sync disabled" body="Scanner mode is disabled outside explicit approved sync windows. Existing AWS_SYNC data remains available for review." />
-            <DisabledActionCard title="Remediation disabled" body="Automatic remediation requires a future approval model and executor role. Current workflows are review-only." />
-            <DisabledActionCard title="Terraform apply disabled" body="CloudShield may present review guidance, but it does not run Terraform plan/apply in this release." />
-          </div>
-        </Section>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_2fr]">
-        <Section title="Executive posture" icon={<ShieldCheck size={16} />} variant="insight">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-sm text-slate-500">Deterministic governance score</p>
-              <strong className="mt-2 block text-5xl font-black text-slate-950">
-                {posture.executiveScore === null ? scoreStatusLabel(posture.scoreStatus) : posture.executiveScore}
-              </strong>
-              <p className="mt-2 text-sm text-slate-600">{posture.reason}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <SourceBadge source={posture.dataSource} />
-                {posture.scoreStatus === "STALE" ? <StatusBadge status="STALE" /> : null}
-              </div>
-            </div>
-            <div className="text-right">
-              <StatusBadge status={posture.overallStatus} />
-              <p className="mt-3 text-sm font-semibold text-slate-700">{posture.criticalAttentionCount} critical attention items</p>
-              <p className="text-xs text-slate-500">Evidence freshness: {posture.dataFreshnessStatus}</p>
-              <p className="text-xs text-slate-500">Last evaluated: {formatTimestamp(posture.lastEvaluatedAt)}</p>
-            </div>
-          </div>
-          <div className="mt-6 space-y-2 border-t border-slate-200 pt-4">
-            {posture.scoreFactors.length ? posture.scoreFactors.map((factor) => (
-              <div key={factor.label} className="flex justify-between gap-4 text-sm">
-                <span className="text-slate-600">{factor.label}</span>
-                <strong className="text-red-700">{factor.impact}</strong>
-              </div>
-            )) : <p className="text-sm text-slate-600">No score deductions from current stored records.</p>}
-          </div>
-        </Section>
-
-        <Section title="Executive attention" icon={<ShieldAlert size={16} />} variant="action">
-          <div className="grid gap-3">
-            {data.recommendations.map((recommendation) => (
-              <Link key={`${recommendation.priority}-${recommendation.title}`} href={recommendation.link} className="rounded-xl border border-slate-200 bg-white p-4 hover:border-orange-300">
-                <div className="flex items-center justify-between gap-3">
-                  <strong className="text-slate-900">{recommendation.title}</strong>
-                  <StatusBadge status={recommendation.priority} />
-                </div>
-                <p className="mt-2 text-sm text-slate-600">{recommendation.description}</p>
-              </Link>
-            ))}
+          <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <ActionRow href="/dashboard/compliance" status={compliance.failingControls ? "Needs review" : "Ready"} title="Review failing control mappings" description={`${compliance.failingControls} failing · ${compliance.unknownControls} unknown controls`} />
+            <ActionRow href="/dashboard/security" status={security.openFindings ? "Open" : "Clear"} title="Review active findings" description={`${security.openFindings} open findings from stored posture records`} />
+            <ActionRow href="/dashboard/reports" status="DB-only" title="Export governance proof" description="Open report previews and real governance proof export routes." />
+            <ActionRow href="/dashboard/accounts" status="Posture" title="Review account posture" description={`${posture.connectedAccountCount} connected account(s), ${posture.awsSyncedResourceCount} AWS_SYNC resources`} />
+            <ActionRow href="/dashboard/settings" status="Locked" title="Check runtime safety" description="Scanner, change execution, remediation, and Terraform remain disabled." />
           </div>
         </Section>
       </div>
 
       <Section
-        title="Why the executive score differs from account security"
-        description="The account score measures active AWS_SYNC finding severity. The executive score also includes compliance and governance deductions."
-        icon={<Database size={16} />}
-        variant="evidence"
+        title="Disabled by design"
+        description="CloudShield keeps the review experience useful while high-risk operations stay unavailable."
+        icon={<Ban size={16} />}
+        variant="warning"
       >
-        <div className="grid gap-3 sm:grid-cols-3">
-          <MetricTile label="Security finding penalty" value={findingPenalty} detail="AWS_SYNC findings" tone={findingPenalty < 0 ? "warning" : "success"} />
-          <MetricTile label="Compliance control penalty" value={compliancePenalty} detail="Failing projected controls" tone={compliancePenalty < 0 ? "warning" : "success"} />
-          <MetricTile label="Other governance penalty" value={governancePenalty} detail="Expired acceptances or other factors" tone={governancePenalty < 0 ? "warning" : "success"} />
+        <div className="grid gap-2 lg:grid-cols-3">
+          <DisabledActionRow title="Inventory sync disabled" body="Scanner mode is disabled outside explicit approved sync windows." />
+          <DisabledActionRow title="Remediation disabled" body="Requires a future approval model and executor role; current workflows are review-only." />
+          <DisabledActionRow title="Terraform apply disabled" body="CloudShield does not run Terraform plan/apply in this release." />
         </div>
-        <p className="mt-4 text-sm text-slate-600">
-          Executive score = 100 plus the deductions above. It is a broader governance score, not a duplicate of an individual account security score.
-        </p>
       </Section>
 
-      <StatGroup>
-        <LinkedMetricTile href="/dashboard/security" label="Open findings" value={security.openFindings} detail={`${security.totalFindings} total`} tone={security.openFindings ? "danger" : "success"} icon={<ShieldAlert size={16} />} />
-        <LinkedMetricTile href="/dashboard/security" label="Acknowledged" value={security.acknowledgedFindings} />
-        <LinkedMetricTile href="/dashboard/security" label="Assigned" value={security.assignedFindings} />
-        <LinkedMetricTile href="/dashboard/risk-acceptances" label="Risk accepted" value={security.riskAcceptedFindings} tone="warning" />
-        <LinkedMetricTile href="/dashboard/security" label="Resolved" value={security.resolvedFindings} tone="success" />
-      </StatGroup>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="Accepted risk governance" icon={<Clock3 size={16} />}>
-          <div className="grid grid-cols-2 gap-3">
-            <MetricTile label="Total" value={risk.totalAcceptedRisks} />
-            <MetricTile label="Active" value={risk.activeAcceptedRisks} tone="success" />
-            <MetricTile label="Expiring soon" value={risk.expiringSoonAcceptedRisks} tone="warning" />
-            <MetricTile label="Expired" value={risk.expiredAcceptedRisks} tone={risk.expiredAcceptedRisks ? "danger" : "neutral"} />
-          </div>
-          <Link className="cs-link mt-5 inline-flex" href="/dashboard/risk-acceptances">Open Risk Acceptance Center</Link>
-        </Section>
-
-        <Section title="Compliance control posture" icon={<FileCheck2 size={16} />}>
-          <div className="grid grid-cols-2 gap-3">
-            <MetricTile label="Failing" value={compliance.failingControls} tone={compliance.failingControls ? "danger" : "neutral"} />
-            <MetricTile label="Accepted risk" value={compliance.acceptedRiskControls} tone="warning" />
-            <MetricTile label="Passing" value={compliance.passingControls} tone="success" />
-            <MetricTile label="Unknown" value={compliance.unknownControls} />
-          </div>
-          <Link className="cs-link mt-5 inline-flex" href="/dashboard/compliance">Open Compliance Evidence Mapping</Link>
-        </Section>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="Immutable evidence" icon={<Database size={16} />} variant="evidence">
-          <StatGroup>
-            <LinkedMetricTile href="/dashboard/compliance" label="Snapshots" value={evidence.totalSnapshots} />
-            <LinkedMetricTile href="/dashboard/compliance" label="Coverage" value={`${evidence.evidenceCoveragePercent}%`} />
-            <LinkedMetricTile href="/dashboard/compliance" label="Last 7 days" value={evidence.snapshotsLast7d} />
-          </StatGroup>
-          <p className="mt-4 text-sm text-slate-600">Latest snapshot: {formatTimestamp(evidence.latestSnapshotAt)}</p>
-        </Section>
-
-        <Section title="Operations and safety" icon={<Activity size={16} />} variant="operational">
-          <div className="grid grid-cols-2 gap-3">
-            <MetricTile label="Backend" value={operations.backendReady ? "Ready" : "Unavailable"} tone={operations.backendReady ? "success" : "danger"} />
-            <MetricTile label="Database" value={operations.databaseConnected ? "Connected" : "Unavailable"} tone={operations.databaseConnected ? "success" : "danger"} />
-            <MetricTile label="Redis" value={operations.redisConfigured ? "Configured" : "Unavailable"} />
-            <MetricTile label="Safety mode" value="DB only" tone="info" />
-          </div>
-          <p className="mt-4 text-sm text-slate-600">Last evaluation: {formatTimestamp(operations.lastEvaluationAt)}</p>
-          <Link className="cs-link mt-3 inline-flex" href="/dashboard/monitoring">Open monitoring</Link>
-        </Section>
-      </div>
-
-      <Section title="Data provenance" description="All dashboard metrics are derived from current organization-scoped database records.">
-        <div className="flex flex-wrap gap-2">
+      <footer className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+        <div className="flex flex-wrap items-center gap-2">
+          <strong className="mr-1 text-xs uppercase tracking-wide text-slate-500">Data provenance</strong>
           {data.provenance.findingSources.map((source) => <SourceBadge key={`finding-${source}`} source={source} />)}
           {data.provenance.resourceSources.map((source) => <SourceBadge key={`resource-${source}`} source={source} />)}
           <SourceBadge source="DB_ONLY_READ_ONLY" />
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">
+            Compliance readiness, not certification
+          </span>
         </div>
         {data.provenance.sampleDataPresent ? <p className="mt-3 text-sm font-semibold text-amber-700">Sample/demo records are present and visibly classified.</p> : null}
-      </Section>
+      </footer>
     </div>
   );
 }
@@ -326,21 +216,21 @@ function ConsoleMetricCard({
   tone: "success" | "warning" | "danger" | "neutral";
 }) {
   return (
-    <Link className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500" href={href}>
+    <Link className="group min-h-[112px] rounded-xl border border-slate-200 bg-white p-3.5 transition hover:border-blue-300 hover:bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" href={href}>
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</span>
         <span className="text-slate-400 transition group-hover:text-blue-600"><ArrowRight size={15} /></span>
       </div>
-      <strong className="mt-3 block text-3xl font-black tracking-tight text-slate-950">{value}</strong>
-      <p className="mt-2 text-xs leading-5 text-slate-600">{detail}</p>
-      <span className="mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-bold" data-tone={tone}>
+      <strong className="mt-2 block text-2xl font-black tracking-tight text-slate-950">{value}</strong>
+      <p className="mt-1 text-xs leading-5 text-slate-600">{detail}</p>
+      <span className="mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold" data-tone={tone}>
         Open workspace
       </span>
     </Link>
   );
 }
 
-function ServiceHubCard({
+function ServiceRow({
   href,
   icon,
   title,
@@ -354,8 +244,8 @@ function ServiceHubCard({
   description: string;
 }) {
   return (
-    <Link className="flex gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" href={href}>
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-blue-700">{icon}</span>
+    <Link className="flex min-h-[58px] items-center gap-3 px-4 py-3 transition hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500" href={href}>
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-blue-700">{icon}</span>
       <span className="min-w-0">
         <span className="flex flex-wrap items-center gap-2">
           <strong className="text-sm text-slate-950">{title}</strong>
@@ -367,37 +257,39 @@ function ServiceHubCard({
   );
 }
 
-function SafetyChip({
-  label,
-  value,
-  tone
+function ActionRow({
+  href,
+  status,
+  title,
+  description
 }: {
-  label: string;
-  value: string;
-  tone: "info" | "warning";
+  href: string;
+  status: string;
+  title: string;
+  description: string;
 }) {
   return (
-    <div className={`rounded-xl border p-3 ${tone === "info" ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
-      <span className={`block text-xs font-bold ${tone === "info" ? "text-blue-700" : "text-amber-800"}`}>{label}</span>
-      <strong className="mt-1 block text-sm text-slate-950">{value}</strong>
-    </div>
-  );
-}
-
-function DisabledActionCard({ title, body }: { title: string; body: string }) {
-  return (
-    <article className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-      <strong className="text-sm text-amber-950">{title}</strong>
-      <p className="mt-1 text-sm leading-5 text-amber-900">{body}</p>
-    </article>
-  );
-}
-
-function LinkedMetricTile(props: React.ComponentProps<typeof MetricTile> & { href: string }) {
-  const { href, ...tileProps } = props;
-  return (
-    <Link className="block rounded-2xl transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500" href={href}>
-      <MetricTile {...tileProps} />
+    <Link className="flex min-h-[58px] items-center justify-between gap-4 px-4 py-3 transition hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500" href={href}>
+      <span className="min-w-0">
+        <span className="flex flex-wrap items-center gap-2">
+          <strong className="text-sm text-slate-950">{title}</strong>
+          <em className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] not-italic font-bold text-slate-600">{status}</em>
+        </span>
+        <span className="mt-1 block text-sm leading-5 text-slate-600">{description}</span>
+      </span>
+      <ArrowRight className="shrink-0 text-slate-400" size={15} />
     </Link>
+  );
+}
+
+function DisabledActionRow({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex min-h-[58px] items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+      <Ban className="mt-0.5 shrink-0 text-amber-700" size={15} />
+      <span>
+        <strong className="block text-sm text-amber-950">{title}</strong>
+        <span className="mt-0.5 block text-xs leading-5 text-amber-900">{body}</span>
+      </span>
+    </div>
   );
 }
