@@ -1,10 +1,14 @@
 # CloudShield Enterprise
-**Future-Scope Enterprise AWS Governance, Security Posture, and Compliance Platform Foundation**
+**Read-Only AWS Governance, Security Posture, Compliance Evidence, and Platform Reliability Foundation**
 
 Current release classification:
-`CLOUDSHIELD_AWS_UNVERIFIED_RELEASE_CANDIDATE_v0.5.0`
+`CLOUDSHIELD_READONLY_AWS_GOVERNANCE_RELEASE_CANDIDATE_v0.6.0`
 
-This classification means local runtime and mocked read-only scanner behavior are validated. No real AWS account validation or production deployment is claimed.
+This classification means CloudShield has completed a real read-only Track 2
+AWS sandbox proof and is locked back into a safe local runtime. Real AWS STS
+identity validation and a narrow read-only EC2/VPC inventory proof were
+completed. Production customer deployment, official certification, autonomous
+remediation, Terraform apply, and AWS mutation are not claimed.
 
 CloudShield Enterprise is a company IT / client-evaluation-ready governance platform foundation. It provides a real-world deployment architecture for managing AWS account governance, evaluating security posture against CIS/SOC2-inspired controls, maintaining a cloud asset inventory, tracking compliance evidence, and coordinating approval-based remediation planning.
 
@@ -33,19 +37,25 @@ CloudShield is built using a modern, scalable, and type-safe stack:
 
 ### ✅ Implemented Capabilities
 - Local Runtime Foundation (Dockerized)
-- Tenant & Auth Boundaries (Mocked auth for demo)
+- Tenant & Auth Boundaries
+- Real AWS STS Identity Validation Proof
+- Real Read-Only AWS EC2/VPC Inventory Proof
 - Security Posture Rules Engine
 - Risk Workflow & Ownership
 - Compliance Evidence Center
 - Reports & Exports Foundation
 - Executive Dashboard & Demo Flow
 - Governed Remediation Operations Foundation
+- Worker Lifecycle Audit Events
+- DB-Only Operational Proof Endpoint
 
 ### 🚫 Intentionally Disabled Capabilities
 For safety and evaluation purposes, the following are strictly disabled:
 - Live AWS Mutation
 - Automatic Remediation
 - Terraform Apply
+- Inventory Sync Outside Separately Approved Read-Only Windows
+- Executor Role Usage
 
 ### Safety Model
 - **Read-Only**: The platform operates in a strict read-only mode. Live connections only permit read/identity actions.
@@ -91,6 +101,7 @@ Access the dashboard at `http://localhost:3100/login` with:
 * **Premium Product Workspaces**: Inner pages use command-center heroes, readiness journeys, timelines, detail blades, status matrices, and richer operator workflows beyond basic dashboard cards.
 * **No Somatic Client Deployments**: CloudShield is client-evaluation ready, but is *not* deployed to Accenture, and Accenture is not a customer.
 * **No Official Certifications**: Compliance rules are CIS-inspired and SOC2-inspired for demonstrating evidence workflows. No official CIS or SOC2 certification is claimed.
+* **No Production Customer Claim**: CloudShield is portfolio/demo and pilot-foundation work. It is not claimed as deployed to a paying or production customer.
 
 
 **Note**: A premium public landing page is now available at / which guides users into the console login flow (/login), highlighting platform capabilities and safety constraints without claiming official compliance or real client deployments.
@@ -128,8 +139,15 @@ CloudShield now has a canonical platform core for database-backed enterprise ope
 - Source classification distinguishes `SAMPLE`, `AWS_SYNC`, `RULE_ENGINE`, `MANUAL`, `IMPORT`, and `SYSTEM` records.
 - Settings changes are audit-first and do not expose or accept secrets.
 - Platform operations health reports API, Redis/queue state, scan state, scanner mode, and execution mode without infrastructure secrets.
+- `GET /api/v1/platform/operational-proof` returns auth-required, tenant-scoped
+  DB-only operational proof covering scan counts, audit event counts, inventory
+  worker lifecycle audit counts, evidence counts, report counts, and safety
+  flags. It does not call AWS, Redis, Docker, or BullMQ.
 
-Real AWS sandbox validation is still pending explicit authorization. Production execution, Terraform apply, arbitrary AWS commands, and autonomous remediation remain blocked.
+Real AWS sandbox validation and the approved read-only inventory proof are
+complete. The runtime is now locked with scanner disabled, change execution
+disabled, and executor role unconfigured. Production execution, Terraform apply,
+arbitrary AWS commands, and autonomous remediation remain blocked.
 
 ## Multi-Account Inventory Engine
 
@@ -142,4 +160,25 @@ CloudShield now includes a worker-driven multi-account, multi-region inventory o
 
 See `docs/MULTI_ACCOUNT_INVENTORY_ENGINE.md`, `docs/INVENTORY_SCAN_LIFECYCLE.md`, `docs/INVENTORY_RECONCILIATION.md`, and `docs/INVENTORY_COVERAGE_MODEL.md`.
 
-Real AWS sandbox validation remains pending. AWS scanning is still disabled by default and no real AWS validation is performed as part of this milestone.
+The Track 2 proof completed one real read-only EC2/VPC inventory slice. AWS
+scanning is disabled after proof and must not be rerun without separate
+operator approval.
+
+## Final Release Package And Free-Tier Closeout
+
+The current platform closeout package is documented in
+`docs/FINAL_PLATFORM_RELEASE_PACKAGE_AND_FREE_TIER_CLOSEOUT.md`.
+
+It captures:
+
+- final platform capability matrix;
+- final safety proof and preflight GREEN shape;
+- June 30 AWS free-tier closeout checklist;
+- final demo flow;
+- portfolio/resume bullets;
+- explicit non-claims and future scope.
+
+The closeout package is documentation-only. It does not call AWS, trigger STS
+validation, trigger inventory sync, enable scanner mode, enable change
+execution, configure an executor role, run remediation, run Terraform, delete
+Docker volumes, reset Prisma, or print secrets.

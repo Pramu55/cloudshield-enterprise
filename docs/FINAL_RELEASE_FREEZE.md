@@ -24,6 +24,9 @@ full AWS inventory coverage.
 
 Latest relevant commits:
 
+- `f9f36cc feat: add DB-only operational proof endpoint`
+- `49263da feat: audit inventory worker lifecycle events`
+- `881d6b3 chore: restore locked local runtime startup protocol`
 - `0cbdd90 chore: add production readiness preflight`
 - `9cf118a feat: add real AWS governance proof report`
 - `de4977d feat: clarify real compliance and evidence posture`
@@ -50,6 +53,9 @@ Do not create this tag until explicitly approved.
 - Executive governance score projection: GREEN.
 - Real AWS governance proof JSON report/export: GREEN.
 - Production-readiness preflight: GREEN.
+- Locked local runtime startup protocol: GREEN.
+- Inventory worker lifecycle audit events: GREEN.
+- DB-only operational proof endpoint: GREEN.
 - Final release freeze documentation: prepared in this milestone.
 
 ## Real Track 2 AWS Proof Summary
@@ -138,6 +144,21 @@ Preflight status: GREEN
 The preflight makes no AWS calls and prints only booleans, modes, and safe
 runtime metadata.
 
+## Platform Reliability Closeout Addendum
+
+After the Track 2 proof package, CloudShield added a small platform reliability
+hardening slice without changing AWS behavior:
+
+- locked local runtime startup protocol using ignored local environment files;
+- persisted inventory worker lifecycle audit events for worker success/failure;
+- `GET /api/v1/platform/operational-proof`, an auth-required and tenant-scoped
+  DB-only operational proof endpoint.
+
+The operational proof endpoint summarizes scan counts, audit event counts,
+inventory worker lifecycle audit counts, evidence counts, report/export counts,
+and safety flags. It does not call AWS, Redis, Docker, BullMQ, inventory sync,
+remediation, mutation, Terraform, or external services.
+
 ## Safety Controls
 
 Required locked runtime:
@@ -194,6 +215,7 @@ process intentionally makes no AWS calls.
 ## GitHub-Ready Release Checklist
 
 - [ ] Review this release freeze document.
+- [ ] Review `docs/FINAL_PLATFORM_RELEASE_PACKAGE_AND_FREE_TIER_CLOSEOUT.md`.
 - [ ] Review `docs/FINAL_DEMO_SCRIPT.md`.
 - [ ] Review `docs/PORTFOLIO_PROJECT_SUMMARY.md`.
 - [ ] Confirm `pnpm.cmd production:preflight` is GREEN.

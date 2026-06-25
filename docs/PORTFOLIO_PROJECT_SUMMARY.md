@@ -54,6 +54,12 @@ enabled.
 - Added real/sample data separation across governance views and reports.
 - Added a database-only JSON governance proof report/export endpoint.
 - Added a production-readiness preflight proving locked runtime guardrails.
+- Added a locked local runtime startup protocol for repeatable safe demos.
+- Added sanitized inventory worker lifecycle audit events for success/failure
+  linkage across account, scan run, job, and correlation context.
+- Added a DB-only operational proof endpoint that summarizes scans, audit
+  events, evidence, reports, and safety flags without AWS, Redis, Docker, or
+  BullMQ calls.
 - Documented final release freeze, demo flow, and portfolio positioning.
 
 ## Impact Metrics
@@ -119,6 +125,8 @@ SRE / Platform Engineer:
 - Developed health/readiness and release preflight checks covering backend,
   frontend, PostgreSQL readiness, worker runtime guardrails, and safe
   environment projection.
+- Implemented worker lifecycle audit events and DB-only operational proof for
+  platform reliability validation without external service dependencies.
 - Modeled cloud resources, relationships, findings, evidence, and reports in a
   tenant-scoped Postgres/Prisma data model.
 - Added deterministic validation, typechecks, response-contract assertions, and
@@ -129,6 +137,8 @@ Security / Governance Engineer:
 - Implemented deterministic posture evaluation over real read-only AWS_SYNC
   resources, generating 12 findings and 12 evidence snapshots with 100%
   evidence coverage.
+- Preserved tenant-scoped evidence and audit linkage while excluding secrets,
+  raw provider payloads, External IDs, and credentials from API outputs.
 - Built internal governance scoring and JSON evidence export flows while
   avoiding official certification claims and preventing secret exposure.
 - Separated sample/demo and real AWS evidence paths to avoid misleading
