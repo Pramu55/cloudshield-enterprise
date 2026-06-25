@@ -251,15 +251,19 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     const skip = (Math.max(Number(page) || 1, 1) - 1) * take;
 
     const whereClause: any = {
-      ...scopeByOrganization(auth.organizationId)
+      ...scopeByOrganization(auth.organizationId),
+      AND: []
     };
 
     if (accountId || account) {
-      whereClause.OR = [
-        { awsAccountId: accountId || account },
-        { awsAccount: { accountId: accountId || account } },
-        { awsAccount: { name: accountId || account } }
-      ];
+      const accountFilter = accountId || account;
+      whereClause.AND.push({
+        OR: [
+          { awsAccountId: accountFilter },
+          { awsAccount: { accountId: accountFilter } },
+          { awsAccount: { name: accountFilter } }
+        ]
+      });
     }
     if (region) {
       whereClause.region = region;
@@ -290,23 +294,28 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       whereClause.staleAt = { not: null };
     }
     if (tag) {
-      whereClause.OR = [
-        ...(whereClause.OR || []),
-        { name: { contains: tag, mode: "insensitive" } },
-        { resourceId: { contains: tag, mode: "insensitive" } }
-      ];
+      whereClause.AND.push({
+        OR: [
+          { name: { contains: tag, mode: "insensitive" } },
+          { resourceId: { contains: tag, mode: "insensitive" } }
+        ]
+      });
     }
     if (search) {
-      whereClause.OR = [
-        ...(whereClause.OR || []),
-        { name: { contains: search, mode: "insensitive" } },
-        { resourceId: { contains: search, mode: "insensitive" } },
-        { resourceType: { contains: search, mode: "insensitive" } },
-        { arn: { contains: search, mode: "insensitive" } }
-      ];
+      whereClause.AND.push({
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { resourceId: { contains: search, mode: "insensitive" } },
+          { resourceType: { contains: search, mode: "insensitive" } },
+          { arn: { contains: search, mode: "insensitive" } }
+        ]
+      });
     }
     if (risk === "at_risk" || risk === "high" || risk === "true") {
       whereClause.riskCount = { gt: 0 };
+    }
+    if (whereClause.AND.length === 0) {
+      delete whereClause.AND;
     }
 
     const allowedSorts = new Set(["resourceType", "name", "region", "lastSeenAt", "lastVerifiedAt", "createdAt", "riskCount"]);
@@ -348,7 +357,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       },
       filters: { accountId: accountId || account || null, region: region || null, type: type || null, source: source || null, freshness: freshness || null, lifecycle: lifecycle || null, search: search || tag || null },
       limit: take,
-      items: resources
+      items: resources.map(sanitizeInventoryResource)
     };
   });
 
@@ -396,6 +405,36 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       items: recommendations
     };
   });
+}
+
+function sanitizeInventoryResource<T extends { metadata?: unknown; tags?: unknown }>(resource: T): T {
+  return {
+    ...resource,
+    metadata: sanitizeJsonForInventoryResponse(resource.metadata),
+    tags: sanitizeJsonForInventoryResponse(resource.tags)
+  };
+}
+
+function sanitizeJsonForInventoryResponse(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeJsonForInventoryResponse(item));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+      key,
+      isSensitiveInventoryResponseKey(key) ? "[REDACTED]" : sanitizeJsonForInventoryResponse(nestedValue)
+    ])
+  );
+}
+
+function isSensitiveInventoryResponseKey(key: string) {
+  return /secret|token|credential|external.?id|access.?key|session.?key|session.?token|password|private.?key|authorization|raw.?provider|provider.?response/i.test(
+    key
+  );
 }
 
 async function getOrganization(organizationId: string) {
