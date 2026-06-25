@@ -1,8 +1,8 @@
 services:
   backend:
     environment:
-      AWS_CONNECTOR_MODE: ${AWS_CONNECTOR_MODE:?Set AWS_CONNECTOR_MODE to readonly-validation}
-      AWS_INVENTORY_SCANNER_MODE: ${AWS_INVENTORY_SCANNER_MODE:?Set AWS_INVENTORY_SCANNER_MODE to readonly}
+      AWS_CONNECTOR_MODE: ${AWS_CONNECTOR_MODE:?Set AWS_CONNECTOR_MODE to sts-validation}
+      AWS_INVENTORY_SCANNER_MODE: ${AWS_INVENTORY_SCANNER_MODE:?Set AWS_INVENTORY_SCANNER_MODE to disabled}
       AWS_REGION_DEFAULT: ${AWS_REGION_DEFAULT:?Set an approved AWS region}
       AWS_ROLE_ARN: ${AWS_ROLE_ARN:?Set the sandbox scanner role ARN}
       AWS_EXTERNAL_ID: ${AWS_EXTERNAL_ID:?Set the scanner External ID in the secure local environment}
@@ -21,8 +21,8 @@ services:
 
   worker:
     environment:
-      AWS_CONNECTOR_MODE: ${AWS_CONNECTOR_MODE:?Set AWS_CONNECTOR_MODE to readonly-validation}
-      AWS_INVENTORY_SCANNER_MODE: ${AWS_INVENTORY_SCANNER_MODE:?Set AWS_INVENTORY_SCANNER_MODE to readonly}
+      AWS_CONNECTOR_MODE: ${AWS_CONNECTOR_MODE:?Set AWS_CONNECTOR_MODE to sts-validation}
+      AWS_INVENTORY_SCANNER_MODE: ${AWS_INVENTORY_SCANNER_MODE:?Set AWS_INVENTORY_SCANNER_MODE to disabled}
       AWS_REGION_DEFAULT: ${AWS_REGION_DEFAULT:?Set an approved AWS region}
       AWS_ROLE_ARN: ${AWS_ROLE_ARN:?Set the sandbox scanner role ARN}
       AWS_EXTERNAL_ID: ${AWS_EXTERNAL_ID:?Set the scanner External ID in the secure local environment}
