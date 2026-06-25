@@ -16,6 +16,7 @@ import { createQueueConnection } from "../modules/queue/queue-connection.js";
 import {
   PLATFORM_CORE_SAFETY_FLAGS,
   buildAccountDetail,
+  buildDbOnlyOperationalProof,
   buildPlatformActivity,
   buildPlatformOverview,
   buildResourceDetail,
@@ -73,6 +74,12 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
     requirePermission(auth.role, PERMISSIONS.AUDIT_READ);
     const query = paginationQuerySchema.parse(request.query);
     return buildPlatformActivity(auth.organizationId, query);
+  });
+
+  app.get("/api/v1/platform/operational-proof", { preHandler: requireAuth }, async (request) => {
+    const auth = getAuthContext(request);
+    requirePermission(auth.role, PERMISSIONS.OPERATIONS_READ);
+    return buildDbOnlyOperationalProof(auth.organizationId, app.config);
   });
 
   app.get("/api/v1/platform/accounts/:id/detail", { preHandler: requireAuth }, async (request, reply) => {

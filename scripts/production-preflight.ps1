@@ -3,6 +3,7 @@ param(
   [string]$FrontendUrl = "http://localhost:3100",
   [string]$BackendContainer = "cloudshield-frontend-backend-1",
   [string]$WorkerContainer = "cloudshield-frontend-worker-1",
+  [string]$ExpectedConnectorMode = "sts-validation",
   [string]$ExpectedInventoryScannerMode = "disabled",
   [string]$ExpectedChangeExecutionMode = "disabled"
 )
@@ -112,10 +113,15 @@ function Test-RuntimeProjection {
   try {
     $runtime = Get-ContainerRuntimeProjection -ContainerName $ContainerName
     $safe =
+      $runtime.AWS_CONNECTOR_MODE -eq $ExpectedConnectorMode -and
       $runtime.AWS_INVENTORY_SCANNER_MODE -eq $ExpectedInventoryScannerMode -and
       $runtime.AWS_CHANGE_EXECUTION_MODE -eq $ExpectedChangeExecutionMode -and
+      $runtime.AWS_ROLE_ARN_CONFIGURED -eq $true -and
+      $runtime.AWS_EXTERNAL_ID_CONFIGURED -eq $true -and
       $runtime.AWS_EXECUTOR_ROLE_ARN_CONFIGURED -eq $false -and
       $runtime.AWS_EXECUTOR_EXTERNAL_ID_CONFIGURED -eq $false -and
+      $runtime.AWS_ALLOWED_ACCOUNT_IDS_CONFIGURED -eq $true -and
+      $runtime.AWS_ALLOWED_REGIONS_CONFIGURED -eq $true -and
       $runtime.SECRETS_RETURNED -eq $false
 
     if ($RequireDatabaseUrl) {

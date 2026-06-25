@@ -56,6 +56,7 @@ type CloudScanJob = {
   regions?: string[];
   scannerType?: string;
   idempotencyKey?: string | null;
+  correlationId?: string | null;
 };
 
 type CloudAssessmentJob = {
@@ -112,6 +113,8 @@ type SafeWorkerErrorLogInput = {
   };
 };
 
+type InventoryWorkerLifecycleStatus = "COMPLETED" | "FAILED";
+
 export function buildSafeWorkerErrorLog(input: SafeWorkerErrorLogInput) {
   const sanitized = input.providerError ? sanitizeProviderError(input.providerError, input.providerContext) : null;
   return {
@@ -137,6 +140,63 @@ export function buildSafeWorkerErrorLog(input: SafeWorkerErrorLogInput) {
       ...(typeof sanitized.attemptCount === "number" ? { attemptCount: sanitized.attemptCount } : {})
     } : {})
   };
+}
+
+export function buildInventoryWorkerLifecycleMetadata(
+  job: { id?: string | number | null; data?: Partial<CloudScanJob> } | null | undefined,
+  status: InventoryWorkerLifecycleStatus,
+  options: { result?: unknown; error?: unknown } = {}
+) {
+  const sanitized = options.error ? sanitizeProviderError(options.error, { operationName: "AWS_EC2_INVENTORY_SCAN" }) : null;
+  const correlationId = getSafeCorrelationId(job?.data?.correlationId);
+  return {
+    organizationId: getSafeString(job?.data?.organizationId),
+    awsAccountId: getSafeString(job?.data?.awsAccountId),
+    scanRunId: getSafeString(job?.data?.scanRunId),
+    jobId: getSafeString(job?.id),
+    correlationId,
+    status: sanitizeLifecycleStatus(status === "FAILED" ? "FAILED" : getResultStatus(options.result) ?? "COMPLETED"),
+    ...(sanitized ? {
+      failureClassification: sanitized.category,
+      safeErrorCode: sanitized.safeCode,
+      retryable: sanitized.retryable,
+      ...(sanitized.providerRequestId ? { providerRequestId: sanitized.providerRequestId } : {}),
+      ...(sanitized.httpStatusCode ? { httpStatusCode: sanitized.httpStatusCode } : {})
+    } : {})
+  };
+}
+
+export async function persistInventoryWorkerLifecycleAudit(
+  job: { id?: string | number | null; data?: Partial<CloudScanJob> } | null | undefined,
+  status: InventoryWorkerLifecycleStatus,
+  options: { result?: unknown; error?: unknown } = {}
+) {
+  if (job?.data?.type !== "AWS_EC2_INVENTORY_SCAN") return null;
+  const organizationId = getSafeString(job.data.organizationId);
+  const awsAccountId = getSafeString(job.data.awsAccountId);
+  const scanRunId = getSafeString(job.data.scanRunId);
+  if (!organizationId || !awsAccountId || !scanRunId) return null;
+
+  try {
+    return await prisma.auditEvent.create({
+      data: {
+        organizationId,
+        actorUserId: null,
+        action: status === "FAILED" ? "inventory.worker.failed" : "inventory.worker.completed",
+        targetType: "scan_run",
+        targetId: scanRunId,
+        metadata: toJson(buildInventoryWorkerLifecycleMetadata(job, status, options))
+      }
+    });
+  } catch (error) {
+    logger.warn(buildSafeWorkerErrorLog({
+      component: "cloud-inventory-worker-audit",
+      jobId: job?.id ? String(job.id) : null,
+      organizationId,
+      providerError: error
+    }), "CloudShield worker lifecycle audit persistence failed");
+    return null;
+  }
 }
 
 const worker = process.env.NODE_ENV === "test" ? createWorkerStub() : new BullWorker<CloudScanJob>(
@@ -519,11 +579,13 @@ if (process.env.NODE_ENV !== "test") {
   process.once("SIGINT", () => { void handleShutdown("SIGINT"); });
 }
 
-worker.on("completed", (job: any) => {
+worker.on("completed", (job: any, result: any) => {
+  void persistInventoryWorkerLifecycleAudit(job, "COMPLETED", { result });
   logger.info({ jobId: job.id }, "CloudShield worker job completed");
 });
 
 worker.on("failed", (job: any, error: any) => {
+  void persistInventoryWorkerLifecycleAudit(job, "FAILED", { error });
   logger.error(buildSafeWorkerErrorLog({
     component: "cloud-inventory-worker",
     jobId: job?.id,
@@ -1381,4 +1443,31 @@ async function audit(
 function isSampleResource(resource: any) {
   const blob = JSON.stringify(resource ?? {}).toLowerCase();
   return blob.includes("sample") || blob.includes("demo");
+}
+
+function getSafeString(value: unknown) {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const text = String(value).trim();
+  if (!text || text.length > 128) return null;
+  return text;
+}
+
+function getSafeCorrelationId(value: unknown) {
+  if (typeof value !== "string") return null;
+  return isValidCorrelationId(value) ? value.trim().toLowerCase() : null;
+}
+
+function getResultStatus(result: unknown) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  return sanitizeLifecycleStatus((result as Record<string, unknown>).status);
+}
+
+function sanitizeLifecycleStatus(value: unknown) {
+  if (typeof value !== "string") return null;
+  const status = value.trim().toUpperCase().replace(/[^A-Z0-9_:-]/g, "_").slice(0, 64);
+  return status || null;
+}
+
+function toJson(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
 }

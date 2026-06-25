@@ -198,7 +198,34 @@ Script:
 Do not open or commit secrets directories during a public demo. If showing the
 saved JSON, verify first that it contains only safe exported evidence.
 
-## 11. Production Preflight Proof
+## 11. Optional DB-Only Operational Proof
+
+If the reviewer wants platform reliability evidence, show the backend endpoint:
+
+```http
+GET /api/v1/platform/operational-proof
+```
+
+Script:
+
+> This endpoint is auth-required, tenant-scoped, and database-only. It
+> summarizes recent scan counts, audit event counts, inventory worker lifecycle
+> audit events, evidence counts, report/export counts, and runtime safety flags.
+> It does not call AWS, Redis, Docker, BullMQ, inventory sync, remediation,
+> mutation, Terraform, or external services.
+
+Point out:
+
+- `mode=DB_ONLY_OPERATIONAL_PROOF`.
+- `awsApiCallExecuted=false`.
+- `scannerRun=false`.
+- `mutationExecuted=false`.
+- `terraformApplyExecuted=false`.
+- `automaticRemediationExecuted=false`.
+- `redisQueried=false`.
+- `dockerQueried=false`.
+
+## 12. Production Preflight Proof
 
 Return to terminal and show:
 
@@ -214,7 +241,7 @@ Script:
 > are not returned. This is the state I would use for a portfolio or stakeholder
 > demo.
 
-## 12. Closing Explanation
+## 13. Closing Explanation
 
 Script:
 
@@ -236,6 +263,8 @@ Script:
   evidence snapshots with 100% evidence coverage.
 - Designed explicit runtime safety gates: scanner disabled by default, change
   execution disabled, executor role disabled, and no secrets in responses.
+- Added worker lifecycle audit events and a DB-only operational proof endpoint
+  for platform reliability evidence without AWS/Redis/Docker calls.
 - Added governance proof export and release preflight evidence suitable for a
   portfolio-grade engineering walkthrough.
 
@@ -248,7 +277,8 @@ Script:
 5. Open `/dashboard/security`.
 6. Open `/dashboard/compliance`.
 7. Open governance proof JSON/export link.
-8. Close with safety boundaries and future work.
+8. Optionally show `GET /api/v1/platform/operational-proof`.
+9. Close with safety boundaries and future work.
 
 ## Stop Conditions
 

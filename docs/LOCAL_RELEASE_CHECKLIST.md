@@ -1,12 +1,16 @@
 # Local Release Checklist
 
-Use this checklist before committing or tagging CloudShield v0.5.0.
+Use this checklist before committing, tagging, or presenting the current
+CloudShield read-only AWS governance release candidate.
 
 Release classification:
 
-`CLOUDSHIELD_AWS_UNVERIFIED_RELEASE_CANDIDATE_v0.5.0`
+`CLOUDSHIELD_READONLY_AWS_GOVERNANCE_RELEASE_CANDIDATE_v0.6.0`
 
-This release does not claim real AWS validation, production deployment, formal audit, SLA, or disaster-recovery proof.
+This release includes real read-only Track 2 AWS STS validation and a narrow
+read-only EC2/VPC inventory proof. It does not claim production deployment,
+formal audit certification, SLA, disaster-recovery proof, autonomous
+remediation, Terraform apply, or broad AWS service coverage.
 
 ## 1. Repository State
 
@@ -67,14 +71,47 @@ Verify sample provenance, unavailable-score states, capability-aware actions, an
 
 ## 7. AWS Safety
 
-- [ ] `AWS_CONNECTOR_MODE`, `AWS_INVENTORY_SCANNER_MODE`, and `AWS_CHANGE_EXECUTION_MODE` default to `disabled`.
-- [ ] No real AWS validation or mutation is performed during release validation.
+- [ ] `AWS_CONNECTOR_MODE=sts-validation`.
+- [ ] `AWS_INVENTORY_SCANNER_MODE=disabled`.
+- [ ] `AWS_CHANGE_EXECUTION_MODE=disabled`.
+- [ ] Executor role is not configured.
+- [ ] No STS validation is rerun during release validation.
+- [ ] No inventory sync is rerun during release validation.
+- [ ] No AWS mutation is performed during release validation.
 - [ ] No External ID, temporary credential, or raw provider payload is returned by an API.
 - [ ] Governed mutation-capable code remains disabled and approval-gated.
 - [ ] Automatic remediation and Terraform apply remain unavailable.
 
-## 8. Release
+## 8. Platform Reliability Proof
+
+- [ ] Inventory worker lifecycle audit events are documented.
+- [ ] `GET /api/v1/platform/operational-proof` is documented as DB-only,
+      auth-required, tenant-scoped, and safe.
+- [ ] Operational proof response contains safe counts/booleans/labels only.
+- [ ] Operational proof does not call AWS, Redis, Docker, BullMQ, inventory sync,
+      remediation, mutation, Terraform, or external services.
+- [ ] `pnpm.cmd production:preflight` returns `Preflight status: GREEN`.
+
+## 9. June 30 AWS Free-Tier Closeout
+
+- [ ] Review `docs/FINAL_PLATFORM_RELEASE_PACKAGE_AND_FREE_TIER_CLOSEOUT.md`.
+- [ ] Check AWS Billing dashboard manually before June 30.
+- [ ] Check AWS Free Tier usage manually before June 30.
+- [ ] Check active EC2, VPC, EBS, S3, IAM, and region-specific resources
+      manually before June 30.
+- [ ] Verify no running chargeable resources remain.
+- [ ] Remove temporary AWS access keys after preserving safe proof screenshots.
+- [ ] Keep screenshots/evidence before cleanup.
+- [ ] Do not delete CloudShield local Docker volumes.
+- [ ] Do not run `docker compose down -v`.
+- [ ] Do not run Prisma reset or migration reset.
+- [ ] Do not perform AWS cleanup from this repository release task.
+
+## 10. Release
 
 - [ ] CI passes for the release PR into `main`.
 - [ ] Release notes and known limitations remain accurate.
+- [ ] README no longer contains stale v0.5 unverified language.
+- [ ] Docs do not claim real customers, production deployment, SOC 2, ISO 27001,
+      CIS certification, autonomous remediation, or Terraform apply.
 - [ ] Create and push the release tag only after the merge commit and final approval.
