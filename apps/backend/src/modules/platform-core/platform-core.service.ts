@@ -49,6 +49,16 @@ const SAFE_METADATA_KEYS = new Set([
   "defaultForAz"
 ]);
 
+const OPERATIONAL_PROOF_LOOKBACK_DAYS = 30;
+const INVENTORY_WORKER_LIFECYCLE_ACTIONS = [
+  "inventory.worker.completed",
+  "inventory.worker.failed"
+] as const;
+
+type CountGroup<TField extends string> = Record<TField, string | null> & {
+  _count: { _all: number };
+};
+
 export async function buildPlatformOverview(
   organizationId: string,
   env: RuntimeEnv
@@ -212,6 +222,143 @@ export async function buildPlatformOverview(
   };
 }
 
+export async function buildDbOnlyOperationalProof(
+  organizationId: string,
+  env: RuntimeEnv,
+  generatedAt = new Date()
+) {
+  const scope = scopeByOrganization(organizationId);
+  const lookbackSince = new Date(generatedAt.getTime() - OPERATIONAL_PROOF_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const lifecycleActions = [...INVENTORY_WORKER_LIFECYCLE_ACTIONS];
+
+  const [
+    scanCounts,
+    recentScanTotal,
+    latestScan,
+    latestSuccessfulScan,
+    latestFailedScan,
+    auditCounts,
+    recentAuditTotal,
+    inventoryWorkerLifecycleCounts,
+    latestInventoryWorkerLifecycleAudit,
+    evidenceSnapshotCount,
+    complianceEvidenceCount,
+    reportCounts,
+    reportTotal,
+    latestReportGenerated,
+    latestReportCompleted
+  ] = await Promise.all([
+    prisma.scanRun.groupBy({
+      by: ["status"],
+      where: scope,
+      _count: { _all: true }
+    }),
+    prisma.scanRun.count({
+      where: { ...scope, createdAt: { gte: lookbackSince } }
+    }),
+    prisma.scanRun.findFirst({
+      where: scope,
+      orderBy: { createdAt: "desc" },
+      select: { startedAt: true, queuedAt: true, completedAt: true, createdAt: true }
+    }),
+    prisma.scanRun.findFirst({
+      where: { ...scope, status: { in: ["SUCCEEDED", "COMPLETED"] } },
+      orderBy: { completedAt: "desc" },
+      select: { completedAt: true, createdAt: true }
+    }),
+    prisma.scanRun.findFirst({
+      where: { ...scope, status: { in: ["FAILED", "AUTH_FAILED", "PERMISSION_DENIED", "RATE_LIMITED"] } },
+      orderBy: { completedAt: "desc" },
+      select: { completedAt: true, createdAt: true }
+    }),
+    prisma.auditEvent.groupBy({
+      by: ["action"],
+      where: { ...scope, createdAt: { gte: lookbackSince } },
+      _count: { _all: true }
+    }),
+    prisma.auditEvent.count({
+      where: { ...scope, createdAt: { gte: lookbackSince } }
+    }),
+    prisma.auditEvent.groupBy({
+      by: ["action"],
+      where: { ...scope, action: { in: lifecycleActions } },
+      _count: { _all: true }
+    }),
+    prisma.auditEvent.findFirst({
+      where: { ...scope, action: { in: lifecycleActions } },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true }
+    }),
+    prisma.securityFindingEvidenceSnapshot.count({ where: scope }),
+    prisma.complianceEvidence.count({ where: scope }),
+    prisma.reportExport.groupBy({
+      by: ["status"],
+      where: scope,
+      _count: { _all: true }
+    }),
+    prisma.reportExport.count({ where: scope }),
+    prisma.reportExport.findFirst({
+      where: { ...scope, generatedAt: { not: null } },
+      orderBy: { generatedAt: "desc" },
+      select: { generatedAt: true }
+    }),
+    prisma.reportExport.findFirst({
+      where: { ...scope, completedAt: { not: null } },
+      orderBy: { completedAt: "desc" },
+      select: { completedAt: true }
+    })
+  ]);
+
+  const inventoryLifecycleByAction = countGroupsByField(inventoryWorkerLifecycleCounts, "action");
+
+  return {
+    mode: "DB_ONLY_OPERATIONAL_PROOF" as const,
+    generatedAt: generatedAt.toISOString(),
+    lookbackWindowDays: OPERATIONAL_PROOF_LOOKBACK_DAYS,
+    scans: {
+      byStatus: countGroupsByField(scanCounts, "status"),
+      recentTotal: recentScanTotal,
+      latestScanAt: latestOperationalTimestamp(latestScan),
+      latestSuccessfulScanAt: latestTimestamp(latestSuccessfulScan),
+      latestFailedScanAt: latestTimestamp(latestFailedScan)
+    },
+    audit: {
+      recentTotal: recentAuditTotal,
+      byAction: countGroupsByField(auditCounts, "action"),
+      inventoryWorkerLifecycle: {
+        completed: inventoryLifecycleByAction["inventory.worker.completed"] ?? 0,
+        failed: inventoryLifecycleByAction["inventory.worker.failed"] ?? 0,
+        byAction: inventoryLifecycleByAction,
+        latestAt: latestInventoryWorkerLifecycleAudit?.createdAt.toISOString() ?? null
+      }
+    },
+    evidence: {
+      securityFindingEvidenceSnapshots: evidenceSnapshotCount,
+      complianceEvidence: complianceEvidenceCount
+    },
+    reports: {
+      total: reportTotal,
+      byStatus: countGroupsByField(reportCounts, "status"),
+      latestGeneratedAt: latestReportGenerated?.generatedAt?.toISOString() ?? null,
+      latestCompletedAt: latestReportCompleted?.completedAt?.toISOString() ?? null
+    },
+    safety: {
+      connectorMode: env.AWS_CONNECTOR_MODE,
+      scannerMode: env.AWS_INVENTORY_SCANNER_MODE,
+      changeExecutionMode: env.AWS_CHANGE_EXECUTION_MODE,
+      executorRoleConfigured: Boolean(env.AWS_EXECUTOR_ROLE_ARN && env.AWS_EXECUTOR_EXTERNAL_ID),
+      secretsReturned: false as const,
+      awsApiCallExecuted: false as const,
+      scannerRun: false as const,
+      mutationExecuted: false as const,
+      terraformApplyExecuted: false as const,
+      automaticRemediationExecuted: false as const,
+      redisQueried: false as const,
+      dockerQueried: false as const
+    }
+  };
+}
+
 export async function buildPlatformActivity(
   organizationId: string,
   query: {
@@ -268,6 +415,25 @@ export async function buildPlatformActivity(
     },
     ...PLATFORM_CORE_SAFETY_FLAGS
   };
+}
+
+function countGroupsByField<TField extends string>(
+  groups: CountGroup<TField>[],
+  field: TField
+): Record<string, number> {
+  return Object.fromEntries(groups.map((group) => [group[field] ?? "UNKNOWN", group._count._all]));
+}
+
+function latestOperationalTimestamp(
+  record: { completedAt: Date | null; startedAt: Date; queuedAt: Date | null; createdAt: Date } | null
+): string | null {
+  if (!record) return null;
+  return (record.completedAt ?? record.startedAt ?? record.queuedAt ?? record.createdAt).toISOString();
+}
+
+function latestTimestamp(record: { completedAt: Date | null; createdAt: Date } | null): string | null {
+  if (!record) return null;
+  return (record.completedAt ?? record.createdAt).toISOString();
 }
 
 export async function buildAccountDetail(organizationId: string, accountId: string) {
