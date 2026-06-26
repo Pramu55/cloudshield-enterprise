@@ -71,7 +71,8 @@ Verify sample provenance, unavailable-score states, capability-aware actions, an
 
 ## 7. AWS Safety
 
-- [ ] `AWS_CONNECTOR_MODE=sts-validation`.
+- [ ] For base `docker-compose.yml` local runtime, `AWS_CONNECTOR_MODE=disabled`.
+- [ ] For AWS-readonly release validation runtime, `AWS_CONNECTOR_MODE=sts-validation`.
 - [ ] `AWS_INVENTORY_SCANNER_MODE=disabled`.
 - [ ] `AWS_CHANGE_EXECUTION_MODE=disabled`.
 - [ ] Executor role is not configured.
@@ -90,7 +91,10 @@ Verify sample provenance, unavailable-score states, capability-aware actions, an
 - [ ] Operational proof response contains safe counts/booleans/labels only.
 - [ ] Operational proof does not call AWS, Redis, Docker, BullMQ, inventory sync,
       remediation, mutation, Terraform, or external services.
-- [ ] `pnpm.cmd production:preflight` returns `Preflight status: GREEN`.
+- [ ] Base `docker-compose.yml` runtime: `pnpm.cmd local:preflight` returns
+      `Preflight status: GREEN`.
+- [ ] AWS-readonly release validation runtime:
+      `pnpm.cmd production:preflight` returns `Preflight status: GREEN`.
 
 ## 9. June 30 AWS Free-Tier Closeout
 

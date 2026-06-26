@@ -3,6 +3,8 @@ param(
   [string]$FrontendUrl = "http://localhost:3100",
   [string]$BackendContainer = "cloudshield-frontend-backend-1",
   [string]$WorkerContainer = "cloudshield-frontend-worker-1",
+  [ValidateSet("AwsReadonlyRelease", "DisabledLocal")]
+  [string]$RuntimeProfile = "AwsReadonlyRelease",
   [string]$ExpectedConnectorMode = "sts-validation",
   [string]$ExpectedInventoryScannerMode = "disabled",
   [string]$ExpectedChangeExecutionMode = "disabled"
@@ -112,17 +114,26 @@ function Test-RuntimeProjection {
 
   try {
     $runtime = Get-ContainerRuntimeProjection -ContainerName $ContainerName
-    $safe =
-      $runtime.AWS_CONNECTOR_MODE -eq $ExpectedConnectorMode -and
+    $baseSafe =
       $runtime.AWS_INVENTORY_SCANNER_MODE -eq $ExpectedInventoryScannerMode -and
       $runtime.AWS_CHANGE_EXECUTION_MODE -eq $ExpectedChangeExecutionMode -and
-      $runtime.AWS_ROLE_ARN_CONFIGURED -eq $true -and
-      $runtime.AWS_EXTERNAL_ID_CONFIGURED -eq $true -and
       $runtime.AWS_EXECUTOR_ROLE_ARN_CONFIGURED -eq $false -and
       $runtime.AWS_EXECUTOR_EXTERNAL_ID_CONFIGURED -eq $false -and
-      $runtime.AWS_ALLOWED_ACCOUNT_IDS_CONFIGURED -eq $true -and
-      $runtime.AWS_ALLOWED_REGIONS_CONFIGURED -eq $true -and
       $runtime.SECRETS_RETURNED -eq $false
+
+    if ($RuntimeProfile -eq "DisabledLocal") {
+      $safe =
+        $baseSafe -and
+        $runtime.AWS_CONNECTOR_MODE -eq "disabled"
+    } else {
+      $safe =
+        $baseSafe -and
+        $runtime.AWS_CONNECTOR_MODE -eq $ExpectedConnectorMode -and
+        $runtime.AWS_ROLE_ARN_CONFIGURED -eq $true -and
+        $runtime.AWS_EXTERNAL_ID_CONFIGURED -eq $true -and
+        $runtime.AWS_ALLOWED_ACCOUNT_IDS_CONFIGURED -eq $true -and
+        $runtime.AWS_ALLOWED_REGIONS_CONFIGURED -eq $true
+    }
 
     if ($RequireDatabaseUrl) {
       $safe = $safe -and $runtime.DATABASE_URL_CONFIGURED -eq $true
@@ -165,8 +176,14 @@ function Test-RuntimeProjection {
 }
 
 Write-Host "CloudShield production-readiness preflight"
+Write-Host "Runtime profile: $RuntimeProfile"
 Write-Host "NO AWS CALL: this script checks local HTTP readiness and sanitized container runtime metadata only."
 Write-Host "NO AWS CALL: it does not trigger inventory sync, STS validation, remediation, mutation, Terraform, or raw secret output."
+if ($RuntimeProfile -eq "DisabledLocal") {
+  Write-Host "DisabledLocal validates the base docker-compose.yml safe local runtime only; it does not prove AWS-readonly release readiness."
+} else {
+  Write-Host "AwsReadonlyRelease validates the AWS-readonly locked release runtime profile."
+}
 Write-Host ""
 
 Test-HttpEndpoint "backend_health" "$BackendBaseUrl/health" { param($body) $body.status -eq "ok" }

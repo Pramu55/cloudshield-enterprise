@@ -119,18 +119,31 @@ JSON export or any secrets directory content to the repository.
 
 ## Production Preflight
 
-Run before a demo, release review, or portfolio walkthrough:
+Run the disabled local preflight when the base `docker-compose.yml` runtime is
+active:
+
+```powershell
+pnpm.cmd local:preflight
+```
+
+This proves the local runtime is safely disabled. It is not AWS-readonly release
+readiness.
+
+Run the production preflight before a demo, release review, or portfolio
+walkthrough only after the AWS-readonly locked release runtime is active:
 
 ```powershell
 pnpm.cmd production:preflight
 ```
 
-Expected GREEN shape:
+Expected AWS-readonly release GREEN shape:
 
 ```text
 CloudShield production-readiness preflight
+Runtime profile: AwsReadonlyRelease
 NO AWS CALL: this script checks local HTTP readiness and sanitized container runtime metadata only.
 NO AWS CALL: it does not trigger inventory sync, STS validation, remediation, mutation, Terraform, or raw secret output.
+AwsReadonlyRelease validates the AWS-readonly locked release runtime profile.
 
 PASS: backend_health - http=200
 PASS: backend_ready_postgres_migrations - http=200
@@ -141,8 +154,9 @@ PASS: cloudshield-frontend-worker-1.runtime_guardrails - connector=sts-validatio
 Preflight status: GREEN
 ```
 
-The preflight makes no AWS calls and prints only booleans, modes, and safe
-runtime metadata.
+Both preflight profiles make no AWS calls and print only booleans, modes, and
+safe runtime metadata. The local profile accepts only the disabled base runtime;
+the production profile remains strict for AWS-readonly release validation.
 
 ## Platform Reliability Closeout Addendum
 
@@ -218,7 +232,9 @@ process intentionally makes no AWS calls.
 - [ ] Review `docs/FINAL_PLATFORM_RELEASE_PACKAGE_AND_FREE_TIER_CLOSEOUT.md`.
 - [ ] Review `docs/FINAL_DEMO_SCRIPT.md`.
 - [ ] Review `docs/PORTFOLIO_PROJECT_SUMMARY.md`.
-- [ ] Confirm `pnpm.cmd production:preflight` is GREEN.
+- [ ] Confirm `pnpm.cmd local:preflight` is GREEN for base local runtime.
+- [ ] Confirm `pnpm.cmd production:preflight` is GREEN only when the
+      AWS-readonly locked release runtime is active.
 - [ ] Confirm backend typecheck passes.
 - [ ] Confirm frontend typecheck passes.
 - [ ] Confirm contracts build passes.

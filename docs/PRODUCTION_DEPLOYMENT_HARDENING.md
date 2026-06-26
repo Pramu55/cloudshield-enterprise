@@ -87,7 +87,21 @@ two-person review, rollback planning, and dedicated tests.
 
 ## One-Command Safe Preflight
 
-Run this before a demo, local deployment proof, or production-readiness review:
+Run the disabled local preflight against the base `docker-compose.yml` runtime:
+
+```powershell
+pnpm.cmd local:preflight
+```
+
+This proves the local runtime is safely locked down with
+`AWS_CONNECTOR_MODE=disabled`, `AWS_INVENTORY_SCANNER_MODE=disabled`, and
+`AWS_CHANGE_EXECUTION_MODE=disabled`. It does not prove AWS-readonly release
+readiness and does not require AWS role, External ID, account allowlist, or
+region allowlist values.
+
+Run the production preflight only against the AWS-readonly locked release
+runtime started with the ignored local env file and
+`docker-compose.aws-readonly.override.yml`:
 
 ```powershell
 pnpm.cmd production:preflight
@@ -99,17 +113,19 @@ The preflight is a local-only check. It verifies:
 - backend `/ready`, including bounded PostgreSQL and migration readiness;
 - frontend HTTP reachability;
 - backend and worker sanitized runtime guardrails;
+- expected connector mode for the selected runtime profile;
 - expected scanner mode;
 - expected change execution mode;
 - executor role and executor External ID are not configured;
-- allowed account and region configuration are present as booleans only;
+- allowed account and region configuration are present as booleans only for
+  AWS-readonly release validation;
 - no secrets are returned.
 
 The preflight does not call AWS, does not trigger STS validation, does not start
 inventory sync, does not enqueue worker jobs, does not mutate cloud resources,
 does not run Terraform, and does not print secret values.
 
-For the locked post-proof runtime, the expected defaults are:
+For the AWS-readonly locked release runtime, the expected defaults are:
 
 ```powershell
 pnpm.cmd production:preflight
