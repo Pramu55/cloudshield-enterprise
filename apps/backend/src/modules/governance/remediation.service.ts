@@ -9,6 +9,7 @@ import {
   buildCanonicalApprovalPayload,
   computeApprovalPayloadHash
 } from "@cloudshield/utils";
+import { assertGovernanceTargetOperationallyActive } from "../governance-action-guard/governance-action-guard.policy.js";
 
 type ActorContext = {
   organizationId: string;
@@ -30,7 +31,8 @@ const remediationInclude = {
       severity: true,
       ruleId: true,
       resourceId: true,
-      resource: { select: { name: true, resourceType: true, resourceId: true } }
+      resource: { select: { name: true, resourceType: true, resourceId: true } },
+      awsAccount: { select: { name: true, connectionStatus: true, archivedAt: true } }
     }
   },
   resource: { select: { name: true, resourceType: true, resourceId: true } },
@@ -73,13 +75,15 @@ export async function createRemediationPlan(
     where: { id: findingId, organizationId: actor.organizationId },
     include: {
       resource: { select: { id: true, name: true, resourceType: true, resourceId: true } },
-      awsAccount: { select: { name: true, accountId: true } }
+      awsAccount: { select: { name: true, accountId: true, connectionStatus: true, archivedAt: true } }
     }
   });
 
   if (!finding) {
     return null;
   }
+
+  assertGovernanceTargetOperationallyActive(finding.awsAccount);
 
   const guidance = buildGovernedGuidance(finding);
   const plan = await prisma.remediationPlan.create({
@@ -137,12 +141,15 @@ export async function createRemediationPlan(
 
 export async function requestApproval(actor: ActorContext, planId: string) {
   const plan = await prisma.remediationPlan.findFirst({
-    where: { id: planId, organizationId: actor.organizationId }
+    where: { id: planId, organizationId: actor.organizationId },
+    include: remediationInclude
   });
 
   if (!plan) {
     return null;
   }
+
+  assertGovernanceTargetOperationallyActive(plan.finding?.awsAccount as any);
 
   const payloadHash = approvalPayloadHash(plan);
   const [updatedPlan, approvalRequest] = await prisma.$transaction([
@@ -230,12 +237,15 @@ export async function markPlanManuallyCompleted(
   body: GovernanceDecisionRequest
 ) {
   const plan = await prisma.remediationPlan.findFirst({
-    where: { id: planId, organizationId: actor.organizationId }
+    where: { id: planId, organizationId: actor.organizationId },
+    include: remediationInclude
   });
 
   if (!plan) {
     return null;
   }
+
+  assertGovernanceTargetOperationallyActive(plan.finding?.awsAccount as any);
 
   const updatedPlan = await prisma.remediationPlan.update({
     where: { id: plan.id },
@@ -302,12 +312,15 @@ async function decidePlan(
   body: GovernanceDecisionRequest
 ) {
   const plan = await prisma.remediationPlan.findFirst({
-    where: { id: planId, organizationId: actor.organizationId }
+    where: { id: planId, organizationId: actor.organizationId },
+    include: remediationInclude
   });
 
   if (!plan) {
     return null;
   }
+
+  assertGovernanceTargetOperationallyActive(plan.finding?.awsAccount as any);
 
   if (status === "APPROVED" && plan.createdById === actor.userId) {
     return blockedPlanMutation(actor, plan, "Self-approval is blocked for remediation plans.");
