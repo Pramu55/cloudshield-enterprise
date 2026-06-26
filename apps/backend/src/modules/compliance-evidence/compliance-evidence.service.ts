@@ -14,12 +14,15 @@ import type {
 import {
   ComplianceControlCatalog,
   ComplianceControlProjectionCatalog,
-  ComplianceEvidenceSafety
+  ComplianceEvidenceSafety,
+  deriveComplianceStatus,
+  deriveComplianceProjectionStatus
 } from "./compliance-evidence.policy.js";
 import {
   toComplianceControlDto,
   toComplianceEvidenceDto
 } from "./compliance-evidence.mapper.js";
+import { activeFindingForActiveResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 
 const CONTROL_LIMIT = 100;
 const EVIDENCE_LIMIT = 200;
@@ -83,12 +86,10 @@ async function loadComplianceProjectionFindings(
   resourceSource?: "AWS_SYNC" | "SAMPLE"
 ) {
   return prisma.securityFinding.findMany({
-    where: {
-      organizationId,
+    where: activeFindingForActiveResourceWhere(organizationId, {
       ruleId: { in: mappedRuleIds },
-      archivedAt: null,
       ...(resourceSource ? { resource: { source: resourceSource } } : {})
-    },
+    }),
     orderBy: [{ severity: "asc" }, { updatedAt: "desc" }, { id: "desc" }],
     include: {
       resource: { select: { source: true } },
@@ -100,7 +101,7 @@ async function loadComplianceProjectionFindings(
       },
       riskAcceptances: {
         where: { organizationId },
-        select: { id: true }
+        select: { id: true, expiresAt: true }
       },
       _count: {
         select: {
@@ -188,11 +189,19 @@ function complianceProjectionCounts(
   let resolvedFindingCount = 0;
 
   for (const finding of findings) {
+    const hasActiveRiskAcceptance = finding.riskAcceptances.some(
+      ra => ra.expiresAt > new Date()
+    );
+
     if (activeStatuses.has(finding.workflowStatus)) {
-      openFindingCount++;
+      if (hasActiveRiskAcceptance) {
+        acceptedRiskCount++;
+      } else {
+        openFindingCount++;
+      }
     } else if (
       finding.workflowStatus === "RISK_ACCEPTED" ||
-      finding.riskAcceptances.length > 0
+      hasActiveRiskAcceptance
     ) {
       acceptedRiskCount++;
     } else {
@@ -204,20 +213,22 @@ function complianceProjectionCounts(
     (count, finding) => count + finding._count.evidenceSnapshots,
     0
   );
+
+  const hasSampleEvidenceOnly = findings.every(f => f.resource?.source === "SAMPLE");
+
   return {
     findingCount: findings.length,
     openFindingCount,
     acceptedRiskCount,
     resolvedFindingCount,
     evidenceSnapshotCount,
-    status:
-      openFindingCount > 0
-        ? "FAILING"
-        : acceptedRiskCount > 0
-          ? "ACCEPTED_RISK"
-          : evidenceSnapshotCount > 0
-            ? "PASSING"
-            : "UNKNOWN"
+    status: deriveComplianceProjectionStatus({
+      openFindingCount,
+      acceptedRiskCount,
+      evidenceSnapshotCount,
+      hasSampleEvidenceOnly,
+      hasStaleEvidence: false
+    })
   };
 }
 
@@ -387,11 +398,10 @@ async function evaluateControl(
   const [securityFindings, costFindings, riskAcceptances, auditEvents, recommendations] =
     await Promise.all([
       prisma.securityFinding.findMany({
-        where: {
-          organizationId,
+        where: activeFindingForActiveResourceWhere(organizationId, {
           ...(whereRules ? { ruleId: whereRules } : {})
-        },
-        include: { resource: { select: { id: true, name: true, resourceType: true } } },
+        }),
+        include: { resource: { select: { id: true, name: true, resourceType: true, source: true } }, riskAcceptances: { select: { expiresAt: true } } },
         take: 50
       }),
       prisma.costFinding.findMany({
@@ -399,11 +409,14 @@ async function evaluateControl(
           organizationId,
           ...(whereRules ? { ruleId: whereRules } : {})
         },
-        include: { resource: { select: { id: true, name: true, resourceType: true } } },
+        include: { resource: { select: { id: true, name: true, resourceType: true, source: true } } },
         take: 50
       }),
       prisma.riskAcceptance.findMany({
-        where: scopeByOrganization(organizationId),
+        where: {
+          organizationId,
+          expiresAt: { gt: new Date() }
+        },
         take: definition.controlId === "INT-RISK-002" ? 50 : 10
       }),
       prisma.auditEvent.findMany({
@@ -526,17 +539,54 @@ async function evaluateControl(
   await Promise.all(evidenceWrites);
 
   const evidenceCount = evidenceWrites.length;
-  const findingCount = securityFindings.length + costFindings.length;
+  const allFindings = [...securityFindings, ...costFindings];
+
+  let openFindingCount = 0;
+  let acceptedRiskCount = 0;
+
+  for (const finding of allFindings) {
+    const isCost = "estimatedAnnualWaste" in finding;
+    const workflowStatus = isCost ? finding.status : finding.workflowStatus;
+    const activeStatuses = new Set(["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "REOPENED", "WARNING"]);
+
+    const hasActiveRiskAcceptance = "riskAcceptances" in finding
+      ? finding.riskAcceptances.some(ra => ra.expiresAt > new Date())
+      : false;
+
+    if (activeStatuses.has(workflowStatus)) {
+      if (hasActiveRiskAcceptance) {
+        acceptedRiskCount++;
+      } else {
+        openFindingCount++;
+      }
+    } else if (workflowStatus === "RISK_ACCEPTED" || hasActiveRiskAcceptance) {
+      acceptedRiskCount++;
+    }
+  }
+
   const failedResources = new Set(
-    [...securityFindings, ...costFindings]
+    allFindings
+      .filter(f => {
+        const isCost = "estimatedAnnualWaste" in f;
+        const ws = isCost ? f.status : f.workflowStatus;
+        return new Set(["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "REOPENED", "WARNING"]).has(ws);
+      })
       .map((finding) => finding.resourceId)
       .filter(Boolean)
   ).size;
 
+  const hasSampleEvidenceOnly = allFindings.every(f => f.resource?.source === "SAMPLE");
+
   return {
-    status: determineStatus(definition, findingCount, failedResources, evidenceCount),
+    status: deriveComplianceStatus({
+      openFindingCount,
+      acceptedRiskCount,
+      evidenceSnapshotCount: evidenceCount,
+      hasSampleEvidenceOnly,
+      hasStaleEvidence: false
+    }),
     evidenceCount,
-    findingCount,
+    findingCount: allFindings.length,
     failedResources
   };
 }

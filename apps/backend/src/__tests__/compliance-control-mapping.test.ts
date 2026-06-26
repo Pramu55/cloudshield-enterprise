@@ -269,6 +269,18 @@ async function createComplianceFixture(organizationId: string) {
       tags: {}
     }
   });
+  const productionResource = await prisma.cloudResource.create({
+    data: {
+      organizationId,
+      awsAccountId: account.id,
+      resourceType: "security-group",
+      resourceId: `sg-prod-${randomUUID()}`,
+      name: "Production compliance resource",
+      source: "AWS_SYNC",
+      metadata: {},
+      tags: {}
+    }
+  });
   const openFinding = await createFinding({
     organizationId,
     awsAccountId: account.id,
@@ -290,7 +302,7 @@ async function createComplianceFixture(organizationId: string) {
   const resolvedFinding = await createFinding({
     organizationId,
     awsAccountId: account.id,
-    resourceId: resource.id,
+    resourceId: productionResource.id,
     ruleId: "MISSING_OWNER_TAG",
     title: "Missing owner",
     status: "RESOLVED",
@@ -309,17 +321,19 @@ async function createComplianceFixture(organizationId: string) {
   await createSnapshot(
     organizationId,
     resolvedFinding.id,
-    resource.id,
+    productionResource.id,
     "MISSING_OWNER_TAG",
-    new Date("2026-06-20T10:00:00.000Z")
+    new Date("2026-06-20T10:00:00.000Z"),
+    "AWS_SYNC"
   );
   const latestSnapshotAt = new Date("2026-06-21T10:00:00.000Z");
   const latestSnapshot = await createSnapshot(
     organizationId,
     resolvedFinding.id,
-    resource.id,
+    productionResource.id,
     "MISSING_OWNER_TAG",
-    latestSnapshotAt
+    latestSnapshotAt,
+    "AWS_SYNC"
   );
   await createSnapshot(
     organizationId,
