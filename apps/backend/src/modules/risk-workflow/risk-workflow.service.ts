@@ -102,7 +102,7 @@ export async function listRiskAcceptances(
 ) {
   const expiringSoonAt = new Date(now.getTime() + 30 * 86_400_000);
   const cursor = decodeAcceptanceCursor(query.cursor);
-  const securityFindingConditions: any[] = [];
+  const securityFindingConditions: Prisma.SecurityFindingWhereInput[] = [];
   if (query.severity) {
     securityFindingConditions.push({ severity: query.severity });
   }
@@ -118,7 +118,7 @@ export async function listRiskAcceptances(
     });
   }
 
-  const expiryWhere =
+  const expiryWhere: Prisma.RiskAcceptanceWhereInput =
     query.status === "expired"
       ? {
           OR: [
@@ -135,14 +135,14 @@ export async function listRiskAcceptances(
           ? { expiresAt: { gt: expiringSoonAt } }
           : {};
 
-  const where: any = {
+  const where: Prisma.RiskAcceptanceWhereInput = {
     organizationId,
     securityFindingId: { not: null },
     ...expiryWhere,
     ...(securityFindingConditions.length
       ? {
           securityFinding: {
-            is: securityFindingConditions.reduce((acc, curr) => ({ ...acc, ...curr }), {})
+            is: securityFindingConditions.reduce<Prisma.SecurityFindingWhereInput>((acc, curr) => ({ ...acc, ...curr }), {})
           }
         }
       : {}),
