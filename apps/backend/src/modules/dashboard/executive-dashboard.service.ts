@@ -7,6 +7,8 @@ import type {
   ExecutiveRecommendation
 } from "@cloudshield/contracts";
 import { listComplianceControls } from "../compliance-evidence/compliance-evidence.service.js";
+import { activeAwsAccountWhere } from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
+import { activeResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 
 const DAY_MS = 86_400_000;
 const ACTIVE_FINDING_STATUSES = new Set<string>([
@@ -31,17 +33,13 @@ export async function getExecutiveDashboardSummary(
     completedScanCount
   ] = await Promise.all([
     prisma.awsAccount.count({
-      where: {
-        organizationId,
-        archivedAt: null,
-        connectionStatus: "VALIDATION_SUCCEEDED"
-      }
+      where: activeAwsAccountWhere(organizationId, { connectionStatus: "VALIDATION_SUCCEEDED" })
     }),
     prisma.cloudResource.count({
-      where: { organizationId, archivedAt: null, source: "AWS_SYNC" }
+      where: activeResourceWhere(organizationId, { source: "AWS_SYNC" })
     }),
     prisma.cloudResource.count({
-      where: { organizationId, archivedAt: null, source: "SAMPLE" }
+      where: activeResourceWhere(organizationId, { source: "SAMPLE" })
     }),
     prisma.scanRun.count({
       where: {

@@ -89,6 +89,7 @@ type InventoryCounts = {
   instances: number;
   volumes: number;
   relationships: number;
+  staleResources: number;
 };
 
 export class AwsInventorySyncService {
@@ -187,17 +188,19 @@ export class AwsInventorySyncService {
         securityGroups: 0,
         instances: 0,
         volumes: 0,
-        relationships: 0
+        relationships: 0,
+        staleResources: 0
       };
 
       for (const region of allowedRegions) {
-        const regionCounts = await this.syncRegion(input, region);
+        const regionCounts = await this.syncRegion(input, region, scanRun.id);
         counts.vpcs += regionCounts.vpcs;
         counts.subnets += regionCounts.subnets;
         counts.securityGroups += regionCounts.securityGroups;
         counts.instances += regionCounts.instances;
         counts.volumes += regionCounts.volumes;
         counts.relationships += regionCounts.relationships;
+        counts.staleResources += regionCounts.staleResources;
       }
 
       await this.updateScan(scanRun.id, "RUNNING", Lifecycle.analyzingPosture);
@@ -347,7 +350,7 @@ export class AwsInventorySyncService {
     return selected.length ? selected : [this.env.AWS_REGION_DEFAULT];
   }
 
-  private async syncRegion(input: InventorySyncInput, region: string): Promise<InventoryCounts> {
+  private async syncRegion(input: InventorySyncInput, region: string, scanRunId: string): Promise<InventoryCounts> {
     const ec2 = new EC2Client({ region });
     await this.updateLatestRunning(input.organizationId, input.account.id, Lifecycle.syncingNetwork);
     const [vpcsResult, subnetsResult, securityGroupsResult] = await Promise.all([
@@ -371,26 +374,27 @@ export class AwsInventorySyncService {
       securityGroups: 0,
       instances: 0,
       volumes: 0,
-      relationships: 0
+      relationships: 0,
+      staleResources: 0
     };
 
     for (const vpc of vpcsResult.Vpcs ?? []) {
       if (!vpc.VpcId) continue;
-      const resource = await this.saveResource(input.account, input.organizationId, "VPC", vpc.VpcId, region, getTag(vpc.Tags, "Name"), vpc.State, vpc.Tags, vpc);
+      const resource = await this.saveResource(input.account, input.organizationId, "VPC", vpc.VpcId, region, getTag(vpc.Tags, "Name"), vpc.State, vpc.Tags, vpc, scanRunId);
       resourceIds.set(vpc.VpcId, resource.id);
       counts.vpcs += 1;
     }
 
     for (const subnet of subnetsResult.Subnets ?? []) {
       if (!subnet.SubnetId) continue;
-      const resource = await this.saveResource(input.account, input.organizationId, "SUBNET", subnet.SubnetId, region, getTag(subnet.Tags, "Name"), subnet.State, subnet.Tags, subnet);
+      const resource = await this.saveResource(input.account, input.organizationId, "SUBNET", subnet.SubnetId, region, getTag(subnet.Tags, "Name"), subnet.State, subnet.Tags, subnet, scanRunId);
       resourceIds.set(subnet.SubnetId, resource.id);
       counts.subnets += 1;
     }
 
     for (const group of securityGroupsResult.SecurityGroups ?? []) {
       if (!group.GroupId) continue;
-      const resource = await this.saveResource(input.account, input.organizationId, "SECURITY_GROUP", group.GroupId, region, group.GroupName, null, group.Tags, group);
+      const resource = await this.saveResource(input.account, input.organizationId, "SECURITY_GROUP", group.GroupId, region, group.GroupName, null, group.Tags, group, scanRunId);
       resourceIds.set(group.GroupId, resource.id);
       counts.securityGroups += 1;
     }
@@ -398,36 +402,53 @@ export class AwsInventorySyncService {
     const instances = (instancesResult.Reservations ?? []).flatMap((reservation) => reservation.Instances ?? []);
     for (const instance of instances) {
       if (!instance.InstanceId) continue;
-      const resource = await this.saveResource(input.account, input.organizationId, "EC2_INSTANCE", instance.InstanceId, region, getTag(instance.Tags, "Name"), instance.State?.Name, instance.Tags, instance);
+      const resource = await this.saveResource(input.account, input.organizationId, "EC2_INSTANCE", instance.InstanceId, region, getTag(instance.Tags, "Name"), instance.State?.Name, instance.Tags, instance, scanRunId);
       resourceIds.set(instance.InstanceId, resource.id);
       counts.instances += 1;
     }
 
     for (const volume of volumesResult.Volumes ?? []) {
       if (!volume.VolumeId) continue;
-      const resource = await this.saveResource(input.account, input.organizationId, "EBS_VOLUME", volume.VolumeId, region, getTag(volume.Tags, "Name"), volume.State, volume.Tags, volume);
+      const resource = await this.saveResource(input.account, input.organizationId, "EBS_VOLUME", volume.VolumeId, region, getTag(volume.Tags, "Name"), volume.State, volume.Tags, volume, scanRunId);
       resourceIds.set(volume.VolumeId, resource.id);
       counts.volumes += 1;
     }
 
     await this.updateLatestRunning(input.organizationId, input.account.id, Lifecycle.updatingGraph);
     for (const subnet of subnetsResult.Subnets ?? []) {
-      counts.relationships += await this.saveEdge(resourceIds.get(subnet.VpcId ?? ""), resourceIds.get(subnet.SubnetId ?? ""), "CONTAINS");
+      counts.relationships += await this.saveEdge(resourceIds.get(subnet.VpcId ?? ""), resourceIds.get(subnet.SubnetId ?? ""), "CONTAINS", scanRunId);
     }
     for (const group of securityGroupsResult.SecurityGroups ?? []) {
-      counts.relationships += await this.saveEdge(resourceIds.get(group.VpcId ?? ""), resourceIds.get(group.GroupId ?? ""), "CONTAINS");
+      counts.relationships += await this.saveEdge(resourceIds.get(group.VpcId ?? ""), resourceIds.get(group.GroupId ?? ""), "CONTAINS", scanRunId);
     }
     for (const instance of instances) {
-      counts.relationships += await this.saveEdge(resourceIds.get(instance.SubnetId ?? ""), resourceIds.get(instance.InstanceId ?? ""), "CONTAINS");
+      counts.relationships += await this.saveEdge(resourceIds.get(instance.SubnetId ?? ""), resourceIds.get(instance.InstanceId ?? ""), "CONTAINS", scanRunId);
       for (const group of instance.SecurityGroups ?? []) {
-        counts.relationships += await this.saveEdge(resourceIds.get(instance.InstanceId ?? ""), resourceIds.get(group.GroupId ?? ""), "ASSOCIATED_WITH");
+        counts.relationships += await this.saveEdge(resourceIds.get(instance.InstanceId ?? ""), resourceIds.get(group.GroupId ?? ""), "ASSOCIATED_WITH", scanRunId);
       }
     }
     for (const volume of volumesResult.Volumes ?? []) {
       for (const attachment of volume.Attachments ?? []) {
-        counts.relationships += await this.saveEdge(resourceIds.get(attachment.InstanceId ?? ""), resourceIds.get(volume.VolumeId ?? ""), "ATTACHED_TO");
+        counts.relationships += await this.saveEdge(resourceIds.get(attachment.InstanceId ?? ""), resourceIds.get(volume.VolumeId ?? ""), "ATTACHED_TO", scanRunId);
       }
     }
+
+    const staleReconciliation = await prisma.cloudResource.updateMany({
+      where: {
+        organizationId: input.organizationId,
+        awsAccountId: input.account.id,
+        region,
+        source: "AWS_SYNC",
+        lastScanRunId: { not: scanRunId },
+        staleAt: null,
+        archivedAt: null
+      },
+      data: {
+        staleAt: new Date(),
+        staleReason: "Missing from successful scan"
+      }
+    });
+    counts.staleResources = staleReconciliation.count;
 
     return counts;
   }
@@ -441,7 +462,8 @@ export class AwsInventorySyncService {
     name: string | undefined,
     status: string | null | undefined,
     tags: Tag[] | undefined,
-    metadata: unknown
+    metadata: unknown,
+    scanRunId: string
   ) {
     return prisma.cloudResource.upsert({
       where: {
@@ -462,7 +484,10 @@ export class AwsInventorySyncService {
         metadata: normalizeMetadata(metadata, account),
         source: "AWS_SYNC",
         lastVerifiedAt: new Date(),
-        lastSeenAt: new Date()
+        lastSeenAt: new Date(),
+        lastScanRunId: scanRunId,
+        staleAt: null,
+        staleReason: null
       },
       create: {
         organizationId,
@@ -478,17 +503,30 @@ export class AwsInventorySyncService {
         metadata: normalizeMetadata(metadata, account),
         source: "AWS_SYNC",
         lastVerifiedAt: new Date(),
-        lastSeenAt: new Date()
+        lastSeenAt: new Date(),
+        lastScanRunId: scanRunId,
+        staleAt: null,
+        staleReason: null
       }
     });
   }
 
-  private async saveEdge(sourceResourceId: string | undefined, targetResourceId: string | undefined, relationshipType: string) {
+  private async saveEdge(sourceResourceId: string | undefined, targetResourceId: string | undefined, relationshipType: string, scanRunId: string) {
     if (!sourceResourceId || !targetResourceId) return 0;
     const existing = await prisma.resourceRelationship.findFirst({
       where: { sourceResourceId, targetResourceId, relationshipType }
     });
-    if (existing) return 0;
+    if (existing) {
+      await prisma.resourceRelationship.update({
+        where: { id: existing.id },
+        data: {
+          lastSeenAt: new Date(),
+          lastScanRunId: scanRunId,
+          staleAt: null
+        }
+      });
+      return 0;
+    }
     const source = await prisma.cloudResource.findUnique({ where: { id: sourceResourceId }, select: { organizationId: true } });
     const target = await prisma.cloudResource.findUnique({ where: { id: targetResourceId }, select: { organizationId: true } });
     if (!source || !target || source.organizationId !== target.organizationId) return 0;
@@ -499,6 +537,8 @@ export class AwsInventorySyncService {
         targetResourceId,
         relationshipType,
         sourceClassification: "AWS_SYNC",
+        lastScanRunId: scanRunId,
+        staleAt: null,
         evidence: {
           source: "aws-readonly-inventory-sync",
           mutationExecuted: false

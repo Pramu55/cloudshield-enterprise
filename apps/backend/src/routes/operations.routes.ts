@@ -7,10 +7,13 @@ import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credenti
 import {
   activeAwsAccountRelationWhere,
   activeAwsAccountWhere,
-  activeCloudResourceWhere,
-  activeComplianceEvidenceWhere,
-  activeSecurityFindingWhere
+  activeComplianceEvidenceWhere
 } from "../modules/aws-account-lifecycle/aws-account-lifecycle.policy.js";
+import {
+  activeResourceWhere,
+  activeFindingForActiveResourceWhere,
+  activeRelationshipWhere
+} from "../modules/inventory-lifecycle/inventory-lifecycle.policy.js";
 
 const SafetyFlags = {
   awsApiCallExecuted: false as const,
@@ -47,17 +50,13 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         orderBy: [{ environment: "asc" }, { name: "asc" }]
       }),
       prisma.cloudResource.findMany({
-        where: activeCloudResourceWhere(auth.organizationId),
+        where: activeResourceWhere(auth.organizationId),
         include: { awsAccount: { select: { id: true, name: true, accountId: true } }, ownerTeam: { select: { name: true } } },
         orderBy: [{ resourceType: "asc" }, { name: "asc" }],
         take: 150
       }),
       prisma.resourceRelationship.findMany({
-        where: {
-          ...scope,
-          sourceResource: { awsAccount: activeAwsAccountRelationWhere(), archivedAt: null },
-          targetResource: { awsAccount: activeAwsAccountRelationWhere(), archivedAt: null }
-        },
+        where: activeRelationshipWhere(auth.organizationId),
         include: {
           sourceResource: { select: { id: true, name: true, resourceType: true, resourceId: true } },
           targetResource: { select: { id: true, name: true, resourceType: true, resourceId: true } }
@@ -65,7 +64,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         take: 250
       }),
       prisma.securityFinding.findMany({
-        where: activeSecurityFindingWhere(auth.organizationId),
+        where: activeFindingForActiveResourceWhere(auth.organizationId),
         include: { resource: { select: { id: true, name: true, resourceType: true, source: true } } },
         orderBy: [{ severity: "asc" }, { createdAt: "desc" }],
         take: 100

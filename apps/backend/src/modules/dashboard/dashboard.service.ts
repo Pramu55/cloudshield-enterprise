@@ -10,6 +10,8 @@ import type {
   ExecutiveScoreStatus,
   DataSourceLabel
 } from "@cloudshield/contracts";
+import { activeAwsAccountWhere } from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
+import { activeResourceWhere, activeFindingForActiveResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 
 const FRESH_MAX_HOURS = 24;
 const AGING_MAX_HOURS = 72;
@@ -33,12 +35,12 @@ export async function getCommandCenterData(organizationId: string): Promise<Comm
     totalTeams,
     totalMembers
   ] = await Promise.all([
-    prisma.awsAccount.count({ where: { organizationId, archivedAt: null } }),
-    prisma.awsAccount.count({ where: { organizationId, archivedAt: null, connectionStatus: "VALIDATION_SUCCEEDED" } }),
-    prisma.cloudResource.count({ where: { organizationId, archivedAt: null } }),
-    prisma.securityFinding.count({ where: { organizationId, workflowStatus: "OPEN", archivedAt: null } }),
-    prisma.securityFinding.count({ where: { organizationId, workflowStatus: "OPEN", archivedAt: null, severity: "CRITICAL" } }),
-    prisma.securityFinding.count({ where: { organizationId, workflowStatus: "OPEN", archivedAt: null, severity: "HIGH" } }),
+    prisma.awsAccount.count({ where: activeAwsAccountWhere(organizationId) }),
+    prisma.awsAccount.count({ where: activeAwsAccountWhere(organizationId, { connectionStatus: "VALIDATION_SUCCEEDED" }) }),
+    prisma.cloudResource.count({ where: activeResourceWhere(organizationId) }),
+    prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(organizationId, { workflowStatus: "OPEN" }) }),
+    prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(organizationId, { workflowStatus: "OPEN", severity: "CRITICAL" }) }),
+    prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(organizationId, { workflowStatus: "OPEN", severity: "HIGH" }) }),
     prisma.complianceControl.count({ where: { organizationId, status: { in: ["FAIL", "WARNING", "NEEDS_REVIEW"] } } }),
     prisma.recommendation.count({ where: { organizationId } }),
     prisma.remediationPlan.count({ where: { organizationId, approvalStatus: "PENDING_APPROVAL" } }),
@@ -250,8 +252,8 @@ export async function getCommandCenterData(organizationId: string): Promise<Comm
     prisma.complianceControl.count({ where: { organizationId } }),
     prisma.complianceControl.count({ where: { organizationId, evidenceCount: { gt: 0 } } }),
     prisma.complianceControl.count({ where: { organizationId, status: "PASS" } }),
-    prisma.cloudResource.count({ where: { organizationId, archivedAt: null, source: "AWS_SYNC" } }),
-    prisma.cloudResource.count({ where: { organizationId, archivedAt: null, source: "SAMPLE" } }),
+    prisma.cloudResource.count({ where: activeResourceWhere(organizationId, { source: "AWS_SYNC" }) }),
+    prisma.cloudResource.count({ where: activeResourceWhere(organizationId, { source: "SAMPLE" }) }),
     prisma.complianceEvidence.count({
       where: { organizationId, sampleData: false, sourceClassification: "AWS_SYNC" }
     }),
@@ -275,8 +277,8 @@ export async function getCommandCenterData(organizationId: string): Promise<Comm
   const controlsWithoutEvidence = totalControls - controlsWithEvidence;
   const coveragePercent = totalControls > 0 ? (controlsWithEvidence / totalControls) : 0;
   
+  const ownedHighRiskRecords = await prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(organizationId, { workflowStatus: "OPEN", severity: { in: ["CRITICAL", "HIGH"] }, ownerTeamId: { not: null } }) });
   const totalHighRisk = criticalFindings + highFindings;
-  const ownedHighRiskRecords = await prisma.securityFinding.count({ where: { organizationId, workflowStatus: "OPEN", severity: { in: ["CRITICAL", "HIGH"] }, ownerTeamId: { not: null }, archivedAt: null } });
   const unownedHighRiskRecords = totalHighRisk - ownedHighRiskRecords;
   const ownershipPercent = totalHighRisk > 0 ? (ownedHighRiskRecords / totalHighRisk) : (hasData ? 1 : 0);
 
@@ -515,9 +517,9 @@ export async function getCommandCenterData(organizationId: string): Promise<Comm
   };
 
   // Risk Distribution
-  const mediumFindings = await prisma.securityFinding.count({ where: { organizationId, workflowStatus: "OPEN", archivedAt: null, severity: "MEDIUM" } });
-  const lowFindings = await prisma.securityFinding.count({ where: { organizationId, workflowStatus: "OPEN", archivedAt: null, severity: "LOW" } });
-  const infoFindings = await prisma.securityFinding.count({ where: { organizationId, workflowStatus: "OPEN", archivedAt: null, severity: "INFO" } });
+  const mediumFindings = await prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(organizationId, { workflowStatus: "OPEN", severity: "MEDIUM" }) });
+  const lowFindings = await prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(organizationId, { workflowStatus: "OPEN", severity: "LOW" }) });
+  const infoFindings = await prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(organizationId, { workflowStatus: "OPEN", severity: "INFO" }) });
   
   const findingsGroupedByStatus = await prisma.securityFinding.groupBy({
     by: ['workflowStatus'],

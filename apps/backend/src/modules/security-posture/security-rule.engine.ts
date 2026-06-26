@@ -2,8 +2,8 @@ import { prisma, scopeByOrganization } from "@cloudshield/database";
 import { createLogger } from "@cloudshield/logger";
 import { SECURITY_RULE_CATALOG } from "./security-rule.catalog.js";
 import type { ResourceForEvaluation, RuleEvaluationResult } from "./security-rule.types.js";
+import { activeResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 import {
-  activeCloudResourceWhere,
   activeSecurityFindingWhere
 } from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
@@ -18,7 +18,7 @@ export type EvaluationSummary = {
 
 export async function evaluateSecurityRules(organizationId: string): Promise<EvaluationSummary> {
   const resources = await prisma.cloudResource.findMany({
-    where: activeCloudResourceWhere(organizationId),
+    where: activeResourceWhere(organizationId),
     select: {
       id: true,
       organizationId: true,
