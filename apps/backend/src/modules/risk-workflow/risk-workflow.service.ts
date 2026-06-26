@@ -13,7 +13,7 @@ import type {
   RiskWorkflowActionName,
   RiskWorkflowStatus
 } from "@cloudshield/contracts";
-import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
+import { prisma, scopeByOrganization, type Prisma, RiskStatus } from "@cloudshield/database";
 import { createRiskWorkflowAuditEvent, toRiskAuditEventDto } from "./risk-workflow.audit.js";
 import { assertGovernanceTargetOperationallyActive } from "../governance-action-guard/governance-action-guard.policy.js";
 import {
@@ -23,6 +23,7 @@ import {
   RiskWorkflowSafety,
   evidenceSummary
 } from "./risk-workflow.policy.js";
+import { riskAcceptanceExpiryState, isRiskAcceptanceActive } from "./risk-acceptance.policy.js";
 import type { RiskWorkflowAuditActionName } from "./risk-workflow.types.js";
 
 type ActorContext = {
@@ -101,19 +102,50 @@ export async function listRiskAcceptances(
 ) {
   const expiringSoonAt = new Date(now.getTime() + 30 * 86_400_000);
   const cursor = decodeAcceptanceCursor(query.cursor);
-  const expiryWhere =
+  const securityFindingConditions: Prisma.SecurityFindingWhereInput[] = [];
+  if (query.severity) {
+    securityFindingConditions.push({ severity: query.severity });
+  }
+
+  if (query.status === "active" || query.status === "expiring-soon") {
+    securityFindingConditions.push({
+      workflowStatus: RiskStatus.RISK_ACCEPTED,
+      archivedAt: null,
+      OR: [
+        { resourceId: null },
+        { resource: { is: { archivedAt: null, staleAt: null } } }
+      ]
+    });
+  }
+
+  const expiryWhere: Prisma.RiskAcceptanceWhereInput =
     query.status === "expired"
-      ? { expiresAt: { lt: now } }
+      ? {
+          OR: [
+            { expiresAt: { lt: now } },
+            { securityFinding: { is: { workflowStatus: { not: RiskStatus.RISK_ACCEPTED } } } },
+            { securityFinding: { is: { archivedAt: { not: null } } } },
+            { securityFinding: { is: { resource: { is: { archivedAt: { not: null } } } } } },
+            { securityFinding: { is: { resource: { is: { staleAt: { not: null } } } } } }
+          ]
+        }
       : query.status === "expiring-soon"
         ? { expiresAt: { gte: now, lte: expiringSoonAt } }
         : query.status === "active"
           ? { expiresAt: { gt: expiringSoonAt } }
           : {};
+
   const where: Prisma.RiskAcceptanceWhereInput = {
     organizationId,
     securityFindingId: { not: null },
     ...expiryWhere,
-    ...(query.severity ? { securityFinding: { severity: query.severity } } : {}),
+    ...(securityFindingConditions.length
+      ? {
+          securityFinding: {
+            is: securityFindingConditions.reduce<Prisma.SecurityFindingWhereInput>((acc, curr) => ({ ...acc, ...curr }), {})
+          }
+        }
+      : {}),
     ...(cursor
       ? {
           OR: [
@@ -164,7 +196,9 @@ export async function listRiskAcceptances(
   const items = page.flatMap((acceptance): RiskAcceptanceRegistryItem[] => {
     const finding = acceptance.securityFinding;
     if (!finding) return [];
-    const expiry = riskAcceptanceExpiry(acceptance.expiresAt, now, expiringSoonAt);
+    const state = riskAcceptanceExpiryState(acceptance, finding, finding.resource, now);
+    const expiryStatus = state === "ACTIVE" || state === "EXPIRING_SOON" ? state : "EXPIRED";
+    const daysUntilExpiry = Math.ceil((acceptance.expiresAt.getTime() - now.getTime()) / 86_400_000);
     return [{
       riskAcceptanceId: acceptance.id,
       findingId: finding.id,
@@ -184,8 +218,8 @@ export async function listRiskAcceptances(
       acceptedByName: approverNames.get(acceptance.approver) ?? null,
       acceptedAt: acceptance.createdAt.toISOString(),
       expiresAt: acceptance.expiresAt.toISOString(),
-      expiryStatus: expiry.status,
-      daysUntilExpiry: expiry.daysUntilExpiry,
+      expiryStatus,
+      daysUntilExpiry,
       justification: acceptance.businessJustification,
       evidenceSnapshotId: acceptance.evidenceSnapshot?.id ?? null,
       evidenceCapturedAt:
@@ -404,6 +438,12 @@ async function updateWorkflow(
     );
   }
 
+  if (input.action === "accept-risk") {
+    if (existing.resource && (existing.resource.archivedAt || existing.resource.staleAt)) {
+      throw workflowConflict("Risk acceptance requires an active resource. This resource is stale or archived.");
+    }
+  }
+
   if (input.action === "accept-risk" && !existing.ownerTeamId && !existing.assignedToUserId) {
     throw workflowConflict("Risk acceptance requires a current owner.");
   }
@@ -501,22 +541,7 @@ async function updateWorkflow(
   });
 }
 
-function riskAcceptanceExpiry(
-  expiresAt: Date,
-  now: Date,
-  expiringSoonAt: Date
-) {
-  const millisecondsUntilExpiry = expiresAt.getTime() - now.getTime();
-  return {
-    status:
-      expiresAt < now
-        ? "EXPIRED" as const
-        : expiresAt <= expiringSoonAt
-          ? "EXPIRING_SOON" as const
-          : "ACTIVE" as const,
-    daysUntilExpiry: Math.ceil(millisecondsUntilExpiry / 86_400_000)
-  };
-}
+
 
 function decodeAcceptanceCursor(value: string | undefined) {
   if (!value) return null;
@@ -608,7 +633,7 @@ function workflowConflict(message: string) {
 
 const riskFindingInclude = {
   awsAccount: { select: { name: true, connectionStatus: true, archivedAt: true } },
-  resource: { select: { name: true, resourceType: true, source: true } },
+  resource: { select: { name: true, resourceType: true, source: true, archivedAt: true, staleAt: true } },
   ownerTeam: { select: { name: true } },
   assignedToUser: { select: { email: true, name: true } },
   riskAcceptedByUser: { select: { email: true } }

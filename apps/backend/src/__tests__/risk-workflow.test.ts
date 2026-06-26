@@ -478,6 +478,7 @@ test("risk finding detail and workflow handoff remain tenant-safe and DB-only", 
 
   await t.test("registry expiry classification and filters are deterministic", async () => {
     const now = new Date("2026-06-21T12:00:00.000Z");
+    await resetFinding(matrixFixture.finding.id, "RISK_ACCEPTED", matrixFixture.team.id);
     await prisma.riskAcceptance.createMany({
       data: [
         {

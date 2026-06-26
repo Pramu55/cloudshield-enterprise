@@ -4,7 +4,7 @@ import type { Prisma } from "@prisma/client";
 export const prisma = new PrismaClient();
 export { Prisma, PrismaClient } from "@prisma/client";
 export type { Prisma as PrismaType };
-export { Environment, AwsAccountStatus } from "@prisma/client";
+export { Environment, AwsAccountStatus, RiskStatus, FindingSeverity } from "@prisma/client";
 
 export type OrganizationScope = {
   organizationId: string;
