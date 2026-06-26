@@ -1,4 +1,4 @@
-import { prisma, scopeByOrganization } from "@cloudshield/database";
+import { prisma, scopeByOrganization, FindingSeverity } from "@cloudshield/database";
 import { createLogger } from "@cloudshield/logger";
 import { SECURITY_RULE_CATALOG } from "./security-rule.catalog.js";
 import type { ResourceForEvaluation, RuleEvaluationResult } from "./security-rule.types.js";
@@ -67,7 +67,8 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
             organizationId,
             resourceId: resource.id,
             ruleId: rule.ruleId,
-            status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED"] }
+            status: { notIn: ["RESOLVED", "ARCHIVED", "FALSE_POSITIVE"] },
+            archivedAt: null
           }
         });
 
@@ -90,7 +91,7 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
               ruleId: rule.ruleId,
               title: rule.title,
               description: rule.description,
-              severity: rule.severity as any,
+              severity: FindingSeverity[rule.severity],
               status: "OPEN",
               evidence: (result.evidence as object) || {},
               businessImpact: rule.businessImpact,
@@ -110,7 +111,7 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
   // Resolve findings that no longer apply
   const openFindings = await prisma.securityFinding.findMany({
     where: activeSecurityFindingWhere(organizationId, {
-      status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED"] }
+      status: { notIn: ["RESOLVED", "ARCHIVED", "FALSE_POSITIVE"] }
     }),
     select: { id: true, ruleId: true, resourceId: true }
   });

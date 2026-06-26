@@ -302,7 +302,8 @@ function executiveSummary(context: ReportContext) {
       metric("Inventory resources", context.resources.length),
       metric("Open findings", openFindings.length, openFindings.length ? "warning" : "good"),
       metric("High severity findings", highSeverity.length, highSeverity.length ? "critical" : "good"),
-      metric("Accepted risks", context.riskAcceptances.length),
+      metric("Accepted risks", context.riskAcceptances.filter((ra) => ra.expiresAt > new Date()).length),
+      metric("Historical risk acceptances", context.riskAcceptances.filter((ra) => ra.expiresAt <= new Date()).length),
       metric("Compliance evidence", context.complianceEvidenceCount),
       metric("Recommendations", context.recommendations.length),
       metric("Remediation plans", context.remediationPlans.length),
@@ -376,7 +377,7 @@ function riskSummary(context: ReportContext) {
   return {
     metrics: [
       metric("Assigned findings", assigned.length),
-      metric("Accepted risks", context.riskAcceptances.length),
+      metric("Accepted risks", context.riskAcceptances.filter((ra) => ra.expiresAt > new Date()).length),
       metric("Resolved findings", resolved.length, "good"),
       metric("Overdue target dates", overdue.length, overdue.length ? "critical" : "good"),
       metric("Audit events", context.auditEvents.length),
@@ -386,7 +387,8 @@ function riskSummary(context: ReportContext) {
     sections: [
       section("Risk workflow", "Ownership and acceptance summary from CloudShield workflow records.", [
         metric("Assigned", assigned.length),
-        metric("Accepted", context.riskAcceptances.length),
+        metric("Accepted", context.riskAcceptances.filter((ra) => ra.expiresAt > new Date()).length),
+        metric("Historical Accepted", context.riskAcceptances.filter((ra) => ra.expiresAt <= new Date()).length),
         metric("Resolved", resolved.length)
       ]),
       section("Remediation governance", "Approval-backed remediation plan evidence for manual execution workflows.", [

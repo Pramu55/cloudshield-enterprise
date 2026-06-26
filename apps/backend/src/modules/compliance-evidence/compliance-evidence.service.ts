@@ -18,6 +18,7 @@ import {
   deriveComplianceStatus,
   deriveComplianceProjectionStatus
 } from "./compliance-evidence.policy.js";
+import { isRiskAcceptanceActive } from "../risk-workflow/risk-acceptance.policy.js";
 import {
   toComplianceControlDto,
   toComplianceEvidenceDto
@@ -189,24 +190,27 @@ function complianceProjectionCounts(
   let resolvedFindingCount = 0;
 
   for (const finding of findings) {
-    const hasActiveRiskAcceptance = finding.riskAcceptances.some(
-      ra => ra.expiresAt > new Date()
-    );
+      const hasActiveRiskAcceptance = finding.riskAcceptances.some(
+        ra => isRiskAcceptanceActive(ra, finding, finding.resource)
+      );
 
-    if (activeStatuses.has(finding.workflowStatus)) {
-      if (hasActiveRiskAcceptance) {
+      if (activeStatuses.has(finding.workflowStatus)) {
+        if (hasActiveRiskAcceptance) {
+          acceptedRiskCount++;
+        } else {
+          openFindingCount++;
+        }
+      } else if (finding.workflowStatus === "RISK_ACCEPTED") {
+        if (hasActiveRiskAcceptance) {
+          acceptedRiskCount++;
+        } else {
+          openFindingCount++;
+        }
+      } else if (hasActiveRiskAcceptance) {
         acceptedRiskCount++;
       } else {
-        openFindingCount++;
+        resolvedFindingCount++;
       }
-    } else if (
-      finding.workflowStatus === "RISK_ACCEPTED" ||
-      hasActiveRiskAcceptance
-    ) {
-      acceptedRiskCount++;
-    } else {
-      resolvedFindingCount++;
-    }
   }
 
   const evidenceSnapshotCount = findings.reduce(
@@ -549,19 +553,25 @@ async function evaluateControl(
     const workflowStatus = isCost ? finding.status : finding.workflowStatus;
     const activeStatuses = new Set(["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "REOPENED", "WARNING"]);
 
-    const hasActiveRiskAcceptance = "riskAcceptances" in finding
-      ? finding.riskAcceptances.some(ra => ra.expiresAt > new Date())
-      : false;
+      const hasActiveRiskAcceptance = "riskAcceptances" in finding
+        ? finding.riskAcceptances.some(ra => isRiskAcceptanceActive(ra, finding, finding.resource))
+        : false;
 
-    if (activeStatuses.has(workflowStatus)) {
-      if (hasActiveRiskAcceptance) {
+      if (activeStatuses.has(workflowStatus)) {
+        if (hasActiveRiskAcceptance) {
+          acceptedRiskCount++;
+        } else {
+          openFindingCount++;
+        }
+      } else if (workflowStatus === "RISK_ACCEPTED") {
+        if (hasActiveRiskAcceptance) {
+          acceptedRiskCount++;
+        } else {
+          openFindingCount++;
+        }
+      } else if (hasActiveRiskAcceptance) {
         acceptedRiskCount++;
-      } else {
-        openFindingCount++;
       }
-    } else if (workflowStatus === "RISK_ACCEPTED" || hasActiveRiskAcceptance) {
-      acceptedRiskCount++;
-    }
   }
 
   const failedResources = new Set(
