@@ -11,6 +11,7 @@ import {
   RESOURCE_STATE_FINGERPRINT_POLICY_VERSION,
   RESOURCE_STATE_FINGERPRINT_SCHEMA_VERSION
 } from "@cloudshield/utils";
+import { assertGovernanceTargetOperationallyActive } from "../governance-action-guard/governance-action-guard.policy.js";
 
 export const AUTHORITATIVE_CAPTURE_SOURCE = "PROVIDER_DESCRIBE_INSTANCES" as const;
 
@@ -324,7 +325,12 @@ function validateCaptureTarget(plan: any, organizationId: string, now: Date, env
   const payload = plan.normalizedPayload as any;
   if (plan.organizationId !== organizationId || account?.organizationId !== organizationId || resource?.organizationId !== organizationId) throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_NOT_ALLOWED", false);
   if (plan.allowlistedOperation !== "EC2_APPLY_GOVERNANCE_TAGS" || plan.lifecycleState !== "PENDING_APPROVAL") throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_NOT_ALLOWED", false);
-  if (!account || account.archivedAt || account.connectionStatus === "DISABLED" || account.status === "FAILED") throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_NOT_ALLOWED", false);
+  try {
+    assertGovernanceTargetOperationallyActive(account);
+  } catch {
+    throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_NOT_ALLOWED", false);
+  }
+  if (account.status === "FAILED") throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_NOT_ALLOWED", false);
   if (account.environment === "prod") throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_NOT_ALLOWED", false);
   if (!account.roleArnPlaceholder || account.roleArnPlaceholder !== env.AWS_ROLE_ARN) throw new FingerprintCaptureError("FINGERPRINT_CAPTURE_NOT_ALLOWED", false);
   const allowedAccounts = csv(env.AWS_ALLOWED_ACCOUNT_IDS);

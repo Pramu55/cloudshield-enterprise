@@ -15,6 +15,7 @@ import type {
 } from "@cloudshield/contracts";
 import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
 import { createRiskWorkflowAuditEvent, toRiskAuditEventDto } from "./risk-workflow.audit.js";
+import { assertGovernanceTargetOperationallyActive } from "../governance-action-guard/governance-action-guard.policy.js";
 import {
   availableRiskWorkflowActions,
   isRiskWorkflowTransitionAllowed,
@@ -394,6 +395,8 @@ async function updateWorkflow(
     return null;
   }
 
+  assertGovernanceTargetOperationallyActive(existing.awsAccount);
+
   const fromStatus = normalizeWorkflowStatus(existing.workflowStatus);
   if (!isRiskWorkflowTransitionAllowed(fromStatus, input.action)) {
     throw workflowConflict(
@@ -604,7 +607,7 @@ function workflowConflict(message: string) {
 }
 
 const riskFindingInclude = {
-  awsAccount: { select: { name: true } },
+  awsAccount: { select: { name: true, connectionStatus: true, archivedAt: true } },
   resource: { select: { name: true, resourceType: true, source: true } },
   ownerTeam: { select: { name: true } },
   assignedToUser: { select: { email: true, name: true } },

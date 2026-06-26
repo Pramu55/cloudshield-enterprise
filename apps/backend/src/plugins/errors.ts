@@ -20,10 +20,14 @@ export function registerErrorPlugin(app: FastifyInstance): void {
     }
 
     if (hasStatusCode(error)) {
-      reply.status(error.statusCode).send({
+      const body: Record<string, unknown> = {
         error: "request_error",
         message: error.message
-      });
+      };
+      if ("classification" in error && typeof error.classification === "string") {
+        body.classification = error.classification;
+      }
+      reply.status(error.statusCode).send(body);
       return;
     }
 

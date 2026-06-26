@@ -25,6 +25,10 @@ import {
 } from "./aws-change-execution.policy.js";
 import { GovernanceSafety } from "./remediation.service.js";
 import { validateAuthoritativeApprovalCapture } from "./resource-state-capture.service.js";
+import {
+  assertGovernanceTargetOperationallyActive,
+  sanitizeGovernanceEvidencePayload
+} from "../governance-action-guard/governance-action-guard.policy.js";
 
 type ActorContext = {
   organizationId: string;
@@ -68,10 +72,10 @@ export async function simulateGovernedAwsChange(
       requestedById: actor.userId,
       expectedImpact: body.expectedImpact
     },
-    normalizedPayload: body.payload,
-    beforeState: buildBeforeState(loaded),
-    expectedAfterState: buildExpectedAfterState(body.payload),
-    rollbackPayload: buildRollbackPayload(body.payload),
+    normalizedPayload: sanitizeGovernanceEvidencePayload(body.payload) as any,
+    beforeState: sanitizeGovernanceEvidencePayload(buildBeforeState(loaded)) as any,
+    expectedAfterState: sanitizeGovernanceEvidencePayload(buildExpectedAfterState(body.payload)) as any,
+    rollbackPayload: sanitizeGovernanceEvidencePayload(buildRollbackPayload(body.payload)) as any,
     preflightEvidence: {
       simulatedOnly: true,
       awsMutationApiCalled: false,
@@ -116,7 +120,7 @@ export async function simulateGovernedAwsChange(
           : "governance.aws_change.simulated",
         targetType: "remediation_plan",
         targetId: loaded.id,
-        metadata: {
+        metadata: sanitizeGovernanceEvidencePayload({
           operation: body.operation,
           executionMode: mode,
           blockedReason,
@@ -124,7 +128,7 @@ export async function simulateGovernedAwsChange(
           mutationExecuted: false,
           automaticRemediationExecuted: false,
           terraformApplyExecuted: false
-        }
+        }) as any
       }
     })
   ]);
@@ -172,20 +176,20 @@ export async function requestGovernedAwsChangeApproval(
         decisionReason: body.reason,
         expectedImpact: body.expectedImpact,
         confirmationToken: body.confirmationToken,
-        evidenceSnapshot: {
+        evidenceSnapshot: sanitizeGovernanceEvidencePayload({
           requestedAction: plan.requestedAction,
           normalizedPayload: plan.normalizedPayload,
           beforeState: plan.beforeState,
           expectedAfterState: plan.expectedAfterState
-        },
+        }) as any,
         payloadHash,
         expiresAt: plan.approvalExpiresAt
       }
     }),
     prisma.auditEvent.create({
-      data: auditData(actor, plan.id, "governance.aws_change.approval_requested", {
+      data: auditData(actor, plan.id, "governance.aws_change.approval_requested", sanitizeGovernanceEvidencePayload({
         expectedImpact: body.expectedImpact
-      })
+      }) as any)
     })
   ]);
 
@@ -292,10 +296,10 @@ export async function queueGovernedAwsChangeExecution(
     });
     if (claimed.count !== 1) return null;
     const auditEvent = await tx.auditEvent.create({
-      data: auditData(actor, plan.id, "governance.aws_change.execution_queued", {
+      data: auditData(actor, plan.id, "governance.aws_change.execution_queued", sanitizeGovernanceEvidencePayload({
         idempotencyKey: body.idempotencyKey,
         correlationId: context.correlationId
-      })
+      }) as any)
     });
     const updatedPlan = await tx.remediationPlan.findUniqueOrThrow({
       where: { id: plan.id },
@@ -333,6 +337,12 @@ function validatePreparation(
   body: GovernedSimulationRequest
 ) {
   const policy = ALLOWLISTED_GOVERNED_AWS_OPERATIONS[body.operation];
+  try {
+    assertGovernanceTargetOperationallyActive(loaded.finding?.awsAccount as any);
+  } catch (error) {
+    if (error instanceof Error) return error.message;
+    return "AWS account lifecycle blocked";
+  }
   if (!policy?.enabled) return "Requested operation is not enabled in the governed execution allowlist.";
   if (body.operation !== body.payload.operation) return "Operation and payload operation do not match.";
   if (loaded.finding.status === "RESOLVED" || loaded.finding.workflowStatus === "RESOLVED") {
@@ -354,6 +364,12 @@ function validatePreparation(
 function validateExecutionReady(plan: ExecutionPlan, body: GovernedExecuteRequest) {
   const now = new Date();
   const mode = getAwsChangeExecutionMode();
+  try {
+    assertGovernanceTargetOperationallyActive(plan.finding?.awsAccount as any);
+  } catch (error) {
+    if (error instanceof Error) return error.message;
+    return "AWS account lifecycle blocked";
+  }
   if (mode === "disabled") return "AWS_CHANGE_EXECUTION_MODE is disabled.";
   if (mode === "production") return "Production execution is configured but not enabled in this pilot milestone.";
   if (plan.lifecycleState !== "APPROVED") return "Plan must be approved before execution can be queued.";
@@ -818,23 +834,23 @@ function toApprovalRequestDto(approval: any) {
 
 function auditData(
   actor: ActorContext,
-  planId: string,
+  targetId: string,
   action: string,
   metadata: Record<string, unknown>
 ) {
   return {
     organizationId: actor.organizationId,
     actorUserId: actor.userId,
-    action,
     targetType: "remediation_plan",
-    targetId: planId,
-    metadata: {
+    targetId,
+    action,
+    metadata: sanitizeGovernanceEvidencePayload({
       ...metadata,
       awsApiCallExecuted: false,
       mutationExecuted: false,
-      automaticRemediationExecuted: false,
-      terraformApplyExecuted: false
-    }
+      terraformApplyExecuted: false,
+      automaticRemediationExecuted: false
+    }) as any
   };
 }
 
