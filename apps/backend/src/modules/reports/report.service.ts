@@ -9,6 +9,13 @@ import type {
 import { prisma, scopeByOrganization, type Prisma } from "@cloudshield/database";
 import { toReportExportDto } from "./report.mapper.js";
 import { ReportMessage, ReportSafety, ReportTitles, ReportTypes } from "./report.policy.js";
+import {
+  activeAwsAccountWhere,
+  activeCloudResourceWhere,
+  activeComplianceEvidenceWhere,
+  activeCostFindingWhere,
+  activeSecurityFindingWhere
+} from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 const REPORT_LIMIT = 25;
 
@@ -47,13 +54,11 @@ export async function getReportsSummary(organizationId: string) {
         where: { organizationId, archivedAt: null },
         orderBy: [{ generatedAt: "desc" }, { createdAt: "desc" }]
       }),
-      prisma.complianceEvidence.count({ where: scopeByOrganization(organizationId) }),
+      prisma.complianceEvidence.count({ where: activeComplianceEvidenceWhere(organizationId) }),
       prisma.securityFinding.count({
-        where: {
-          organizationId,
-          archivedAt: null,
+        where: activeSecurityFindingWhere(organizationId, {
           status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
-        }
+        })
       })
     ]);
 
@@ -189,15 +194,15 @@ async function getReportContext(organizationId: string) {
     approvalRequests
   ] = await Promise.all([
     prisma.awsAccount.findMany({
-      where: organizationScope,
+      where: activeAwsAccountWhere(organizationId),
       include: { ownerTeam: { select: { name: true } } }
     }),
     prisma.cloudResource.findMany({
-      where: organizationScope,
+      where: activeCloudResourceWhere(organizationId),
       take: 100
     }),
     prisma.securityFinding.findMany({
-      where: organizationScope,
+      where: activeSecurityFindingWhere(organizationId),
       include: {
         resource: { select: { resourceType: true, name: true } },
         ownerTeam: { select: { name: true } }
@@ -205,7 +210,7 @@ async function getReportContext(organizationId: string) {
       take: 100
     }),
     prisma.costFinding.findMany({
-      where: organizationScope,
+      where: activeCostFindingWhere(organizationId),
       include: {
         resource: { select: { resourceType: true, name: true } },
         ownerTeam: { select: { name: true } }
@@ -216,7 +221,7 @@ async function getReportContext(organizationId: string) {
       where: organizationScope,
       take: 100
     }),
-    prisma.complianceEvidence.count({ where: organizationScope }),
+    prisma.complianceEvidence.count({ where: activeComplianceEvidenceWhere(organizationId) }),
     prisma.riskAcceptance.findMany({
       where: organizationScope,
       take: 100

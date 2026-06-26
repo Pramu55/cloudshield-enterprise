@@ -14,6 +14,11 @@ import {
 } from "@cloudshield/database";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
+import {
+  activeAwsAccountWhere,
+  awsAccountLifecycleBlockedResponse,
+  getAwsAccountOperationalBlockReason
+} from "../modules/aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 const REGISTRY_READY_MESSAGE =
   "Registry metadata is ready for explicit STS identity validation. This registry check made no AWS API call.";
@@ -45,10 +50,7 @@ export async function registerAwsAccountRoutes(
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.ACCOUNTS_READ);
     const accounts = await prisma.awsAccount.findMany({
-      where: {
-        organizationId: auth.organizationId,
-        archivedAt: null
-      },
+      where: activeAwsAccountWhere(auth.organizationId),
       orderBy: [{ environment: "asc" }, { name: "asc" }],
       include: {
         ownerTeam: {
@@ -195,6 +197,10 @@ export async function registerAwsAccountRoutes(
         });
         return;
       }
+      if (getAwsAccountOperationalBlockReason(existing)) {
+        reply.status(409).send(awsAccountLifecycleBlockedResponse());
+        return;
+      }
 
       const ownerTeamIsAllowed = await ownerTeamBelongsToOrganization(
         auth.organizationId,
@@ -269,7 +275,6 @@ export async function registerAwsAccountRoutes(
         });
         return;
       }
-
       const account = await prisma.awsAccount.update({
         where: {
           id: existing.id
@@ -311,6 +316,10 @@ export async function registerAwsAccountRoutes(
           error: "aws_account_not_found",
           message: "AWS account registry record was not found for this organization."
         });
+        return;
+      }
+      if (getAwsAccountOperationalBlockReason(existing)) {
+        reply.status(409).send(awsAccountLifecycleBlockedResponse());
         return;
       }
 

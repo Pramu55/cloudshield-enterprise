@@ -2,6 +2,14 @@ import type { FastifyInstance } from "fastify";
 import { prisma, scopeByOrganization } from "@cloudshield/database";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
+import {
+  activeAwsAccountRelationWhere,
+  activeAwsAccountWhere,
+  activeCloudResourceWhere,
+  activeComplianceEvidenceWhere,
+  activeCostFindingWhere,
+  activeSecurityFindingWhere
+} from "../modules/aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 const DEFAULT_LIMIT = 50;
 
@@ -30,12 +38,12 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       latestScan
     ] = await Promise.all([
       prisma.organization.count({ where: { id: auth.organizationId } }),
-      prisma.awsAccount.count({ where: organizationScope }),
-      prisma.cloudResource.count({ where: organizationScope }),
-      prisma.securityFinding.count({ where: organizationScope }),
-      prisma.costFinding.count({ where: organizationScope }),
+      prisma.awsAccount.count({ where: activeAwsAccountWhere(auth.organizationId) }),
+      prisma.cloudResource.count({ where: activeCloudResourceWhere(auth.organizationId) }),
+      prisma.securityFinding.count({ where: activeSecurityFindingWhere(auth.organizationId) }),
+      prisma.costFinding.count({ where: activeCostFindingWhere(auth.organizationId) }),
       prisma.complianceControl.count({ where: organizationScope }),
-      prisma.complianceEvidence.count({ where: organizationScope }),
+      prisma.complianceEvidence.count({ where: activeComplianceEvidenceWhere(auth.organizationId) }),
       prisma.complianceControl.count({
         where: {
           ...organizationScope,
@@ -46,19 +54,15 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       }),
       prisma.riskAcceptance.count({ where: organizationScope }),
       prisma.securityFinding.count({
-        where: {
-          ...organizationScope,
-          archivedAt: null,
+        where: activeSecurityFindingWhere(auth.organizationId, {
           status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
-        }
+        })
       }),
       prisma.securityFinding.count({
-        where: {
-          ...organizationScope,
-          archivedAt: null,
+        where: activeSecurityFindingWhere(auth.organizationId, {
           severity: { in: ["CRITICAL", "HIGH"] },
           status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
-        }
+        })
       }),
       prisma.recommendation.count({ where: organizationScope }),
       prisma.reportExport.count({
@@ -151,7 +155,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     const organizationScope = scopeByOrganization(auth.organizationId);
     
-    const accounts = await prisma.awsAccount.findMany({ where: organizationScope });
+    const accounts = await prisma.awsAccount.findMany({ where: activeAwsAccountWhere(auth.organizationId) });
     const businessUnits = new Set();
     const organizationalUnits = new Set();
     const environments = new Set();
@@ -181,9 +185,9 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     requirePermission(auth.role, PERMISSIONS.ORGANIZATION_READ);
     const organizationScope = scopeByOrganization(auth.organizationId);
     
-    const accounts = await prisma.awsAccount.findMany({ where: organizationScope });
+    const accounts = await prisma.awsAccount.findMany({ where: activeAwsAccountWhere(auth.organizationId) });
     const securityFindings = await prisma.securityFinding.findMany({ 
-      where: { ...organizationScope, status: "OPEN" },
+      where: activeSecurityFindingWhere(auth.organizationId, { status: "OPEN" }),
       include: { awsAccount: { select: { businessUnit: true } } }
     });
     
@@ -252,7 +256,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
 
     const whereClause: any = {
       ...scopeByOrganization(auth.organizationId),
-      AND: []
+      AND: [{ awsAccount: activeAwsAccountRelationWhere() }]
     };
 
     if (accountId || account) {
@@ -292,6 +296,9 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     if (lifecycle === "stale") {
       whereClause.archivedAt = null;
       whereClause.staleAt = { not: null };
+    }
+    if (!lifecycle && !freshness) {
+      whereClause.archivedAt = null;
     }
     if (tag) {
       whereClause.AND.push({
@@ -365,7 +372,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.FINDINGS_READ);
     const findings = await prisma.costFinding.findMany({
-      where: scopeByOrganization(auth.organizationId),
+      where: activeCostFindingWhere(auth.organizationId),
       take: DEFAULT_LIMIT,
       orderBy: [{ createdAt: "desc" }],
       include: {
