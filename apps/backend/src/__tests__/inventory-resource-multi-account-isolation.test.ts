@@ -40,6 +40,7 @@ test("inventory resource filtering is tenant-scoped and same-org account isolate
     assert.ok(ids.includes(fixture.accountAResource.resourceId));
     assert.ok(ids.includes(fixture.accountBResource.resourceId));
     assert.equal(ids.includes(fixture.otherTenantResource.resourceId), false);
+    assert.equal(ids.includes(fixture.archivedAccountResource.resourceId), false);
   });
 
   await t.test("same-org account filter returns only that account resources", async () => {
@@ -90,7 +91,7 @@ test("inventory resource filtering is tenant-scoped and same-org account isolate
     assert.deepEqual(resourceIds(wrongRegion.json()), []);
   });
 
-  await t.test("archived parent account behavior is documented by existing resource route semantics", async () => {
+  await t.test("archived parent account resources are excluded from active inventory filters", async () => {
     const res = await app.inject({
       method: "GET",
       url: `/api/v1/inventory/resources?accountId=${encodeURIComponent(fixture.archivedAccount.id)}&lifecycle=active&limit=100`,
@@ -98,7 +99,7 @@ test("inventory resource filtering is tenant-scoped and same-org account isolate
     });
 
     assert.equal(res.statusCode, 200, res.body);
-    assert.deepEqual(resourceIds(res.json()), [fixture.archivedAccountResource.resourceId]);
+    assert.deepEqual(resourceIds(res.json()), []);
   });
 
   await t.test("inventory response redacts secret-like metadata and raw provider payloads", async () => {

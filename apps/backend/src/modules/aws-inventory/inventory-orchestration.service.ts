@@ -8,6 +8,10 @@ import {
 import type { RuntimeEnv } from "@cloudshield/config";
 import { cloudScanQueue } from "./aws-inventory.queue.js";
 import { isReadonlyInventoryEnabled } from "./aws-inventory.service.js";
+import {
+  activeAwsAccountWhere,
+  activeCloudResourceWhere
+} from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 export const CANONICAL_SCAN_STATES = [
   "REQUESTED",
@@ -399,6 +403,7 @@ export class InventoryOrchestrationService {
 
   async getCoverage(organizationId: string) {
     const scope = scopeByOrganization(organizationId);
+    const activeResourceScope = activeCloudResourceWhere(organizationId);
     const [
       accounts,
       resourcesByAccount,
@@ -413,13 +418,13 @@ export class InventoryOrchestrationService {
       activeScans,
       failedRegions
     ] = await Promise.all([
-      prisma.awsAccount.findMany({ where: scope, orderBy: [{ environment: "asc" }, { name: "asc" }] }),
-      prisma.cloudResource.groupBy({ by: ["awsAccountId"], where: scope, _count: { _all: true } }),
-      prisma.cloudResource.groupBy({ by: ["region"], where: scope, _count: { _all: true } }),
-      prisma.cloudResource.groupBy({ by: ["resourceType"], where: scope, _count: { _all: true } }),
-      prisma.cloudResource.count({ where: { ...scope, source: "SAMPLE" } }),
-      prisma.cloudResource.count({ where: { ...scope, source: "AWS_SYNC" } }),
-      prisma.cloudResource.count({ where: { ...scope, staleAt: { not: null }, archivedAt: null } }),
+      prisma.awsAccount.findMany({ where: activeAwsAccountWhere(organizationId), orderBy: [{ environment: "asc" }, { name: "asc" }] }),
+      prisma.cloudResource.groupBy({ by: ["awsAccountId"], where: activeResourceScope, _count: { _all: true } }),
+      prisma.cloudResource.groupBy({ by: ["region"], where: activeResourceScope, _count: { _all: true } }),
+      prisma.cloudResource.groupBy({ by: ["resourceType"], where: activeResourceScope, _count: { _all: true } }),
+      prisma.cloudResource.count({ where: activeCloudResourceWhere(organizationId, { source: "SAMPLE" }) }),
+      prisma.cloudResource.count({ where: activeCloudResourceWhere(organizationId, { source: "AWS_SYNC" }) }),
+      prisma.cloudResource.count({ where: activeCloudResourceWhere(organizationId, { staleAt: { not: null } }) }),
       prisma.cloudResource.count({ where: { ...scope, archivedAt: { not: null } } }),
       latestScansByAccount(organizationId, ["SUCCEEDED", "COMPLETED"]),
       latestScansByAccount(organizationId, ["FAILED", "AUTH_FAILED", "PERMISSION_DENIED", "RATE_LIMITED"]),
@@ -474,15 +479,12 @@ export class InventoryOrchestrationService {
   private async resolveAccounts(input: PlanInventoryScanInput) {
     if (input.allAccounts || !input.accountIds?.length) {
       return prisma.awsAccount.findMany({
-        where: scopeByOrganization(input.organizationId),
+        where: activeAwsAccountWhere(input.organizationId),
         orderBy: [{ environment: "asc" }, { name: "asc" }]
       });
     }
     return prisma.awsAccount.findMany({
-      where: {
-        organizationId: input.organizationId,
-        id: { in: input.accountIds }
-      },
+      where: activeAwsAccountWhere(input.organizationId, { id: { in: input.accountIds } }),
       orderBy: [{ environment: "asc" }, { name: "asc" }]
     });
   }

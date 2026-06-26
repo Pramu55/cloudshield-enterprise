@@ -2,6 +2,10 @@ import { prisma, scopeByOrganization } from "@cloudshield/database";
 import { createLogger } from "@cloudshield/logger";
 import { SECURITY_RULE_CATALOG } from "./security-rule.catalog.js";
 import type { ResourceForEvaluation, RuleEvaluationResult } from "./security-rule.types.js";
+import {
+  activeCloudResourceWhere,
+  activeSecurityFindingWhere
+} from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 const logger = createLogger("security-rule-engine");
 
@@ -14,7 +18,7 @@ export type EvaluationSummary = {
 
 export async function evaluateSecurityRules(organizationId: string): Promise<EvaluationSummary> {
   const resources = await prisma.cloudResource.findMany({
-    where: scopeByOrganization(organizationId),
+    where: activeCloudResourceWhere(organizationId),
     select: {
       id: true,
       organizationId: true,
@@ -105,10 +109,9 @@ export async function evaluateSecurityRules(organizationId: string): Promise<Eva
 
   // Resolve findings that no longer apply
   const openFindings = await prisma.securityFinding.findMany({
-    where: {
-      organizationId,
+    where: activeSecurityFindingWhere(organizationId, {
       status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED"] }
-    },
+    }),
     select: { id: true, ruleId: true, resourceId: true }
   });
 

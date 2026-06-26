@@ -9,6 +9,10 @@ import {
   findAccountForOrganization,
   toAwsAccountDto
 } from "./aws-account.routes.js";
+import {
+  awsAccountLifecycleBlockedResponse,
+  getAwsAccountOperationalBlockReason
+} from "../modules/aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 export async function registerAwsInventoryRoutes(
   app: FastifyInstance
@@ -110,6 +114,10 @@ export async function registerAwsInventoryRoutes(
         });
         return;
       }
+      if (getAwsAccountOperationalBlockReason(account)) {
+        reply.status(409).send(awsAccountLifecycleBlockedResponse());
+        return;
+      }
 
       return getInventoryPlanService(app).getAccountPlan(
         toAwsAccountDto(account)
@@ -135,6 +143,10 @@ export async function registerAwsInventoryRoutes(
           message:
             "AWS account registry record was not found for this organization."
         });
+        return;
+      }
+      if (getAwsAccountOperationalBlockReason(account)) {
+        reply.status(409).send(awsAccountLifecycleBlockedResponse());
         return;
       }
 
@@ -175,6 +187,10 @@ export async function registerAwsInventoryRoutes(
           message:
             "AWS account registry record was not found for this organization."
         });
+        return;
+      }
+      if (getAwsAccountOperationalBlockReason(account)) {
+        reply.status(409).send(awsAccountLifecycleBlockedResponse());
         return;
       }
 

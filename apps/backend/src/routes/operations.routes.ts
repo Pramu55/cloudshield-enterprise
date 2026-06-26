@@ -4,6 +4,13 @@ import { prisma, scopeByOrganization } from "@cloudshield/database";
 import { PERMISSIONS, requirePermission } from "@cloudshield/security";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import { getAwsCredentialReadiness } from "../modules/aws-readiness/aws-credential-readiness.js";
+import {
+  activeAwsAccountRelationWhere,
+  activeAwsAccountWhere,
+  activeCloudResourceWhere,
+  activeComplianceEvidenceWhere,
+  activeSecurityFindingWhere
+} from "../modules/aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 const SafetyFlags = {
   awsApiCallExecuted: false as const,
@@ -35,18 +42,22 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
       reports
     ] = await Promise.all([
       prisma.awsAccount.findMany({
-        where: scope,
+        where: activeAwsAccountWhere(auth.organizationId),
         include: { ownerTeam: { select: { name: true } } },
         orderBy: [{ environment: "asc" }, { name: "asc" }]
       }),
       prisma.cloudResource.findMany({
-        where: scope,
+        where: activeCloudResourceWhere(auth.organizationId),
         include: { awsAccount: { select: { id: true, name: true, accountId: true } }, ownerTeam: { select: { name: true } } },
         orderBy: [{ resourceType: "asc" }, { name: "asc" }],
         take: 150
       }),
       prisma.resourceRelationship.findMany({
-        where: scope,
+        where: {
+          ...scope,
+          sourceResource: { awsAccount: activeAwsAccountRelationWhere(), archivedAt: null },
+          targetResource: { awsAccount: activeAwsAccountRelationWhere(), archivedAt: null }
+        },
         include: {
           sourceResource: { select: { id: true, name: true, resourceType: true, resourceId: true } },
           targetResource: { select: { id: true, name: true, resourceType: true, resourceId: true } }
@@ -54,7 +65,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         take: 250
       }),
       prisma.securityFinding.findMany({
-        where: scope,
+        where: activeSecurityFindingWhere(auth.organizationId),
         include: { resource: { select: { id: true, name: true, resourceType: true, source: true } } },
         orderBy: [{ severity: "asc" }, { createdAt: "desc" }],
         take: 100
@@ -77,7 +88,7 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         take: 100
       }),
       prisma.complianceEvidence.findMany({
-        where: scope,
+        where: activeComplianceEvidenceWhere(auth.organizationId),
         include: { resource: { select: { id: true, name: true, source: true } }, control: { select: { id: true, title: true, controlId: true, framework: true } } },
         orderBy: { collectedAt: "desc" },
         take: 100

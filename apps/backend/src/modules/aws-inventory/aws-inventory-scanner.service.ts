@@ -7,6 +7,7 @@ import {
 import { cloudScanQueue } from "./aws-inventory.queue.js";
 import { prisma } from "@cloudshield/database";
 import { isReadonlyInventoryEnabled } from "./aws-inventory.service.js";
+import { getAwsAccountOperationalBlockReason } from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 export class AwsInventoryScannerService {
   constructor(private readonly scannerMode: AwsInventoryScannerMode) {}
@@ -23,6 +24,29 @@ export class AwsInventoryScannerService {
     }
 
     if (isReadonlyInventoryEnabled(this.scannerMode)) {
+      const account = await prisma.awsAccount.findFirst({
+        where: {
+          organizationId,
+          id: accountId
+        },
+        select: {
+          archivedAt: true,
+          connectionStatus: true
+        }
+      });
+      const blockedReason = account
+        ? getAwsAccountOperationalBlockReason(account)
+        : "AWS account registry record was not found for this organization.";
+      if (blockedReason) {
+        return AwsInventoryStartResponseSchema.parse({
+          status: "BLOCKED_DISABLED",
+          scannerMode: this.scannerMode,
+          awsApiCallExecuted: false,
+          scannerRun: false,
+          message: blockedReason
+        });
+      }
+
       const scanRun = await prisma.scanRun.create({
         data: {
           organizationId: organizationId,

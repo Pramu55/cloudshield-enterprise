@@ -1,6 +1,13 @@
 import type { Prisma } from "@cloudshield/database";
 import { prisma, scopeByOrganization } from "@cloudshield/database";
 import type { RuntimeEnv } from "@cloudshield/config";
+import {
+  activeAwsAccountRelationWhere,
+  activeAwsAccountWhere,
+  activeCloudResourceWhere,
+  activeCostFindingWhere,
+  activeSecurityFindingWhere
+} from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
 
 export const PLATFORM_CORE_SAFETY_FLAGS = {
   awsApiCallExecuted: false as const,
@@ -64,6 +71,14 @@ export async function buildPlatformOverview(
   env: RuntimeEnv
 ) {
   const scope = scopeByOrganization(organizationId);
+  const activeResourceChildScope = {
+    archivedAt: null,
+    awsAccount: activeAwsAccountRelationWhere()
+  };
+  const activeFindingChildScope = {
+    archivedAt: null,
+    awsAccount: activeAwsAccountRelationWhere()
+  };
   const [
     organization,
     accounts,
@@ -94,7 +109,7 @@ export async function buildPlatformOverview(
   ] = await Promise.all([
     prisma.organization.findFirstOrThrow({ where: { id: organizationId } }),
     prisma.awsAccount.findMany({
-      where: { ...scope, archivedAt: null },
+      where: activeAwsAccountWhere(organizationId),
       select: {
         id: true,
         name: true,
@@ -108,27 +123,27 @@ export async function buildPlatformOverview(
       },
       orderBy: [{ environment: "asc" }, { name: "asc" }]
     }),
-    prisma.cloudResource.count({ where: scope }),
-    groupByField("cloudResource", organizationId, ["resourceType"]),
-    groupByField("cloudResource", organizationId, ["region"]),
-    groupByField("cloudResource", organizationId, ["source"]),
+    prisma.cloudResource.count({ where: activeCloudResourceWhere(organizationId) }),
+    groupByField("cloudResource", organizationId, ["resourceType"], activeResourceChildScope),
+    groupByField("cloudResource", organizationId, ["region"], activeResourceChildScope),
+    groupByField("cloudResource", organizationId, ["source"], activeResourceChildScope),
     prisma.securityFinding.count({
-      where: { ...scope, archivedAt: null, status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] } }
+      where: activeSecurityFindingWhere(organizationId, { status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] } })
     }),
-    groupByField("securityFinding", organizationId, ["severity"]),
+    groupByField("securityFinding", organizationId, ["severity"], activeFindingChildScope),
     prisma.securityFinding.count({
-      where: { ...scope, archivedAt: null, assignedToUserId: null, ownerTeamId: null, status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] } }
+      where: activeSecurityFindingWhere(organizationId, { assignedToUserId: null, ownerTeamId: null, status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] } })
     }),
-    prisma.costFinding.count({ where: { ...scope, status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] } } }),
+    prisma.costFinding.count({ where: activeCostFindingWhere(organizationId, { status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] } }) }),
     prisma.costFinding.aggregate({
-      where: { ...scope, status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] } },
+      where: activeCostFindingWhere(organizationId, { status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] } }),
       _sum: { estimatedMonthlyWaste: true, estimatedAnnualWaste: true }
     }),
     prisma.complianceControl.count({ where: scope }),
     prisma.complianceControl.count({ where: { ...scope, status: "PASS" } }),
     prisma.complianceControl.count({ where: { ...scope, status: { in: ["FAIL", "WARNING", "NEEDS_REVIEW"] } } }),
     prisma.complianceControl.count({ where: { ...scope, evidenceCount: 0 } }),
-    prisma.securityFinding.count({ where: { ...scope, archivedAt: null, status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "REOPENED"] } } }),
+    prisma.securityFinding.count({ where: activeSecurityFindingWhere(organizationId, { status: { in: ["OPEN", "ACKNOWLEDGED", "ASSIGNED", "REMEDIATION_PLANNED", "REOPENED"] } }) }),
     prisma.riskAcceptance.count({ where: scope }),
     prisma.recommendation.count({ where: scope }),
     prisma.approvalRequest.count({ where: { ...scope, status: "PENDING" } }),
@@ -148,8 +163,8 @@ export async function buildPlatformOverview(
       where: { ...scope, status: "FAILED" },
       orderBy: { completedAt: "desc" }
     }),
-    prisma.cloudResource.count({ where: { ...scope, source: "SAMPLE" } }),
-    prisma.cloudResource.count({ where: { ...scope, source: "AWS_SYNC" } })
+    prisma.cloudResource.count({ where: activeCloudResourceWhere(organizationId, { source: "SAMPLE" }) }),
+    prisma.cloudResource.count({ where: activeCloudResourceWhere(organizationId, { source: "AWS_SYNC" }) })
   ]);
 
   const connectedAccounts = accounts.filter((account) => account.connectionStatus === "VALIDATION_SUCCEEDED");
