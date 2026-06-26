@@ -3,6 +3,7 @@ import type {
   ComplianceControlProjectionDefinition,
   ComplianceEvaluationSafety
 } from "./compliance-control.types.js";
+import type { ComplianceStatus, ComplianceControlPostureStatus } from "@cloudshield/contracts";
 
 export const ComplianceEvidenceSafety: ComplianceEvaluationSafety = {
   sampleData: true,
@@ -205,3 +206,43 @@ export const ComplianceControlProjectionCatalog: ComplianceControlProjectionDefi
     mappedRuleIds: ["EBS_VOLUME_UNATTACHED"]
   }
 ];
+
+export type ComplianceEvaluationInput = {
+  openFindingCount: number;
+  acceptedRiskCount: number;
+  evidenceSnapshotCount: number;
+  hasSampleEvidenceOnly: boolean;
+  hasStaleEvidence: boolean;
+};
+
+export function deriveComplianceStatus(input: ComplianceEvaluationInput): ComplianceStatus {
+  if (input.openFindingCount > 0) {
+    return "FAIL";
+  }
+  if (input.acceptedRiskCount > 0) {
+    return "NEEDS_REVIEW";
+  }
+  if (input.evidenceSnapshotCount > 0) {
+    if (input.hasSampleEvidenceOnly || input.hasStaleEvidence) {
+      return "NEEDS_REVIEW";
+    }
+    return "PASS";
+  }
+  return "NOT_EVALUATED";
+}
+
+export function deriveComplianceProjectionStatus(input: ComplianceEvaluationInput): ComplianceControlPostureStatus {
+  if (input.openFindingCount > 0) {
+    return "FAILING";
+  }
+  if (input.acceptedRiskCount > 0) {
+    return "ACCEPTED_RISK";
+  }
+  if (input.evidenceSnapshotCount > 0) {
+    if (input.hasSampleEvidenceOnly || input.hasStaleEvidence) {
+      return "UNKNOWN"; // Contract projection has no separate stale/sample status, so non-production evidence maps to UNKNOWN.
+    }
+    return "PASSING";
+  }
+  return "UNKNOWN";
+}
