@@ -11,11 +11,13 @@ import { toReportExportDto } from "./report.mapper.js";
 import { ReportMessage, ReportSafety, ReportTitles, ReportTypes } from "./report.policy.js";
 import {
   activeAwsAccountWhere,
-  activeCloudResourceWhere,
   activeComplianceEvidenceWhere,
-  activeCostFindingWhere,
-  activeSecurityFindingWhere
+  activeCostFindingWhere
 } from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
+import {
+  activeResourceWhere,
+  activeFindingForActiveResourceWhere
+} from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 
 const REPORT_LIMIT = 25;
 
@@ -56,7 +58,7 @@ export async function getReportsSummary(organizationId: string) {
       }),
       prisma.complianceEvidence.count({ where: activeComplianceEvidenceWhere(organizationId) }),
       prisma.securityFinding.count({
-        where: activeSecurityFindingWhere(organizationId, {
+        where: activeFindingForActiveResourceWhere(organizationId, {
           status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
         })
       })
@@ -198,11 +200,11 @@ async function getReportContext(organizationId: string) {
       include: { ownerTeam: { select: { name: true } } }
     }),
     prisma.cloudResource.findMany({
-      where: activeCloudResourceWhere(organizationId),
+      where: activeResourceWhere(organizationId),
       take: 100
     }),
     prisma.securityFinding.findMany({
-      where: activeSecurityFindingWhere(organizationId),
+      where: activeFindingForActiveResourceWhere(organizationId),
       include: {
         resource: { select: { resourceType: true, name: true } },
         ownerTeam: { select: { name: true } }

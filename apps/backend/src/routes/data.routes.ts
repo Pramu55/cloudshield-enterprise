@@ -5,11 +5,10 @@ import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import {
   activeAwsAccountRelationWhere,
   activeAwsAccountWhere,
-  activeCloudResourceWhere,
   activeComplianceEvidenceWhere,
-  activeCostFindingWhere,
-  activeSecurityFindingWhere
+  activeCostFindingWhere
 } from "../modules/aws-account-lifecycle/aws-account-lifecycle.policy.js";
+import { activeResourceWhere, activeFindingForActiveResourceWhere } from "../modules/inventory-lifecycle/inventory-lifecycle.policy.js";
 
 const DEFAULT_LIMIT = 50;
 
@@ -39,8 +38,8 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     ] = await Promise.all([
       prisma.organization.count({ where: { id: auth.organizationId } }),
       prisma.awsAccount.count({ where: activeAwsAccountWhere(auth.organizationId) }),
-      prisma.cloudResource.count({ where: activeCloudResourceWhere(auth.organizationId) }),
-      prisma.securityFinding.count({ where: activeSecurityFindingWhere(auth.organizationId) }),
+      prisma.cloudResource.count({ where: activeResourceWhere(auth.organizationId) }),
+      prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(auth.organizationId) }),
       prisma.costFinding.count({ where: activeCostFindingWhere(auth.organizationId) }),
       prisma.complianceControl.count({ where: organizationScope }),
       prisma.complianceEvidence.count({ where: activeComplianceEvidenceWhere(auth.organizationId) }),
@@ -54,12 +53,12 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       }),
       prisma.riskAcceptance.count({ where: organizationScope }),
       prisma.securityFinding.count({
-        where: activeSecurityFindingWhere(auth.organizationId, {
+        where: activeFindingForActiveResourceWhere(auth.organizationId, {
           status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
         })
       }),
       prisma.securityFinding.count({
-        where: activeSecurityFindingWhere(auth.organizationId, {
+        where: activeFindingForActiveResourceWhere(auth.organizationId, {
           severity: { in: ["CRITICAL", "HIGH"] },
           status: { notIn: ["RESOLVED", "FALSE_POSITIVE", "ARCHIVED"] }
         })
@@ -187,7 +186,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     
     const accounts = await prisma.awsAccount.findMany({ where: activeAwsAccountWhere(auth.organizationId) });
     const securityFindings = await prisma.securityFinding.findMany({ 
-      where: activeSecurityFindingWhere(auth.organizationId, { status: "OPEN" }),
+      where: activeFindingForActiveResourceWhere(auth.organizationId, { status: "OPEN" }),
       include: { awsAccount: { select: { businessUnit: true } } }
     });
     
