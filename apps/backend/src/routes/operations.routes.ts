@@ -9,6 +9,7 @@ import {
   activeAwsAccountWhere,
   activeComplianceEvidenceWhere
 } from "../modules/aws-account-lifecycle/aws-account-lifecycle.policy.js";
+import { formatFailureProjection, sanitizeErrorMessage } from "../modules/operational-reliability/operational-reliability.policy.js";
 import {
   activeResourceWhere,
   activeFindingForActiveResourceWhere,
@@ -431,7 +432,10 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
     const scope = scopeByOrganization(auth.organizationId);
     const readiness = getAwsCredentialReadiness(app.config);
     const runs = await prisma.scanRun.findMany({
-      where: scope,
+      where: {
+        ...scope,
+        awsAccount: activeAwsAccountRelationWhere()
+      },
       include: { awsAccount: { select: { id: true, name: true, accountId: true, environment: true, regions: true } } },
       orderBy: { startedAt: "desc" },
       take: 100
@@ -439,19 +443,23 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
     const latestInventoryRun = runs.find((run) => run.jobType === "AWS_READONLY_INVENTORY_SYNC" || run.jobType === "AWS_EC2_INVENTORY_SCAN");
     const hasSuccessfulInventorySync = runs.some((run) => run.jobType === "AWS_READONLY_INVENTORY_SYNC" && run.status === "SUCCEEDED");
 
-    const items = runs.map((run) => ({
+    const items = runs.map((run) => {
+      const projection = formatFailureProjection("JOB", run.status, run.failureClassification, run.metadata);
+      return {
         id: run.id,
         jobType: run.jobType,
-        status: normalizeScanStatus(run.status),
+        status: normalizeScanStatus(projection.status),
         rawStatus: run.status,
         phase: run.phase,
         account: run.awsAccount,
         startedAt: run.startedAt.toISOString(),
         completedAt: run.completedAt?.toISOString() ?? null,
         errorCode: run.errorCode,
-        errorMessage: run.errorMessage,
-        metadata: run.metadata
-      }));
+        errorMessage: sanitizeErrorMessage(run.errorMessage),
+        metadata: projection.metadata,
+        correlationId: projection.correlationId
+      };
+    });
 
     return {
       items,
@@ -570,34 +578,45 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
 async function buildOperationsTimeline(organizationId: string) {
   const scope = scopeByOrganization(organizationId);
   const [scans, findings, reports, approvals, plans, auditEvents] = await Promise.all([
-    prisma.scanRun.findMany({ where: scope, include: { awsAccount: { select: { name: true } } }, orderBy: { startedAt: "desc" }, take: 20 }),
-    prisma.securityFinding.findMany({ where: scope, include: { resource: { select: { name: true, resourceType: true } } }, orderBy: { updatedAt: "desc" }, take: 20 }),
+    prisma.scanRun.findMany({ where: { ...scope, awsAccount: activeAwsAccountRelationWhere() }, include: { awsAccount: { select: { name: true } } }, orderBy: { startedAt: "desc" }, take: 20 }),
+    prisma.securityFinding.findMany({ where: { ...scope, awsAccount: activeAwsAccountRelationWhere() }, include: { resource: { select: { name: true, resourceType: true } } }, orderBy: { updatedAt: "desc" }, take: 20 }),
     prisma.reportExport.findMany({ where: { ...scope, archivedAt: null }, orderBy: [{ generatedAt: "desc" }, { createdAt: "desc" }], take: 20 }),
     prisma.approvalRequest.findMany({ where: scope, include: { remediationPlan: { select: { title: true } } }, orderBy: { createdAt: "desc" }, take: 20 }),
-    prisma.remediationPlan.findMany({ where: scope, include: { finding: { select: { title: true } } }, orderBy: { updatedAt: "desc" }, take: 20 }),
+    prisma.remediationPlan.findMany({ where: { ...scope, finding: { awsAccount: activeAwsAccountRelationWhere() } }, include: { finding: { select: { title: true } } }, orderBy: { updatedAt: "desc" }, take: 20 }),
     prisma.auditEvent.findMany({ where: scope, orderBy: { createdAt: "desc" }, take: 20 })
   ]);
 
   return [
-    ...scans.map((scan) => timelineItem(scan.id, "scan-run", `Scan job ${scan.jobType}`, `${normalizeScanStatus(scan.status)} for ${scan.awsAccount?.name ?? "workspace"}`, scan.startedAt, scan.status)),
+    ...scans.map((scan) => {
+      const proj = formatFailureProjection("JOB", scan.status, scan.failureClassification, scan.metadata);
+      return timelineItem(scan.id, "scan-run", `Scan job ${scan.jobType}`, `${normalizeScanStatus(proj.status)} for ${scan.awsAccount?.name ?? "workspace"}`, scan.startedAt, proj.status, proj.metadata, proj.correlationId);
+    }),
     ...findings.map((finding) => timelineItem(finding.id, "finding", finding.title, `${finding.severity} / ${finding.workflowStatus} / ${finding.resource?.name ?? "unmapped resource"}`, finding.updatedAt, finding.status)),
     ...reports.map((report) => timelineItem(report.id, "report", report.title ?? report.reportType, `${report.status} / ${report.format}`, report.generatedAt ?? report.createdAt, report.status)),
     ...approvals.map((approval) => timelineItem(approval.id, "approval", approval.remediationPlan?.title ?? "Approval request", approval.status, approval.decidedAt ?? approval.createdAt, approval.status)),
-    ...plans.map((plan) => timelineItem(plan.id, "remediation-plan", plan.title, `${plan.approvalStatus} / ${plan.executionStatus}`, plan.updatedAt, plan.executionStatus)),
-    ...auditEvents.map((event) => timelineItem(event.id, "audit-event", event.action, `${event.targetType} ${event.targetId ?? ""}`.trim(), event.createdAt, "RECORDED"))
+    ...plans.map((plan) => {
+      const proj = formatFailureProjection("ACTION", plan.executionStatus, plan.failureClassification, plan.executionEvidence);
+      return timelineItem(plan.id, "remediation-plan", plan.title, `${plan.approvalStatus} / ${proj.status}`, plan.updatedAt, proj.status, proj.metadata, proj.correlationId);
+    }),
+    ...auditEvents.map((event) => {
+      const proj = formatFailureProjection("ACTION", "RECORDED", null, event.metadata);
+      return timelineItem(event.id, "audit-event", event.action, `${event.targetType} ${event.targetId ?? ""}`.trim(), event.createdAt, proj.status, proj.metadata, proj.correlationId);
+    })
   ]
     .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
     .slice(0, 50);
 }
 
-function timelineItem(id: string, type: string, title: string, description: string, timestamp: Date, status: string) {
+function timelineItem(id: string, type: string, title: string, description: string, timestamp: Date, status: string, metadata?: unknown, correlationId?: string | null) {
   return {
     id,
     type,
     title,
     description,
     timestamp: timestamp.toISOString(),
-    status
+    status,
+    metadata,
+    correlationId
   };
 }
 
