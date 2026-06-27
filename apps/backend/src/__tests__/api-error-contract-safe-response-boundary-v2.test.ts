@@ -13,7 +13,7 @@ test("API Error Contract & Safe Response Boundary V2", async (t) => {
   app.get("/api/v1/_test/internal-error", async (request, reply) => {
     throw new Error("SECRET_INTERNAL_AWS_CREDENTIAL=AKIA1234567890 providerError=true stacktrace here");
   });
-  
+
   app.get("/api/v1/_test/prisma-error", async (request, reply) => {
     const error = new Error("Unique constraint failed on the fields: (`id`)") as Error & { code?: string };
     error.name = "PrismaClientKnownRequestError";
@@ -61,7 +61,7 @@ test("API Error Contract & Safe Response Boundary V2", async (t) => {
       classification: "validation_error"
     });
   });
-  
+
   app.setNotFoundHandler((request, reply) => {
     reply.status(404).send({
       error: {
@@ -89,7 +89,7 @@ test("API Error Contract & Safe Response Boundary V2", async (t) => {
     assert.strictEqual(body.classification, "invalid_credentials");
     assert.ok(body.correlationId);
   });
-  
+
   await t.test("2. missing/invalid CSRF returns stable safe CSRF error shape.", async () => {
     const response = await app.inject({
       method: "GET",
@@ -184,4 +184,3 @@ test("API Error Contract & Safe Response Boundary V2", async (t) => {
     assert.strictEqual(body.error.message, "Route not found.");
   });
 });
-
