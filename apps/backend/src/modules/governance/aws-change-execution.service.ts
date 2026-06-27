@@ -602,8 +602,8 @@ async function queueEnqueueFailed(
   correlationId: string,
   queuedAt?: Date
 ) {
-  const [updatedCount, auditEvent] = await prisma.$transaction([
-    prisma.remediationPlan.updateMany({
+  const auditEvent = await prisma.$transaction(async (tx) => {
+    const updatedCount = await tx.remediationPlan.updateMany({
       where: {
         id: plan.id,
         organizationId: actor.organizationId,
@@ -627,8 +627,13 @@ async function queueEnqueueFailed(
           operatorGuidance: "No provider execution was attempted because the queue did not accept the job."
         }
       }
-    }),
-    prisma.auditEvent.create({
+    });
+
+    if (updatedCount.count !== 1) {
+      throw new Error("STALE_STATE_CONFLICT");
+    }
+
+    return tx.auditEvent.create({
       data: auditData(actor, plan.id, "governance.aws_change.queue_failed", {
         idempotencyKey,
         correlationId,
@@ -636,8 +641,8 @@ async function queueEnqueueFailed(
         awsApiCallExecuted: false,
         mutationExecuted: false
       })
-    })
-  ]);
+    });
+  });
   const updatedPlan = await prisma.remediationPlan.findUniqueOrThrow({
     where: { id: plan.id },
     include: remediationExecutionInclude
