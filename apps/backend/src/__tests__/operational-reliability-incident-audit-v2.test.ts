@@ -71,7 +71,7 @@ test("Operational Reliability & Incident Audit V2", async (t) => {
     });
     assert.equal(res.statusCode, 401);
   });
-  
+
   await t.test("2. user without capability is forbidden and side-effect free.", async () => {
     // The test utility creates users with full roles, but we assert this route exists and requires auth
     const res = await app.inject({
@@ -81,7 +81,7 @@ test("Operational Reliability & Incident Audit V2", async (t) => {
     });
     assert.equal(res.statusCode, 200);
   });
-  
+
   await t.test("3. tenant A cannot read tenant B operational/audit/incident records.", async () => {
     const res = await app.inject({
       method: "GET",
@@ -91,12 +91,12 @@ test("Operational Reliability & Incident Audit V2", async (t) => {
     const body = res.json() as { items: TimelineItem[] };
     assert.ok(!body.items.some(i => i.id === crossTenantScan.id), "Should not see cross-tenant scan");
   });
-  
+
   await t.test("4. failure projections include bounded safe error summary only.", () => {
     const proj = formatFailureProjection("JOB", "FAILED", "TEST_ERROR", { message: "Internal explosion" });
     assert.equal(proj.status, "FAILED_TERMINAL");
   });
-  
+
   await t.test("5. secret-like keys are redacted recursively from failure metadata.", () => {
     const raw = { password: "abc", inner: { awsSecretKey: "def", normal: "ok" } };
     const sanitized = sanitizeErrorPayload(raw) as Record<string, unknown>;
@@ -105,39 +105,39 @@ test("Operational Reliability & Incident Audit V2", async (t) => {
     assert.equal((sanitized.inner as Record<string, unknown>).awsSecretKey, "[REDACTED]");
     assert.equal((sanitized.inner as Record<string, unknown>).normal, "ok");
   });
-  
+
   await t.test("6. raw provider payloads are not returned.", () => {
     const raw = { awsPayload: { big: "blob" }, normal: "ok" };
     const sanitized = sanitizeErrorPayload(raw) as Record<string, unknown>;
     assert.equal(sanitized.awsPayload, undefined);
     assert.equal(sanitized.normal, "ok");
   });
-  
+
   await t.test("7. correlation ID is retained in audit/incident projection if present.", () => {
     const proj = formatFailureProjection("JOB", "FAILED", "TEST", { correlationId: "123" });
     assert.equal(proj.correlationId, "123");
   });
-  
+
   await t.test("8. failed job/action does not produce success status.", () => {
     const proj = formatFailureProjection("JOB", "FAILED", "TEST", {});
     assert.equal(proj.status, "FAILED_TERMINAL");
   });
-  
+
   await t.test("9. partial job/action does not produce success status.", () => {
     const proj = formatFailureProjection("JOB", "PARTIAL", "TEST", {});
     assert.equal(proj.status, "FAILED_TERMINAL");
   });
-  
+
   await t.test("10. retryable failure is labeled retryable without claiming recovery.", () => {
     const proj = formatFailureProjection("JOB", "FAILED", "TEST_RETRYABLE", {});
     assert.equal(proj.status, "FAILED_RETRYABLE");
   });
-  
+
   await t.test("11. non-retryable failure is labeled terminal or failed without claiming success.", () => {
     const proj = formatFailureProjection("JOB", "FAILED", "TEST", {});
     assert.equal(proj.status, "FAILED_TERMINAL");
   });
-  
+
   await t.test("12. archived account child failures do not affect active operational health unless explicitly historical.", async () => {
     const res = await app.inject({
       method: "GET",
@@ -147,7 +147,7 @@ test("Operational Reliability & Incident Audit V2", async (t) => {
     const body = res.json() as { items: ScanRunItem[] };
     assert.ok(!body.items.some(i => i.id === archivedScan.id), "Should not see archived scan");
   });
-  
+
   await t.test("13. disabled account child failures do not affect active operational health unless explicitly historical.", async () => {
     const res = await app.inject({
       method: "GET",
@@ -157,7 +157,7 @@ test("Operational Reliability & Incident Audit V2", async (t) => {
     const body = res.json() as { items: ScanRunItem[] };
     assert.ok(!body.items.some(i => i.id === disabledScan.id), "Should not see disabled scan");
   });
-  
+
 
   await t.test("17. operational timeline ordering is deterministic.", async () => {
     const res = await app.inject({
@@ -172,7 +172,7 @@ test("Operational Reliability & Incident Audit V2", async (t) => {
       assert.ok(first >= second, "Should be sorted desc");
     }
   });
-  
+
   await t.test("18. pagination/limit bounds are enforced if timeline/list endpoint exists or is touched.", async () => {
     const res = await app.inject({
       method: "GET",
