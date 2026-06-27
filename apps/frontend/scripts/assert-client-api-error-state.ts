@@ -141,7 +141,7 @@ async function runTests() {
     }
 
     // Header prefers x-correlation-id over x-request-id
-    mockFetch(404, {}, { 
+    mockFetch(404, {}, {
       "x-correlation-id": "44444444-4444-4444-4444-444444444444",
       "x-request-id": "55555555-5555-5555-5555-555555555555"
     });
