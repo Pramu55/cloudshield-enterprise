@@ -16,7 +16,7 @@ export function redactSecrets(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj === "string") return obj;
   if (typeof obj !== "object") return obj;
-  
+
   if (Array.isArray(obj)) {
     return obj.map(redactSecrets);
   }
@@ -37,14 +37,14 @@ export function redactSecrets(obj: unknown): unknown {
 export function sanitizeErrorPayload(metadata: Prisma.JsonValue | null | undefined): Prisma.JsonValue | null {
   if (!metadata) return null;
   const redacted = redactSecrets(metadata) as Record<string, unknown>;
-  
+
   // Remove raw provider payloads if they look too large or provider-specific
   if (redacted.rawPayload || redacted.awsPayload || redacted.providerResponse) {
     delete redacted.rawPayload;
     delete redacted.awsPayload;
     delete redacted.providerResponse;
   }
-  
+
   return redacted as Prisma.JsonValue;
 }
 
