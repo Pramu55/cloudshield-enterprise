@@ -8,7 +8,7 @@ import type {
 } from "@cloudshield/contracts";
 import { listComplianceControls } from "../compliance-evidence/compliance-evidence.service.js";
 import { activeAwsAccountWhere } from "../aws-account-lifecycle/aws-account-lifecycle.policy.js";
-import { activeResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
+import { activeResourceWhere, activeFindingForActiveResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 
 const DAY_MS = 86_400_000;
 const ACTIVE_FINDING_STATUSES = new Set<string>([
@@ -72,7 +72,7 @@ export async function getExecutiveDashboardSummary(
       select: { id: true, name: true }
     }),
     prisma.securityFinding.findMany({
-      where: { organizationId, archivedAt: null },
+      where: activeFindingForActiveResourceWhere(organizationId),
       orderBy: [{ severity: "asc" }, { updatedAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
@@ -85,7 +85,7 @@ export async function getExecutiveDashboardSummary(
       }
     }),
     prisma.riskAcceptance.findMany({
-      where: { organizationId },
+      where: { organizationId, securityFinding: activeFindingForActiveResourceWhere(organizationId) },
       orderBy: [{ expiresAt: "asc" }, { id: "asc" }],
       select: {
         id: true,
@@ -96,31 +96,30 @@ export async function getExecutiveDashboardSummary(
       }
     }),
     prisma.securityFindingEvidenceSnapshot.count({
-      where: evidenceScope
+      where: { ...evidenceScope, securityFinding: activeFindingForActiveResourceWhere(organizationId) }
     }),
     prisma.securityFindingEvidenceSnapshot.findFirst({
-      where: evidenceScope,
+      where: { ...evidenceScope, securityFinding: activeFindingForActiveResourceWhere(organizationId) },
       orderBy: [{ capturedAt: "desc" }, { id: "desc" }],
       select: { capturedAt: true }
     }),
     prisma.securityFindingEvidenceSnapshot.count({
-      where: { ...evidenceScope, capturedAt: { gte: dayAgo } }
+      where: { ...evidenceScope, capturedAt: { gte: dayAgo }, securityFinding: activeFindingForActiveResourceWhere(organizationId) }
     }),
     prisma.securityFindingEvidenceSnapshot.count({
-      where: { ...evidenceScope, capturedAt: { gte: weekAgo } }
+      where: { ...evidenceScope, capturedAt: { gte: weekAgo }, securityFinding: activeFindingForActiveResourceWhere(organizationId) }
     }),
     prisma.securityFindingEvidenceSnapshot.groupBy({
       by: ["securityFindingId"],
-      where: evidenceScope
+      where: { ...evidenceScope, securityFinding: activeFindingForActiveResourceWhere(organizationId) }
     }),
     prisma.securityFinding.findFirst({
-      where: {
-        organizationId,
+      where: activeFindingForActiveResourceWhere(organizationId, {
         lastEvaluatedAt: { not: null },
         ...(executiveResourceSource
           ? { resource: { source: executiveResourceSource } }
           : {})
-      },
+      }),
       orderBy: { lastEvaluatedAt: "desc" },
       select: { lastEvaluatedAt: true }
     }),

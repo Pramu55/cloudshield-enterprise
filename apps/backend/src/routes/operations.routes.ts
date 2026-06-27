@@ -71,13 +71,13 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         take: 100
       }),
       prisma.remediationPlan.findMany({
-        where: scope,
+        where: { ...scope, finding: activeFindingForActiveResourceWhere(auth.organizationId) },
         include: { finding: { select: { id: true, title: true, resource: { select: { source: true } } } } },
         orderBy: { updatedAt: "desc" },
         take: 100
       }),
       prisma.approvalRequest.findMany({
-        where: scope,
+        where: { ...scope, remediationPlan: { finding: activeFindingForActiveResourceWhere(auth.organizationId) } },
         include: { remediationPlan: { select: { id: true, title: true, finding: { select: { resource: { select: { source: true } } } } } } },
         orderBy: { createdAt: "desc" },
         take: 100
@@ -525,9 +525,9 @@ export async function registerOperationsRoutes(app: FastifyInstance): Promise<vo
         take: 25
       }),
       prisma.complianceControl.findMany({ where: scope, take: 100 }),
-      prisma.remediationPlan.count({ where: scope }),
-      prisma.approvalRequest.count({ where: scope }),
-      prisma.securityFinding.count({ where: scope }),
+      prisma.remediationPlan.count({ where: { ...scope, finding: activeFindingForActiveResourceWhere(auth.organizationId) } }),
+      prisma.approvalRequest.count({ where: { ...scope, remediationPlan: { finding: activeFindingForActiveResourceWhere(auth.organizationId) } } }),
+      prisma.securityFinding.count({ where: activeFindingForActiveResourceWhere(auth.organizationId) }),
       prisma.scanRun.count({ where: { ...scope, jobType: "AWS_READONLY_INVENTORY_SYNC", status: "SUCCEEDED" } })
     ]);
 
@@ -579,10 +579,10 @@ async function buildOperationsTimeline(organizationId: string) {
   const scope = scopeByOrganization(organizationId);
   const [scans, findings, reports, approvals, plans, auditEvents] = await Promise.all([
     prisma.scanRun.findMany({ where: { ...scope, awsAccount: activeAwsAccountRelationWhere() }, include: { awsAccount: { select: { name: true } } }, orderBy: { startedAt: "desc" }, take: 20 }),
-    prisma.securityFinding.findMany({ where: { ...scope, awsAccount: activeAwsAccountRelationWhere() }, include: { resource: { select: { name: true, resourceType: true } } }, orderBy: { updatedAt: "desc" }, take: 20 }),
+    prisma.securityFinding.findMany({ where: activeFindingForActiveResourceWhere(organizationId), include: { resource: { select: { name: true, resourceType: true } } }, orderBy: { updatedAt: "desc" }, take: 20 }),
     prisma.reportExport.findMany({ where: { ...scope, archivedAt: null }, orderBy: [{ generatedAt: "desc" }, { createdAt: "desc" }], take: 20 }),
-    prisma.approvalRequest.findMany({ where: scope, include: { remediationPlan: { select: { title: true } } }, orderBy: { createdAt: "desc" }, take: 20 }),
-    prisma.remediationPlan.findMany({ where: { ...scope, finding: { awsAccount: activeAwsAccountRelationWhere() } }, include: { finding: { select: { title: true } } }, orderBy: { updatedAt: "desc" }, take: 20 }),
+    prisma.approvalRequest.findMany({ where: { ...scope, remediationPlan: { finding: activeFindingForActiveResourceWhere(organizationId) } }, include: { remediationPlan: { select: { title: true } } }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.remediationPlan.findMany({ where: { ...scope, finding: activeFindingForActiveResourceWhere(organizationId) }, include: { finding: { select: { title: true } } }, orderBy: { updatedAt: "desc" }, take: 20 }),
     prisma.auditEvent.findMany({ where: scope, orderBy: { createdAt: "desc" }, take: 20 })
   ]);
 

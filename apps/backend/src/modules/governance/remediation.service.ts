@@ -10,6 +10,7 @@ import {
   computeApprovalPayloadHash
 } from "@cloudshield/utils";
 import { assertGovernanceTargetOperationallyActive } from "../governance-action-guard/governance-action-guard.policy.js";
+import { activeFindingForActiveResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 
 type ActorContext = {
   organizationId: string;
@@ -48,7 +49,7 @@ const approvalInclude = {
 
 export async function listRemediationPlans(organizationId: string) {
   const plans = await prisma.remediationPlan.findMany({
-    where: { organizationId },
+    where: { organizationId, finding: activeFindingForActiveResourceWhere(organizationId) },
     include: remediationInclude,
     orderBy: { updatedAt: "desc" },
     take: 100
@@ -283,7 +284,7 @@ export async function markPlanManuallyCompleted(
 
 export async function listApprovals(organizationId: string) {
   const approvals = await prisma.approvalRequest.findMany({
-    where: { organizationId },
+    where: { organizationId, remediationPlan: { finding: activeFindingForActiveResourceWhere(organizationId) } },
     include: approvalInclude,
     orderBy: { createdAt: "desc" },
     take: 100
