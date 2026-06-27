@@ -25,7 +25,6 @@ function mockFetch(status: number, body: unknown, headers: Record<string, string
 }
 
 async function runTests() {
-  console.log("Running frontend API error state assertions...");
 
   try {
     // 1. Parses new nested #61 error shape and maps 400 to VALIDATION
@@ -178,7 +177,6 @@ async function runTests() {
     }
     assert.equal(hit, false, "Mutation must throw and not return success");
 
-    console.log("Frontend API error state assertions passed.");
   } finally {
     globalThis.fetch = originalFetch;
     clearCsrfToken();
