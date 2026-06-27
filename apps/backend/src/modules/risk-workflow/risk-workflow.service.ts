@@ -471,6 +471,7 @@ async function updateWorkflow(
         ...input.data,
         status: input.status,
         workflowStatus: input.status,
+        updatedAt: now,
         lastWorkflowActionAt: now
       }
     });
