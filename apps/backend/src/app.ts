@@ -53,7 +53,8 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
     if (origin && origin !== frontendUrl) {
       return reply.status(403).send({
         error: "unexpected_origin",
-        message: "Request origin is not allowed."
+        message: "Request origin is not allowed.",
+        correlationId: request.id
       });
     }
   });
@@ -111,10 +112,13 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   await registerDashboardRoutes(app);
   await registerMonitoringRoutes(app);
 
-  app.setNotFoundHandler((_request, reply) => {
+  app.setNotFoundHandler((request, reply) => {
     reply.status(404).send({
-      error: "not_found",
-      message: "Route not found"
+      error: {
+        code: "NOT_FOUND",
+        message: "Route not found.",
+        correlationId: request.id
+      }
     });
   });
 
