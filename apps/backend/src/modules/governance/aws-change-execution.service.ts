@@ -255,37 +255,27 @@ export async function queueGovernedAwsChangeExecution(
   }
 
   const queuedAt = new Date();
-  const outcome = await prisma.$transaction(async (tx) => {
-    const claimed = await tx.remediationPlan.updateMany({
-      where: {
-        id: plan.id,
-        organizationId: actor.organizationId,
-        lifecycleState: "APPROVED",
-        approvalStatus: "APPROVED",
-        mutationOutcome: "NOT_ATTEMPTED",
-        approvedByRequestId: plan.approvedByRequestId,
-        updatedAt: plan.updatedAt
-      },
-      data: {
-        lifecycleState: "QUEUED",
-        executionStatus: "READY_FOR_EXECUTION",
-        idempotencyKey: body.idempotencyKey,
-        queuedAt,
-        updatedAt: queuedAt,
-        blockedReason: null
-      }
-    });
-    if (claimed.count !== 1) return null;
-    const auditEvent = await tx.auditEvent.create({
-      data: auditData(actor, plan.id, "governance.aws_change.execution_queued", sanitizeGovernanceEvidencePayload({
-        idempotencyKey: body.idempotencyKey,
-        correlationId: context.correlationId
-      }) as any)
-    });
-    return { auditEvent };
+  const outcome = await prisma.remediationPlan.updateMany({
+    where: {
+      id: plan.id,
+      organizationId: actor.organizationId,
+      lifecycleState: "APPROVED",
+      approvalStatus: "APPROVED",
+      mutationOutcome: "NOT_ATTEMPTED",
+      approvedByRequestId: plan.approvedByRequestId,
+      updatedAt: plan.updatedAt
+    },
+    data: {
+      lifecycleState: "QUEUED",
+      executionStatus: "READY_FOR_EXECUTION",
+      idempotencyKey: body.idempotencyKey,
+      queuedAt,
+      updatedAt: queuedAt,
+      blockedReason: null
+    }
   });
 
-  if (!outcome) {
+  if (outcome.count !== 1) {
     const currentPlan = await prisma.remediationPlan.findFirst({
       where: { id: plan.id, organizationId: actor.organizationId },
       include: remediationExecutionInclude
@@ -293,7 +283,6 @@ export async function queueGovernedAwsChangeExecution(
     if (!currentPlan) return null;
     return nonMutatingBlockedDecision(actor, currentPlan, "Governed AWS change queue transition was already claimed.");
   }
-  const { auditEvent } = outcome;
 
   try {
     await governedAwsChangeQueue.add(
@@ -313,8 +302,15 @@ export async function queueGovernedAwsChangeExecution(
       }
     );
   } catch {
-    return queueEnqueueFailed(actor, plan, body.idempotencyKey, context.correlationId);
+    return queueEnqueueFailed(actor, plan, body.idempotencyKey, context.correlationId, queuedAt);
   }
+
+  const auditEvent = await prisma.auditEvent.create({
+    data: auditData(actor, plan.id, "governance.aws_change.execution_queued", {
+      idempotencyKey: body.idempotencyKey,
+      correlationId: context.correlationId
+    })
+  });
 
   const updatedPlan = await prisma.remediationPlan.findUniqueOrThrow({
     where: { id: plan.id },
@@ -603,11 +599,17 @@ async function queueEnqueueFailed(
   actor: ActorContext,
   plan: ExecutionPlan,
   idempotencyKey: string,
-  correlationId: string
+  correlationId: string,
+  queuedAt?: Date
 ) {
-  const [updatedPlan, auditEvent] = await prisma.$transaction([
-    prisma.remediationPlan.update({
-      where: { id: plan.id },
+  const [updatedCount, auditEvent] = await prisma.$transaction([
+    prisma.remediationPlan.updateMany({
+      where: {
+        id: plan.id,
+        organizationId: actor.organizationId,
+        lifecycleState: queuedAt ? "QUEUED" : "APPROVED",
+        ...(queuedAt ? { updatedAt: queuedAt } : {})
+      },
       data: {
         lifecycleState: "FAILED",
         executionStatus: "EXECUTION_BLOCKED",
@@ -624,8 +626,7 @@ async function queueEnqueueFailed(
           mutationMayHaveExecuted: false,
           operatorGuidance: "No provider execution was attempted because the queue did not accept the job."
         }
-      },
-      include: remediationExecutionInclude
+      }
     }),
     prisma.auditEvent.create({
       data: auditData(actor, plan.id, "governance.aws_change.queue_failed", {
@@ -637,6 +638,10 @@ async function queueEnqueueFailed(
       })
     })
   ]);
+  const updatedPlan = await prisma.remediationPlan.findUniqueOrThrow({
+    where: { id: plan.id },
+    include: remediationExecutionInclude
+  });
   return mutationResponse(updatedPlan, auditEvent, "Governed AWS change could not be queued. No provider execution was attempted.");
 }
 
