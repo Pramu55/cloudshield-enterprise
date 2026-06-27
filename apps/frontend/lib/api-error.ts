@@ -9,16 +9,19 @@ export type ApiErrorKind =
   | "TIMEOUT"
   | "CANCELLED"
   | "CONTRACT_INVALID"
+  | "NOT_FOUND"
   | "UNKNOWN";
 
 export interface ApiError {
   kind: ApiErrorKind;
   status?: number;
   safeMessage: string;
+  code?: string;
   correlationId?: string;
   retryAfterSeconds?: number;
   retryableRead: boolean;
   sessionExpired: boolean;
+  details?: { field?: string; message: string; code?: string }[];
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,6 +38,7 @@ export const API_ERROR_MESSAGES: Record<ApiErrorKind, string> = {
   TIMEOUT: "The request took too long to complete.",
   CANCELLED: "The request was cancelled.",
   CONTRACT_INVALID: "CloudShield received a response that did not match the expected contract.",
+  NOT_FOUND: "The requested resource was not found.",
   UNKNOWN: "The request could not be completed safely. Try again later."
 };
 
@@ -59,9 +63,11 @@ export function classifyHttpError(status: number, method = "GET"): ApiError {
     ? "UNAUTHENTICATED"
     : status === 403
       ? "FORBIDDEN"
-      : status === 409
-        ? "CONFLICT"
-        : status === 422
+      : status === 404
+        ? "NOT_FOUND"
+        : status === 409
+          ? "CONFLICT"
+          : status === 422
           ? "VALIDATION"
           : status === 429
             ? "RATE_LIMITED"
@@ -102,4 +108,71 @@ export class ApiRequestError extends Error {
 export function toApiError(value: unknown): ApiError {
   if (value instanceof ApiRequestError) return value.apiError;
   return classifyRequestFailure(value);
+}
+
+function isUnsafeMessage(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return lower.includes("prisma") ||
+    lower.includes("stacktrace") ||
+    lower.includes("akia") ||
+    lower.includes("secret") ||
+    lower.includes("unique constraint");
+}
+
+export function augmentApiErrorWithPayload(apiError: ApiError, payload: Record<string, unknown> | null): void {
+  if (!payload) return;
+
+  const nestedError = payload.error && typeof payload.error === "object" ? (payload.error as Record<string, unknown>) : null;
+
+  // Extract correlationId
+  const bodyCorrelationId = nestedError?.correlationId ?? payload.correlationId;
+  if (bodyCorrelationId) {
+    apiError.correlationId = normalizeCorrelationId(bodyCorrelationId) ?? apiError.correlationId;
+  }
+
+  // Extract code
+  if (nestedError && typeof nestedError.code === "string") {
+    apiError.code = nestedError.code;
+  } else if (typeof payload.classification === "string") {
+    apiError.code = payload.classification;
+  } else if (typeof payload.error === "string") {
+    apiError.code = payload.error;
+  }
+
+  // Extract bounded safe details (only if an array of objects)
+  if (nestedError && Array.isArray(nestedError.details)) {
+    const safeDetails: { field?: string; message: string; code?: string }[] = [];
+    for (const item of nestedError.details) {
+      if (item && typeof item === "object" && "message" in item && typeof item.message === "string") {
+        safeDetails.push({
+          message: item.message.slice(0, 512),
+          field: typeof item.field === "string" ? item.field.slice(0, 100) : undefined,
+          code: typeof item.code === "string" ? item.code.slice(0, 100) : undefined
+        });
+      }
+    }
+    if (safeDetails.length > 0) {
+      apiError.details = safeDetails.slice(0, 50);
+    }
+  }
+
+  // DO NOT override generic safeMessage if status >= 500
+  if (apiError.status && apiError.status >= 500) {
+    return;
+  }
+
+  // Extract message
+  let rawMessage = "";
+  if (nestedError && typeof nestedError.message === "string") {
+    rawMessage = nestedError.message;
+  } else if (typeof payload.message === "string") {
+    rawMessage = payload.message;
+  }
+
+  if (rawMessage) {
+    rawMessage = rawMessage.slice(0, 512);
+    if (!isUnsafeMessage(rawMessage)) {
+      apiError.safeMessage = rawMessage;
+    }
+  }
 }

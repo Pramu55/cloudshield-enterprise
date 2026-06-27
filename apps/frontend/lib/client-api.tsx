@@ -10,6 +10,7 @@ import {
   normalizeCorrelationId,
   parseRetryAfter,
   toApiError,
+  augmentApiErrorWithPayload,
   type ApiError
 } from "./api-error";
 
@@ -149,7 +150,7 @@ export async function getCsrfToken(signal?: AbortSignal, timeoutMs = CSRF_TIMEOU
   }
 }
 
-async function readSafeErrorPayload(response: Response): Promise<{ correlationId?: unknown } | null> {
+async function readSafeErrorPayload(response: Response): Promise<Record<string, unknown> | null> {
   const length = Number(response.headers.get("content-length"));
   if (Number.isFinite(length) && length > MAX_SAFE_ERROR_BODY_BYTES) return null;
   const contentType = response.headers.get("content-type") ?? "";
@@ -157,7 +158,7 @@ async function readSafeErrorPayload(response: Response): Promise<{ correlationId
   try {
     const payload: unknown = await response.json();
     if (!payload || typeof payload !== "object") return null;
-    return { correlationId: "correlationId" in payload ? payload.correlationId : undefined };
+    return payload as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -198,8 +199,10 @@ export async function fetchCloudShieldClient<T>(path: string, options: ClientReq
     if (!response.ok) {
       const payload = await readSafeErrorPayload(response);
       const apiError = classifyHttpError(response.status, method);
+      augmentApiErrorWithPayload(apiError, payload);
       apiError.correlationId = normalizeCorrelationId(response.headers.get("x-correlation-id"))
-        ?? normalizeCorrelationId(payload?.correlationId);
+        ?? normalizeCorrelationId(response.headers.get("x-request-id"))
+        ?? apiError.correlationId;
       if (response.status === 429) apiError.retryAfterSeconds = parseRetryAfter(response.headers.get("retry-after"));
       if (apiError.sessionExpired && options.handleSessionExpired !== false) handleUnauthenticatedSession();
       throw new ApiRequestError(apiError);
