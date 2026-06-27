@@ -16,6 +16,7 @@ import type {
 import { prisma, scopeByOrganization, type Prisma, RiskStatus } from "@cloudshield/database";
 import { createRiskWorkflowAuditEvent, toRiskAuditEventDto } from "./risk-workflow.audit.js";
 import { assertGovernanceTargetOperationallyActive } from "../governance-action-guard/governance-action-guard.policy.js";
+import { activeFindingForActiveResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 import {
   availableRiskWorkflowActions,
   isRiskWorkflowTransitionAllowed,
@@ -53,7 +54,7 @@ type WorkflowInput = {
 
 export async function listRiskFindings(organizationId: string) {
   const findings = await prisma.securityFinding.findMany({
-    where: scopeByOrganization(organizationId),
+    where: activeFindingForActiveResourceWhere(organizationId),
     take: 100,
     orderBy: [
       { archivedAt: "asc" },

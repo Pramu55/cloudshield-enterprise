@@ -6,6 +6,7 @@ import {
   SECURITY_FINDING_PENALTIES
 } from "@cloudshield/database";
 import { ComplianceControlProjectionCatalog } from "../compliance-evidence/compliance-evidence.policy.js";
+import { activeResourceWhere, activeFindingForActiveResourceWhere } from "../inventory-lifecycle/inventory-lifecycle.policy.js";
 
 export type RealAwsReportRuntimeSafety = {
   inventoryScannerMode: string;
@@ -37,25 +38,20 @@ export async function buildRealAwsGovernanceReport(
   ] = await Promise.all([
     prisma.cloudResource.groupBy({
       by: ["resourceType"],
-      where: {
-        organizationId,
+      where: activeResourceWhere(organizationId, {
         awsAccountId: account.id,
-        source: "AWS_SYNC",
-        archivedAt: null
-      },
+        source: "AWS_SYNC"
+      }),
       _count: { _all: true }
     }),
     prisma.securityFinding.findMany({
-      where: {
-        organizationId,
+      where: activeFindingForActiveResourceWhere(organizationId, {
         awsAccountId: account.id,
-        archivedAt: null,
         workflowStatus: { in: [...ACTIVE_SECURITY_POSTURE_STATUSES] },
         resource: {
-          source: "AWS_SYNC",
-          archivedAt: null
+          source: "AWS_SYNC"
         }
-      },
+      }),
       select: {
         id: true,
         ruleId: true,

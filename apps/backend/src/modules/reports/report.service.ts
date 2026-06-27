@@ -225,7 +225,7 @@ async function getReportContext(organizationId: string) {
     }),
     prisma.complianceEvidence.count({ where: activeComplianceEvidenceWhere(organizationId) }),
     prisma.riskAcceptance.findMany({
-      where: organizationScope,
+      where: { organizationId, securityFinding: activeFindingForActiveResourceWhere(organizationId) },
       take: 100
     }),
     prisma.auditEvent.findMany({
@@ -238,7 +238,7 @@ async function getReportContext(organizationId: string) {
       take: 100
     }),
     prisma.remediationPlan.findMany({
-      where: organizationScope,
+      where: { organizationId, finding: activeFindingForActiveResourceWhere(organizationId) },
       include: {
         finding: { select: { title: true, severity: true } },
         createdBy: { select: { email: true } },
@@ -247,7 +247,7 @@ async function getReportContext(organizationId: string) {
       take: 100
     }),
     prisma.approvalRequest.findMany({
-      where: organizationScope,
+      where: { organizationId, remediationPlan: { finding: activeFindingForActiveResourceWhere(organizationId) } },
       include: {
         remediationPlan: { select: { title: true } },
         requestedBy: { select: { email: true } },
