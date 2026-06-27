@@ -374,7 +374,12 @@ export const processGovernedAwsChangeJob = async (job: any) => {
   }
 
   if (plan.idempotencyKey !== jobData.idempotencyKey) {
-    return await failGovernedPlan(plan.id, "IDEMPOTENCY_KEY_MISMATCH", NO_AWS_EXECUTION, prisma, jobContext);
+    logger.info(buildGovernedAwsWorkerLogFields(jobContext, {
+      organizationId: jobData.organizationId,
+      planId: jobData.planId,
+      duplicateHandling: "stale_job_idempotency_mismatch"
+    }), "Governed AWS change worker dropped stale job with mismatched idempotency key");
+    return { status: "STALE_JOB", reason: "Job idempotency key does not match current plan state.", correlationId: jobContext.correlationId };
   }
 
   if (plan.createdById && plan.approvedById && plan.createdById === plan.approvedById) {

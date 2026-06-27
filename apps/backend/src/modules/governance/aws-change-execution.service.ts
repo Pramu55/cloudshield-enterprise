@@ -254,6 +254,47 @@ export async function queueGovernedAwsChangeExecution(
     return blockedMutation(actor, plan, "Idempotency key has already completed or queued a governed change.");
   }
 
+  const queuedAt = new Date();
+  const outcome = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.remediationPlan.updateMany({
+      where: {
+        id: plan.id,
+        organizationId: actor.organizationId,
+        lifecycleState: "APPROVED",
+        approvalStatus: "APPROVED",
+        mutationOutcome: "NOT_ATTEMPTED",
+        approvedByRequestId: plan.approvedByRequestId,
+        updatedAt: plan.updatedAt
+      },
+      data: {
+        lifecycleState: "QUEUED",
+        executionStatus: "READY_FOR_EXECUTION",
+        idempotencyKey: body.idempotencyKey,
+        queuedAt,
+        updatedAt: queuedAt,
+        blockedReason: null
+      }
+    });
+    if (claimed.count !== 1) return null;
+    const auditEvent = await tx.auditEvent.create({
+      data: auditData(actor, plan.id, "governance.aws_change.execution_queued", sanitizeGovernanceEvidencePayload({
+        idempotencyKey: body.idempotencyKey,
+        correlationId: context.correlationId
+      }) as any)
+    });
+    return { auditEvent };
+  });
+
+  if (!outcome) {
+    const currentPlan = await prisma.remediationPlan.findFirst({
+      where: { id: plan.id, organizationId: actor.organizationId },
+      include: remediationExecutionInclude
+    });
+    if (!currentPlan) return null;
+    return nonMutatingBlockedDecision(actor, currentPlan, "Governed AWS change queue transition was already claimed.");
+  }
+  const { auditEvent } = outcome;
+
   try {
     await governedAwsChangeQueue.add(
       "execute-governed-aws-change",
@@ -275,48 +316,10 @@ export async function queueGovernedAwsChangeExecution(
     return queueEnqueueFailed(actor, plan, body.idempotencyKey, context.correlationId);
   }
 
-  const queuedAt = new Date();
-  const outcome = await prisma.$transaction(async (tx) => {
-    const claimed = await tx.remediationPlan.updateMany({
-      where: {
-        id: plan.id,
-        organizationId: actor.organizationId,
-        lifecycleState: "APPROVED",
-        approvalStatus: "APPROVED",
-        mutationOutcome: "NOT_ATTEMPTED",
-        approvedByRequestId: plan.approvedByRequestId
-      },
-      data: {
-        lifecycleState: "QUEUED",
-        executionStatus: "READY_FOR_EXECUTION",
-        idempotencyKey: body.idempotencyKey,
-        queuedAt,
-        blockedReason: null
-      }
-    });
-    if (claimed.count !== 1) return null;
-    const auditEvent = await tx.auditEvent.create({
-      data: auditData(actor, plan.id, "governance.aws_change.execution_queued", sanitizeGovernanceEvidencePayload({
-        idempotencyKey: body.idempotencyKey,
-        correlationId: context.correlationId
-      }) as any)
-    });
-    const updatedPlan = await tx.remediationPlan.findUniqueOrThrow({
-      where: { id: plan.id },
-      include: remediationExecutionInclude
-    });
-    return { updatedPlan, auditEvent };
+  const updatedPlan = await prisma.remediationPlan.findUniqueOrThrow({
+    where: { id: plan.id },
+    include: remediationExecutionInclude
   });
-
-  if (!outcome) {
-    const currentPlan = await prisma.remediationPlan.findFirst({
-      where: { id: plan.id, organizationId: actor.organizationId },
-      include: remediationExecutionInclude
-    });
-    if (!currentPlan) return null;
-    return nonMutatingBlockedDecision(actor, currentPlan, "Governed AWS change queue transition was already claimed.");
-  }
-  const { updatedPlan, auditEvent } = outcome;
 
   return mutationResponse(updatedPlan, auditEvent, "Governed AWS change queued. Worker will enforce preflight gates before any mutation.");
 }
