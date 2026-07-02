@@ -1,4 +1,17 @@
 # CloudShield Enterprise
+
+[![CI Validation Foundation](https://github.com/Pramu55/cloudshield-enterprise/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Pramu55/cloudshield-enterprise/actions/workflows/ci.yml)
+![Release Candidate](https://img.shields.io/badge/release-candidate_v0.6.0-blue)
+![Read Only AWS](https://img.shields.io/badge/AWS-read--only_validation-2ea44f)
+![AWS Mutations](https://img.shields.io/badge/AWS_mutations-disabled-red)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)
+![Next.js](https://img.shields.io/badge/Next.js-15-black)
+![Fastify](https://img.shields.io/badge/Fastify-5.8-111827)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169e1)
+![Prisma](https://img.shields.io/badge/Prisma-6.19-2d3748)
+![Docker](https://img.shields.io/badge/Docker-compose-2496ed)
+![pnpm](https://img.shields.io/badge/pnpm-workspace-f69220)
+
 **Read-Only AWS Governance, Security Posture, Compliance Evidence, and Platform Reliability Foundation**
 
 Current release classification:
