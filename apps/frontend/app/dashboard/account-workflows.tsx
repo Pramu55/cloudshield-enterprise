@@ -279,6 +279,17 @@ export function AccountsWorkspace() {
       <PermissionRestriction capability={manageCapability} />
       {!connectorState.isRefreshing && !connectorState.data.executionEligibility.eligible && connectorState.data.executionEligibility.mode === "disabled" ? <RuntimeModeRestrictionNotice /> : null}
       <div className="cs-account-workspace mt-8 gap-8">
+        <AccountFormPanel
+          activeAction={activeAction}
+          manageCapability={manageCapability}
+          editingAccount={editingAccount}
+          form={form}
+          teams={teamsState.data.teams}
+          allowedRegions={connectorState.data.allowedRegions}
+          onCancel={() => setForm(emptyForm)}
+          onChange={setForm}
+          onSave={saveAccount}
+        />
         <Section title="Account registry" description="Clean account table with workflow commands kept in a compact action area." icon={<Cloud size={16} />} variant="operational">
           <DataTable
             columns={["Account", "Environment", "Regions", "Connector", "Last scan", "Source", "Actions"]}
@@ -311,17 +322,6 @@ export function AccountsWorkspace() {
             empty={<button className="cs-button" onClick={() => setForm(emptyForm)} type="button">Register account</button>}
           />
         </Section>
-        <AccountFormPanel
-          activeAction={activeAction}
-          manageCapability={manageCapability}
-          editingAccount={editingAccount}
-          form={form}
-          teams={teamsState.data.teams}
-          allowedRegions={connectorState.data.allowedRegions}
-          onCancel={() => setForm(emptyForm)}
-          onChange={setForm}
-          onSave={saveAccount}
-        />
       </div>
       <Section title="Read-only workflow guardrails" description="Command meanings for the account actions restored in this premium workspace." icon={<KeyRound size={16} />} variant="evidence">
         <div className="cs-guardrail-grid">
@@ -568,10 +568,14 @@ function AccountCommandBar({
       <Link className="cs-button-secondary" href={`/dashboard/accounts/${account.id}`}>Open</Link>
       {onEdit ? <ActionButton capability={manageCapability} icon={<Edit3 size={14} />} label="Edit" disabled={Boolean(activeAction)} onClick={onEdit} /> : null}
       <ActionButton capability={manageCapability} icon={<CheckCircle2 size={14} />} label="Check registry" active={actionMatches(activeAction, "registry", account.id)} activeLabel="Checking registry..." disabled={Boolean(activeAction)} onClick={onRegistry} />
-      <ActionButton capability={identityCapability} icon={<ShieldCheck size={14} />} label="Validate identity" active={actionMatches(activeAction, "identity", account.id)} activeLabel="Validating AWS identity..." disabled={Boolean(activeAction)} onClick={onIdentity} />
-      <ActionButton capability={syncCapability} icon={<RotateCw size={14} />} label="Read-only sync" active={actionMatches(activeAction, "sync", account.id)} activeLabel="Starting read-only sync..." disabled={Boolean(activeAction)} onClick={onSync} />
-      <ActionButton capability={productionMutationCapability.restrictionLayer === "ENVIRONMENT" ? manageCapability : productionMutationCapability} icon={<Archive size={14} />} label="Archive" active={actionMatches(activeAction, "archive", account.id)} activeLabel="Archiving registry record..." disabled={Boolean(activeAction)} danger onClick={onArchive} />
-      {account.environment === "PRODUCTION" ? <CapabilityNotice capability={productionMutationCapability} /> : null}
+      {!onEdit ? (
+        <>
+          <ActionButton capability={identityCapability} icon={<ShieldCheck size={14} />} label="Validate identity" active={actionMatches(activeAction, "identity", account.id)} activeLabel="Validating AWS identity..." disabled={Boolean(activeAction)} onClick={onIdentity} />
+          <ActionButton capability={syncCapability} icon={<RotateCw size={14} />} label="Read-only sync" active={actionMatches(activeAction, "sync", account.id)} activeLabel="Starting read-only sync..." disabled={Boolean(activeAction)} onClick={onSync} />
+          <ActionButton capability={productionMutationCapability.restrictionLayer === "ENVIRONMENT" ? manageCapability : productionMutationCapability} icon={<Archive size={14} />} label="Archive" active={actionMatches(activeAction, "archive", account.id)} activeLabel="Archiving registry record..." disabled={Boolean(activeAction)} danger onClick={onArchive} />
+          {account.environment === "PRODUCTION" ? <CapabilityNotice capability={productionMutationCapability} /> : null}
+        </>
+      ) : null}
     </div>
   );
 }
@@ -642,17 +646,17 @@ function AccountFormPanel({
           disabled={!canManageAccounts}
           onChange={(value) => onChange({ ...form, roleArn: value })}
         />
-        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <input
-            checked={form.externalIdConfigured}
-            disabled={!canManageAccounts}
-            onChange={(event) => onChange({ ...form, externalIdConfigured: event.target.checked })}
-            type="checkbox"
-          />
-          <span>
-            <strong className="block text-sm text-slate-900">External ID configured securely</strong>
-            <small className="mt-1 block text-xs text-slate-600">CloudShield stores only this configured marker. The External ID value belongs in the secure runtime environment and is never returned by the API.</small>
-          </span>
+        <label className="flex flex-col justify-center">
+          <div className="flex items-center gap-2">
+            <input
+              checked={form.externalIdConfigured}
+              disabled={!canManageAccounts}
+              onChange={(event) => onChange({ ...form, externalIdConfigured: event.target.checked })}
+              type="checkbox"
+            />
+            <strong className="text-[13px] font-bold text-slate-900">External ID configured securely</strong>
+          </div>
+          <small className="text-[11px] text-slate-500 leading-tight mt-1">Stored in secure runtime environment.</small>
         </label>
         <label>
           <span>Owner team</span>
