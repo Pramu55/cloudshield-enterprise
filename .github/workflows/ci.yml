@@ -1,6 +1,9 @@
 name: CI Validation Foundation
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
