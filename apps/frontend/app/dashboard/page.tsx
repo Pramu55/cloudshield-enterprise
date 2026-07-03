@@ -32,6 +32,12 @@ function scoreStatusLabel(status: FrontendExecutiveDashboardSummary["posture"]["
   return labels[status];
 }
 
+function isDashboardHomeRecentRoute(route: RecentRoute) {
+  const normalizedPathname = route.pathname.replace(/\/+$/, "");
+  const normalizedTitle = route.title.trim().toLowerCase();
+  return normalizedPathname === "/dashboard" || normalizedTitle === "executive dashboard";
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<FrontendExecutiveDashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,7 +65,11 @@ export default function DashboardPage() {
   useEffect(() => {
     try {
       const parsed = JSON.parse(window.localStorage.getItem("cloudshield-recent-routes") ?? "[]") as RecentRoute[];
-      setRecentRoutes(parsed.filter((route) => route.pathname && route.title).slice(0, 6));
+      setRecentRoutes(
+        parsed
+          .filter((route) => route.pathname && route.title && !isDashboardHomeRecentRoute(route))
+          .slice(0, 6)
+      );
     } catch {
       setRecentRoutes([]);
     }
@@ -91,6 +101,10 @@ export default function DashboardPage() {
     .filter((factor) => !factor.label.toLowerCase().includes("findings") && !factor.label.toLowerCase().includes("controls"))
     .reduce((total, factor) => total + factor.impact, 0);
 
+  const visibleRecentRoutes = recentRoutes.filter(
+    (route) => route.pathname && route.title && !isDashboardHomeRecentRoute(route)
+  );
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -113,7 +127,7 @@ export default function DashboardPage() {
       <div className="console-home-grid">
         <ConsoleWidget title="Recently visited" info="Route shortcuts" action={<MoreVertical size={16} />}>
           <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {recentRoutes.length ? recentRoutes.map((route) => (
+            {visibleRecentRoutes.length ? visibleRecentRoutes.map((route) => (
               <ServiceRow
                 key={`${route.pathname}-${route.timestamp}`}
                 href={route.pathname}

@@ -279,18 +279,8 @@ export function AccountsWorkspace() {
       <PermissionRestriction capability={manageCapability} />
       {!connectorState.isRefreshing && !connectorState.data.executionEligibility.eligible && connectorState.data.executionEligibility.mode === "disabled" ? <RuntimeModeRestrictionNotice /> : null}
       <div className="cs-account-workspace mt-8 gap-8">
-        <AccountFormPanel
-          activeAction={activeAction}
-          manageCapability={manageCapability}
-          editingAccount={editingAccount}
-          form={form}
-          teams={teamsState.data.teams}
-          allowedRegions={connectorState.data.allowedRegions}
-          onCancel={() => setForm(emptyForm)}
-          onChange={setForm}
-          onSave={saveAccount}
-        />
-        <Section title="Account registry" description="Clean account table with workflow commands kept in a compact action area." icon={<Cloud size={16} />} variant="operational">
+        <div className="cs-account-registry-table">
+          <Section title="Account registry" description="Clean account table with workflow commands kept in a compact action area." icon={<Cloud size={16} />} variant="operational">
           <DataTable
             columns={["Account", "Environment", "Regions", "Connector", "Last scan", "Source", "Actions"]}
             rows={accounts.map((account) => [
@@ -321,7 +311,21 @@ export function AccountsWorkspace() {
             ])}
             empty={<button className="cs-button" onClick={() => setForm(emptyForm)} type="button">Register account</button>}
           />
-        </Section>
+          </Section>
+        </div>
+        <div className="cs-account-form-panel">
+          <AccountFormPanel
+            activeAction={activeAction}
+            manageCapability={manageCapability}
+            editingAccount={editingAccount}
+            form={form}
+            teams={teamsState.data.teams}
+            allowedRegions={connectorState.data.allowedRegions}
+            onCancel={() => setForm(emptyForm)}
+            onChange={setForm}
+            onSave={saveAccount}
+          />
+        </div>
       </div>
       <Section title="Read-only workflow guardrails" description="Command meanings for the account actions restored in this premium workspace." icon={<KeyRound size={16} />} variant="evidence">
         <div className="cs-guardrail-grid">
@@ -622,7 +626,7 @@ function AccountFormPanel({
   editingAccount?: AwsAccountDto;
   activeAction: ActionState;
   manageCapability: ActionCapability;
-  teams?: any[];
+  teams?: Array<{ id: string; name: string }>;
   allowedRegions?: string[];
   onChange: (form: AccountFormState) => void;
   onCancel: () => void;
