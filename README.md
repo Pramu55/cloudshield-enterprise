@@ -1,28 +1,15 @@
 # CloudShield Enterprise
 
-[![CI Validation Foundation](https://github.com/Pramu55/cloudshield-enterprise/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Pramu55/cloudshield-enterprise/actions/workflows/ci.yml)
-![Release Candidate](https://img.shields.io/badge/release-candidate_v0.6.0-blue)
-![Platform Status](https://img.shields.io/badge/platform-read--only_governance-2ea44f)
-![AWS Connector](https://img.shields.io/badge/AWS_connector-validation_ready-2563eb)
-![AWS Mutations](https://img.shields.io/badge/AWS_mutations-disabled-red)
-![Terraform Apply](https://img.shields.io/badge/Terraform_apply-disabled-red)
-![Remediation](https://img.shields.io/badge/remediation-approval--gated-f97316)
-![Compliance](https://img.shields.io/badge/compliance-evidence_center-7c3aed)
-![Security Posture](https://img.shields.io/badge/security-posture_engine-0f766e)
-![Audit Evidence](https://img.shields.io/badge/audit-evidence_snapshots-475569)
-![Backend Tests](https://img.shields.io/badge/backend_tests-471%2F471_passed-2ea44f)
-![Frontend Build](https://img.shields.io/badge/frontend-build_passing-2ea44f)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)
-![Next.js](https://img.shields.io/badge/Next.js-15-black)
-![React](https://img.shields.io/badge/React-19-61dafb)
-![Fastify](https://img.shields.io/badge/Fastify-5.8-111827)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169e1)
-![Prisma](https://img.shields.io/badge/Prisma-6.19-2d3748)
-![Redis](https://img.shields.io/badge/Redis-BullMQ-dc2626)
-![Docker](https://img.shields.io/badge/Docker-compose-2496ed)
-![pnpm](https://img.shields.io/badge/pnpm-workspace-f69220)
-![Monorepo](https://img.shields.io/badge/monorepo-turborepo-000000)
-![Status](https://img.shields.io/badge/customer_deployment-not_claimed-64748b)
+[![CI Validation](https://github.com/Pramu55/cloudshield-enterprise/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Pramu55/cloudshield-enterprise/actions/workflows/ci.yml)
+![Release Candidate](https://img.shields.io/badge/release-candidate_v0.6.0-2563eb?style=flat-square)
+![AWS Governance](https://img.shields.io/badge/AWS-read--only_governance-16a34a?style=flat-square)
+![Cloud Mutations](https://img.shields.io/badge/cloud_mutations-disabled-dc2626?style=flat-square)
+![Remediation](https://img.shields.io/badge/remediation-approval--gated-f97316?style=flat-square)
+![Compliance Evidence](https://img.shields.io/badge/compliance-evidence_center-7c3aed?style=flat-square)
+![Security Posture](https://img.shields.io/badge/security-posture_engine-0f766e?style=flat-square)
+![Validation](https://img.shields.io/badge/validation-CI_passing-16a34a?style=flat-square)
+![Stack](https://img.shields.io/badge/stack-TypeScript_monorepo-111827?style=flat-square)
+![Runtime](https://img.shields.io/badge/runtime-Docker_Compose-2496ed?style=flat-square)
 
 **Read-Only AWS Governance, Security Posture, Compliance Evidence, and Platform Reliability Foundation**
 
@@ -60,7 +47,7 @@ CloudShield is built using a modern, scalable, and type-safe stack:
 
 ## Capabilities & Safety Model
 
-### âœ… Implemented Capabilities
+### Ã¢Å“â€¦ Implemented Capabilities
 - Local Runtime Foundation (Dockerized)
 - Tenant & Auth Boundaries
 - Real AWS STS Identity Validation Proof
@@ -74,7 +61,7 @@ CloudShield is built using a modern, scalable, and type-safe stack:
 - Worker Lifecycle Audit Events
 - DB-Only Operational Proof Endpoint
 
-### ðŸš« Intentionally Disabled Capabilities
+### Ã°Å¸Å¡Â« Intentionally Disabled Capabilities
 For safety and evaluation purposes, the following are strictly disabled:
 - Live AWS Mutation
 - Automatic Remediation
