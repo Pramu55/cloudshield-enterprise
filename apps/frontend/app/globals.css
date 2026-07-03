@@ -6208,3 +6208,41 @@ a {
     grid-column: auto !important;
   }
 }
+
+
+/* --- Final Dashboard Card Height Hardenings --- */
+.console-home-grid {
+  grid-auto-rows: 1fr !important;
+  align-items: stretch !important;
+}
+
+.console-widget {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.console-widget-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.console-home-grid > .console-widget:nth-child(-n + 3) {
+  height: 100% !important;
+  max-height: none !important;
+}
+
+@media (max-width: 760px) {
+  .console-home-grid {
+    grid-auto-rows: auto !important;
+  }
+  .console-widget,
+  .console-home-grid > .console-widget:nth-child(-n + 3) {
+    height: auto !important;
+  }
+}
