@@ -1,0 +1,102 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-cloudshield}"
+      POSTGRES_USER: "${POSTGRES_USER:-cloudshield}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.public-demo}"
+    volumes:
+      - public_demo_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile.public-demo
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-cloudshield}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-cloudshield}"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AWS_CONNECTOR_MODE: disabled
+      AWS_INVENTORY_SCANNER_MODE: disabled
+      AWS_CHANGE_EXECUTION_MODE: disabled
+      AWS_REGION_DEFAULT: "${AWS_REGION_DEFAULT:-us-east-1}"
+      AWS_ROLE_ARN: ""
+      AWS_EXTERNAL_ID: ""
+      PUBLIC_FRONTEND_ORIGIN: "${PUBLIC_FRONTEND_ORIGIN:-http://localhost:3100}"
+    ports:
+      - "${BACKEND_PORT:-4100}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile.public-demo
+      args:
+        NEXT_PUBLIC_API_BASE_URL: "${PUBLIC_API_BASE_URL:-http://localhost:4100}"
+        BACKEND_INTERNAL_URL: "http://backend:4000"
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_API_BASE_URL: "${PUBLIC_API_BASE_URL:-http://localhost:4100}"
+      BACKEND_INTERNAL_URL: "http://backend:4000"
+    ports:
+      - "${FRONTEND_PORT:-3100}:3100"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile.public-demo
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-cloudshield}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-cloudshield}"
+      AWS_CONNECTOR_MODE: disabled
+      AWS_INVENTORY_SCANNER_MODE: disabled
+      AWS_CHANGE_EXECUTION_MODE: disabled
+      AWS_REGION_DEFAULT: "${AWS_REGION_DEFAULT:-us-east-1}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  public_demo_postgres_data:
