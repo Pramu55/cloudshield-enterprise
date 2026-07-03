@@ -5918,3 +5918,293 @@ a {
   white-space: normal !important;
   overflow-wrap: anywhere !important;
 }
+
+/* Forward-only console layout hardening */
+.cs-console-app,
+.cs-console-shell,
+.cs-console-main,
+.cs-console-content,
+.cs-console-page,
+.console-home,
+.console-home-grid,
+.console-widget,
+.console-widget-body,
+.cs-section,
+.cs-section-body {
+  min-width: 0 !important;
+}
+
+.cs-console-content {
+  overflow-x: hidden !important;
+  padding-inline: clamp(20px, 3vw, 40px) !important;
+}
+
+.cs-console-content .cs-page-header,
+.cs-console-content .cs-page-hero,
+.cs-console-content .cs-module-header {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  overflow: hidden !important;
+}
+
+.cs-console-content .cs-page-header::before,
+.cs-console-content .cs-page-hero::before,
+.cs-console-content .cs-module-header::before {
+  display: none !important;
+}
+
+.cs-console-content .cs-page-header *,
+.cs-console-content .cs-page-hero *,
+.cs-console-content .cs-module-header * {
+  min-width: 0 !important;
+}
+
+.cs-console-content .cs-page-header h1,
+.cs-console-content .cs-page-hero h1,
+.cs-console-content .cs-module-header h1 {
+  max-width: 100% !important;
+  overflow-wrap: anywhere !important;
+}
+
+.cs-console-topbar {
+  gap: 10px !important;
+  overflow: hidden !important;
+}
+
+.cs-console-topbar-left {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+.cs-console-topbar-right {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+
+.console-command-search,
+.cs-command-search {
+  min-width: 220px !important;
+  max-width: min(700px, 48vw) !important;
+}
+
+.cs-console-workspace,
+.cs-console-org-name,
+.cs-console-user-name {
+  max-width: 220px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.cs-console-sidebar,
+.cs-console-sidebar nav,
+.cs-console-sidebar a,
+.cs-console-sidebar button {
+  min-width: 0 !important;
+}
+
+.cs-console-sidebar a span,
+.cs-console-sidebar button span {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.console-home-grid {
+  align-items: stretch !important;
+  grid-auto-rows: minmax(300px, auto) !important;
+}
+
+.console-home-grid > .console-widget:nth-child(-n + 3) {
+  height: 320px !important;
+  min-height: 320px !important;
+  max-height: 320px !important;
+}
+
+.console-widget {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.console-widget-header {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+
+.console-widget-title,
+.console-widget-header h2,
+.console-widget-header h3 {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.console-widget-body {
+  flex: 1 1 auto !important;
+  overflow: auto !important;
+}
+
+.cs-account-workspace {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 24px !important;
+  width: 100% !important;
+}
+
+.cs-account-registry-table,
+.cs-account-form-panel,
+.cs-account-registry-table .cs-section,
+.cs-account-form-panel .cs-section {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.cs-account-registry-table .cs-section-body {
+  padding: 0 !important;
+  overflow-x: auto !important;
+}
+
+.cs-account-registry-table .cs-table-wrap {
+  width: 100% !important;
+  overflow-x: auto !important;
+}
+
+.cs-account-registry-table .cs-table {
+  min-width: 1080px !important;
+  table-layout: auto !important;
+}
+
+.cs-account-registry-table .cs-table th,
+.cs-account-registry-table .cs-table td {
+  min-height: 0 !important;
+  padding: 12px 16px !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+}
+
+.cs-account-registry-table .cs-table td:first-child {
+  min-width: 220px !important;
+  max-width: 340px !important;
+  white-space: normal !important;
+}
+
+.cs-account-registry-table .cs-row-description {
+  max-width: 300px !important;
+  margin-top: 4px !important;
+  overflow-wrap: break-word !important;
+}
+
+.cs-account-registry-table .cs-account-actions {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: max-content !important;
+  max-width: none !important;
+}
+
+.cs-account-registry-table .cs-account-actions .cs-button,
+.cs-account-registry-table .cs-account-actions button,
+.cs-account-registry-table .cs-account-actions a {
+  min-height: 32px !important;
+  padding: 7px 12px !important;
+  white-space: nowrap !important;
+}
+
+.cs-account-form-panel .cs-section {
+  overflow: visible !important;
+}
+
+.cs-account-form-panel .cs-section-body {
+  padding: 18px 20px !important;
+}
+
+.cs-account-form-panel .cs-account-form {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(160px, 1fr)) !important;
+  gap: 14px 16px !important;
+  align-items: end !important;
+}
+
+.cs-account-form-panel .cs-account-form label,
+.cs-account-form-panel .cs-account-form input,
+.cs-account-form-panel .cs-account-form select,
+.cs-account-form-panel .cs-account-form textarea {
+  min-width: 0 !important;
+}
+
+.cs-account-form-panel .cs-account-form textarea {
+  min-height: 44px !important;
+  max-height: 92px !important;
+  resize: vertical !important;
+}
+
+.cs-account-form-panel .cs-account-external-id-note {
+  grid-column: span 2 !important;
+  max-width: 100% !important;
+  padding: 10px 12px !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+.cs-account-form-panel .cs-form-actions {
+  grid-column: 1 / -1 !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+}
+
+@media (max-width: 1180px) {
+  .cs-console-workspace,
+  .cs-console-org-name,
+  .cs-console-user-name {
+    max-width: 160px !important;
+  }
+
+  .console-command-search,
+  .cs-command-search {
+    max-width: 42vw !important;
+  }
+
+  .console-home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .cs-account-form-panel .cs-account-form {
+    grid-template-columns: repeat(2, minmax(160px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .cs-console-content {
+    padding-inline: 16px !important;
+  }
+
+  .console-home-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .console-home-grid > .console-widget:nth-child(-n + 3) {
+    height: auto !important;
+    min-height: 280px !important;
+    max-height: none !important;
+  }
+
+  .cs-account-registry-table .cs-table {
+    min-width: 900px !important;
+  }
+
+  .cs-account-form-panel .cs-account-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cs-account-form-panel .cs-account-external-id-note,
+  .cs-account-form-panel .cs-form-actions {
+    grid-column: auto !important;
+  }
+}
