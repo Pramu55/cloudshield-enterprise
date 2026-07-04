@@ -17,14 +17,14 @@ Do not add real AWS credentials to the repository.
 ## Files
 
 - docker-compose.public-demo.yml
-- .env.public-demo.example
+- public-demo.env.example
 - apps/frontend/Dockerfile.public-demo
 - apps/backend/Dockerfile.public-demo
 - apps/worker/Dockerfile.public-demo
 
 ## Local Public-Demo Validation
 
-1. Copy .env.public-demo.example to .env.public-demo.
+1. Copy public-demo.env.example to .env.public-demo.
 2. Set a long random POSTGRES_PASSWORD.
 3. Build with: docker compose --env-file .env.public-demo -f docker-compose.public-demo.yml build
 4. Start DB and Redis with: docker compose --env-file .env.public-demo -f docker-compose.public-demo.yml up -d postgres redis

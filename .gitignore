@@ -5,7 +5,6 @@ node_modules/
 .env.*
 !.env.example
 !.env.aws-readonly.local.example
-!.env.public-demo.example
 
 dist/
 build/
