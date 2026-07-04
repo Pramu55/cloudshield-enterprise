@@ -31,6 +31,14 @@ Do not add real AWS credentials to the repository.
 5. Run migrations with: docker compose --env-file .env.public-demo -f docker-compose.public-demo.yml run --rm backend pnpm --filter @cloudshield/database prisma:deploy
 6. Start full stack with: docker compose --env-file .env.public-demo -f docker-compose.public-demo.yml up -d
 
+## Hosted Redis
+
+For free public deployments on platforms like Render, use a hosted Redis provider such as Upstash.
+
+Set `REDIS_URL` in the hosting provider environment variables. Use a secure Redis URL that starts with `rediss://` when TLS is required.
+
+Do not commit Redis URLs, passwords, or tokens.
+
 ## VPS Deployment Shape
 
 Use a small Linux VPS with Docker and Docker Compose, set .env.public-demo values, then place Nginx, Caddy, or Cloudflare in front with HTTPS.

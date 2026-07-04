@@ -8,6 +8,10 @@ export const RuntimeEnvSchema = z.object({
   DATABASE_URL: z.string().optional(),
   REDIS_HOST: z.string().default("localhost"),
   REDIS_PORT: z.coerce.number().int().positive().default(6379),
+  REDIS_URL: z.string().optional(),
+  REDIS_USERNAME: z.string().optional(),
+  REDIS_PASSWORD: z.string().optional(),
+  REDIS_TLS: z.coerce.boolean().optional(),
   JWT_SECRET: z.string().min(16).default("cloudshield-local-demo-jwt-secret-change-me"),
   CLOUDSHIELD_DATA_MODE: z
     .enum(["production", "development", "sample"])
