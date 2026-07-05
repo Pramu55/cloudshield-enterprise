@@ -85,7 +85,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
       signed: false,
       httpOnly: true,
       path: "/",
-      sameSite: "lax",
+      sameSite: process.env.AUTH_COOKIE_SECURE === "true" ? "none" : "lax",
       secure: process.env.AUTH_COOKIE_SECURE === "true"
     },
     getUserInfo: (req) => req.cookies.cloudshield_session || "guest"
