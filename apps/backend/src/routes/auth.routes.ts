@@ -25,7 +25,7 @@ function getCookieOptions() {
     httpOnly: true,
     secure: secureCookie,
     domain: process.env.AUTH_COOKIE_DOMAIN || undefined,
-    sameSite: secureCookie ? "none" : ("lax" as const),
+    sameSite: secureCookie ? ("none" as const) : ("lax" as const),
     maxAge: parseInt(process.env.AUTH_SESSION_TTL_HOURS || "24", 10) * 3600
   };
 }
