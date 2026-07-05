@@ -177,7 +177,7 @@ function validateReconciliationTarget(plan: any) {
   if (!plan.resource || plan.resource.organizationId !== plan.organizationId) return "Resource tenant validation failed.";
   if (!plan.finding?.awsAccount || plan.finding.awsAccount.organizationId !== plan.organizationId) return "AWS account tenant validation failed.";
   const payloadValidation = parseApprovedRequestedTags(payload);
-  if (!payloadValidation.valid) return payloadValidation.reason;
+  if (!payloadValidation.valid) return (payloadValidation as any).reason;
   if (payload.resourceId !== plan.resource.resourceId || payload.region !== plan.resource.region) return "Approved target no longer matches the authoritative plan.";
   if (!plan.approvedByRequestId || !plan.approvedByRequest) return "Exact approval binding is unavailable.";
   if (plan.approvedByRequest.id !== plan.approvedByRequestId) return "Exact approval binding is unavailable.";
