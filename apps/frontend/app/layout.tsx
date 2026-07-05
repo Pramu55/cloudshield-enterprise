@@ -21,7 +21,7 @@ export default function RootLayout({
                 let theme = localStorage.getItem('cloudshield-theme') || 'light';
                 if (!['light', 'dark', 'system'].includes(theme)) theme = 'light';
                 if (theme === 'system') {
-                  theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                  theme = 'light';
                 }
                 document.documentElement.setAttribute('data-theme', theme);
 

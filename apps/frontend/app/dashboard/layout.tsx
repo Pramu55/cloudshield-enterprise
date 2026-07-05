@@ -61,7 +61,7 @@ const RECENT_ROUTES_STORAGE_KEY = "cloudshield-recent-routes";
 
 function resolveThemePreference(theme: ThemePreference) {
   if (theme === "system") {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return "light";
   }
   return theme;
 }
