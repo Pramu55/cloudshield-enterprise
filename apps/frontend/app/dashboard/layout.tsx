@@ -96,7 +96,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
-  const [themePreference, setThemePreference] = useState<ThemePreference>("system");
+  const [themePreference, setThemePreference] = useState<ThemePreference>("light");
   const [densityPreference, setDensityPreference] = useState<DensityPreference>("standard");
   const [isDesktop, setIsDesktop] = useState(true);
 
@@ -113,7 +113,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (saved === "true") setCollapsed(true);
     const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
     const savedDensity = window.localStorage.getItem(DENSITY_STORAGE_KEY);
-    const safeTheme: ThemePreference = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system";
+    const safeTheme: ThemePreference = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "light";
     const safeDensity: DensityPreference = savedDensity === "comfortable" || savedDensity === "compact" || savedDensity === "standard" ? savedDensity : "standard";
     setThemePreference(safeTheme);
     setDensityPreference(safeDensity);

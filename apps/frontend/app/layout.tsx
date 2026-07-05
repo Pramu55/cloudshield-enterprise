@@ -18,8 +18,8 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                let theme = localStorage.getItem('cloudshield-theme') || 'system';
-                if (!['light', 'dark', 'system'].includes(theme)) theme = 'system';
+                let theme = localStorage.getItem('cloudshield-theme') || 'light';
+                if (!['light', 'dark', 'system'].includes(theme)) theme = 'light';
                 if (theme === 'system') {
                   theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
