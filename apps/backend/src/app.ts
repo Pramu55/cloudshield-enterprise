@@ -41,8 +41,16 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   await app.register(helmet);
 
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3100";
+  const allowedOriginPattern = /^https:\/\/cloudshield-enterprise-frontend.*\.vercel\.app$/;
+  
   await app.register(cors, {
-    origin: frontendUrl,
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (origin === frontendUrl || origin === "http://localhost:3100" || allowedOriginPattern.test(origin)) {
+        return cb(null, true);
+      }
+      return cb(null, false);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
   });
@@ -50,7 +58,10 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   app.addHook("onRequest", async (request, reply) => {
     if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
     const origin = request.headers.origin;
-    if (origin && origin !== frontendUrl) {
+    if (origin) {
+      if (origin === frontendUrl || origin === "http://localhost:3100" || allowedOriginPattern.test(origin)) {
+        return;
+      }
       return reply.status(403).send({
         error: "unexpected_origin",
         message: "Request origin is not allowed.",
