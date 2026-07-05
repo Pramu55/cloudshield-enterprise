@@ -19,7 +19,7 @@ import { resolveCurrentUserCapabilities } from "@cloudshield/security";
 const DUMMY_PASSWORD_HASH = "$2b$12$2Sp35sNA7RT0pIqHOAqQOecgoVVdRw1YAdHbbmepaeTX9o6LLEFH6";
 
 function getCookieOptions() {
-  const secureCookie = process.env.AUTH_COOKIE_SECURE === "true";
+  const secureCookie = String(process.env.AUTH_COOKIE_SECURE).trim().toLowerCase() === "true";
   return {
     path: "/",
     httpOnly: true,
