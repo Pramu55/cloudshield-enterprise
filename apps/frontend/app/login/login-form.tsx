@@ -47,29 +47,32 @@ export function LoginForm() {
         body: JSON.stringify({ email: email.trim(), password })
       });
       clearCsrfToken();
-
       if (response.status === 401) {
         setError("Invalid email or password.");
         return;
       }
 
       if (!response.ok) {
-        setError("Server unavailable. Please try again.");
+        let msg = "Server unavailable.";
+        try {
+           const errData = await response.json();
+           msg = errData.message || msg;
+        } catch {}
+        setError(`Error ${response.status}: ${msg}`);
         return;
       }
 
       await response.json();
 
       setSuccessMsg("Login successful. Redirecting...");
-      
       const nextPath = new URLSearchParams(window.location.search).get("next");
       const destination = nextPath?.startsWith("/dashboard")
         ? nextPath
         : "/dashboard";
       
       router.replace(destination);
-    } catch {
-      setError("Server unavailable. Please try again.");
+    } catch (err) {
+      setError(err instanceof Error ? `Network error: ${err.message}` : "Network error. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
