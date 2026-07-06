@@ -1,11 +1,11 @@
 services:
-  # Backend API
+  # Combined Backend API & Worker (100% Free)
   - type: web
     name: cloudshield-backend
     env: node
     region: oregon
     buildCommand: npm install -g pnpm && pnpm install && pnpm build && pnpm --filter @cloudshield/database run prisma:deploy
-    startCommand: pnpm --filter @cloudshield/backend start
+    startCommand: pnpm --filter @cloudshield/worker start & pnpm --filter @cloudshield/backend start
     envVars:
       - key: NODE_ENV
         value: production
@@ -35,37 +35,6 @@ services:
         value: us-east-1
       - key: FRONTEND_URL
         value: https://cloudshield-enterprise-frontend.vercel.app
-
-  # Worker Service
-  - type: worker
-    name: cloudshield-worker
-    env: node
-    region: oregon
-    buildCommand: npm install -g pnpm && pnpm install && pnpm build
-    startCommand: pnpm --filter @cloudshield/worker start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: cloudshield-db
-          property: connectionString
-      - key: REDIS_HOST
-        fromService:
-          type: redis
-          name: cloudshield-redis
-          property: host
-      - key: REDIS_PORT
-        fromService:
-          type: redis
-          name: cloudshield-redis
-          property: port
-      - key: AWS_CONNECTOR_MODE
-        value: disabled
-      - key: AWS_INVENTORY_SCANNER_MODE
-        value: disabled
-      - key: AWS_CHANGE_EXECUTION_MODE
-        value: disabled
 
   # Redis Cache
   - type: redis
