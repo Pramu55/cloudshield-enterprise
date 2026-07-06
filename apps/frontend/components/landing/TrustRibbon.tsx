@@ -1,24 +1,22 @@
-import { DatabaseZap, ShieldCheck, Layers3, Activity } from "lucide-react";
-
 export function TrustRibbon() {
+  const techs = [
+    "Next.js", "React Server Components", "TypeScript", 
+    "PostgreSQL", "Redis", "Docker", "BullMQ", 
+    "AWS SDK v2", "Prisma", "Node.js"
+  ];
+
   return (
-    <section className="premium-trust-ribbon">
-      <div className="premium-container premium-trust-content">
-        <div className="premium-trust-item">
-          <DatabaseZap size={18} color="#94a3b8" />
-          <span>Read-only AWS Connectivity</span>
-        </div>
-        <div className="premium-trust-item">
-          <Layers3 size={18} color="#94a3b8" />
-          <span>Strict Tenant Isolation</span>
-        </div>
-        <div className="premium-trust-item">
-          <ShieldCheck size={18} color="#94a3b8" />
-          <span>Evidence-backed Posture</span>
-        </div>
-        <div className="premium-trust-item">
-          <Activity size={18} color="#94a3b8" />
-          <span>No Autonomous Mutation</span>
+    <section className="border-y border-white/5 bg-[#0d1320] py-8">
+      <div className="max-w-7xl mx-auto px-6">
+        <p className="text-center text-xs font-semibold text-gray-500 uppercase tracking-widest mb-6">
+          Powered by industry-standard enterprise technologies
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6 opacity-60">
+          {techs.map((tech, index) => (
+            <div key={index} className="text-gray-400 font-bold text-lg tracking-tight hover:text-white transition-colors cursor-default">
+              {tech}
+            </div>
+          ))}
         </div>
       </div>
     </section>

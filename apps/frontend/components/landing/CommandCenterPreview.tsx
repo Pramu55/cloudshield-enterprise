@@ -1,92 +1,101 @@
-import { LayoutDashboard, Network, ShieldAlert, FileText, ClipboardCheck, BellRing } from "lucide-react";
+import { LayoutDashboard, Network, ShieldAlert, FileText, ClipboardCheck, BellRing, ChevronRight } from "lucide-react";
 
 export function CommandCenterPreview() {
   return (
-    <div className="premium-preview-wrapper animate-float">
-      <div className="premium-preview-header">
-        <div style={{ display: "flex", gap: "6px" }}>
-          <span className="premium-preview-dot" style={{ background: "#ef4444" }} />
-          <span className="premium-preview-dot" style={{ background: "#f59e0b" }} />
-          <span className="premium-preview-dot" style={{ background: "#10b981" }} />
+    <div className="relative mx-auto w-full max-w-5xl rounded-xl border border-white/10 bg-[#0d1320] shadow-2xl overflow-hidden transform hover:-translate-y-1 transition-transform duration-500">
+      
+      {/* OS Mac-style Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-[#121a2b]">
+        <div className="flex gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-green-500/80"></div>
         </div>
-        <div style={{ flex: 1, textAlign: "center", color: "#94a3b8", fontSize: "11px", fontWeight: 600 }}>
-          ILLUSTRATIVE PLATFORM PREVIEW - NOT LIVE DATA
+        <div className="flex-1 text-center text-xs font-semibold text-gray-500 tracking-widest uppercase">
+          CloudShield Enterprise Command Center
         </div>
       </div>
-      <div className="premium-preview-body">
-        <div className="premium-preview-nav">
-          <div className="premium-preview-nav-item active" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 10px", color: "#38bdf8", fontSize: "12px", fontWeight: 700 }}>
-            <LayoutDashboard size={14} /> Posture
+
+      <div className="flex flex-col md:flex-row h-[420px]">
+        {/* Sidebar */}
+        <div className="hidden md:flex flex-col w-48 bg-[#05070d] border-r border-white/5 p-3 space-y-1">
+          <div className="flex items-center gap-3 px-3 py-2 text-sm font-semibold text-[#ec7211] bg-[#ec7211]/10 rounded-md">
+            <LayoutDashboard size={16} /> Posture
           </div>
-          <div className="premium-preview-nav-item" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 10px", color: "#94a3b8", fontSize: "12px", fontWeight: 600 }}>
-            <Network size={14} /> Inventory
+          <div className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors">
+            <Network size={16} /> Inventory
           </div>
-          <div className="premium-preview-nav-item" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 10px", color: "#94a3b8", fontSize: "12px", fontWeight: 600 }}>
-            <ShieldAlert size={14} /> Findings
+          <div className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors">
+            <ShieldAlert size={16} /> Findings
           </div>
-          <div className="premium-preview-nav-item" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 10px", color: "#94a3b8", fontSize: "12px", fontWeight: 600 }}>
-            <ClipboardCheck size={14} /> Governance
+          <div className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors">
+            <ClipboardCheck size={16} /> Governance
           </div>
-          <div className="premium-preview-nav-item" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 10px", color: "#94a3b8", fontSize: "12px", fontWeight: 600 }}>
-            <FileText size={14} /> Evidence
+          <div className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors">
+            <FileText size={16} /> Evidence
           </div>
         </div>
-        <div className="premium-preview-main">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+
+        {/* Main Content */}
+        <div className="flex-1 p-6 bg-[#0d1320] flex flex-col gap-6 overflow-hidden">
+          {/* Header */}
+          <div className="flex justify-between items-center">
             <div>
-              <h3 style={{ margin: 0, color: "#f8fafc", fontSize: "20px", fontWeight: 700 }}>Global Posture</h3>
-              <p style={{ margin: "4px 0 0", color: "#94a3b8", fontSize: "13px" }}>Aggregated readiness across 24 connected AWS accounts.</p>
+              <h3 className="text-xl font-bold text-white tracking-tight">Global Posture</h3>
+              <p className="text-sm text-gray-400 mt-1">Aggregated readiness across 24 connected AWS accounts.</p>
             </div>
-            <div style={{ display: "flex", gap: "12px" }}>
-              <div style={{ padding: "6px 12px", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.2)", color: "#10b981", borderRadius: "6px", fontSize: "12px", fontWeight: 600 }}>Sync Active</div>
+            <div className="px-3 py-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-md text-xs font-bold uppercase tracking-wide">
+              Sync Active
             </div>
           </div>
-          
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
-            <div style={{ padding: "16px", background: "rgba(30, 41, 59, 0.6)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.05)" }}>
-              <div style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Posture Score</div>
-              <div style={{ marginTop: "8px", color: "#f8fafc", fontSize: "28px", fontWeight: 800 }}>86<span style={{ fontSize: "14px", color: "#10b981" }}>/100</span></div>
-              <div style={{ marginTop: "12px", height: "4px", background: "#1e293b", borderRadius: "2px", overflow: "hidden" }}>
-                <div style={{ width: "86%", height: "100%", background: "linear-gradient(90deg, #38bdf8, #10b981)" }}></div>
+
+          {/* Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 bg-[#121a2b] rounded-lg border border-white/5 shadow-inner">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Posture Score</div>
+              <div className="text-3xl font-extrabold text-white">86<span className="text-sm text-green-400 font-bold ml-1">/100</span></div>
+              <div className="w-full h-1.5 bg-[#05070d] rounded-full mt-3 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#3b82f6] to-[#10b981] w-[86%] rounded-full"></div>
               </div>
             </div>
-            <div style={{ padding: "16px", background: "rgba(30, 41, 59, 0.6)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.05)" }}>
-              <div style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Critical Findings</div>
-              <div style={{ marginTop: "8px", color: "#f8fafc", fontSize: "28px", fontWeight: 800 }}>12</div>
-              <div style={{ marginTop: "12px", display: "flex", gap: "4px" }}>
-                <div style={{ width: "20%", height: "4px", background: "#ef4444", borderRadius: "2px" }}></div>
-                <div style={{ width: "30%", height: "4px", background: "#f59e0b", borderRadius: "2px" }}></div>
-                <div style={{ width: "50%", height: "4px", background: "#10b981", borderRadius: "2px" }}></div>
+            <div className="p-4 bg-[#121a2b] rounded-lg border border-white/5 shadow-inner">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Critical Findings</div>
+              <div className="text-3xl font-extrabold text-white">12</div>
+              <div className="flex gap-1 w-full h-1.5 mt-3">
+                <div className="h-full bg-red-500 rounded-full w-[20%]"></div>
+                <div className="h-full bg-orange-500 rounded-full w-[30%]"></div>
+                <div className="h-full bg-green-500 rounded-full w-[50%]"></div>
               </div>
             </div>
-            <div style={{ padding: "16px", background: "rgba(30, 41, 59, 0.6)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.05)" }}>
-              <div style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Scan Activity</div>
-              <div style={{ marginTop: "8px", color: "#f8fafc", fontSize: "28px", fontWeight: 800 }}>1.4k</div>
-              <div style={{ marginTop: "12px", display: "flex", gap: "4px", alignItems: "flex-end", height: "12px" }}>
+            <div className="p-4 bg-[#121a2b] rounded-lg border border-white/5 shadow-inner">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Scan Activity</div>
+              <div className="text-3xl font-extrabold text-white">1.4k</div>
+              <div className="flex items-end gap-1 h-3 mt-3">
                 {[4, 8, 5, 10, 6, 12, 8, 10].map((h, i) => (
-                  <div key={i} style={{ flex: 1, height: `${h}px`, background: i === 7 ? "#38bdf8" : "#334155", borderRadius: "1px" }}></div>
+                  <div key={i} className={`flex-1 rounded-sm ${i === 7 ? 'bg-[#3b82f6]' : 'bg-gray-700'}`} style={{ height: `${h}px` }}></div>
                 ))}
               </div>
             </div>
           </div>
 
-          <div style={{ padding: "16px", background: "rgba(30, 41, 59, 0.6)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.05)", flex: 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
-              <span style={{ color: "#f8fafc", fontSize: "14px", fontWeight: 600 }}>Recent Operational Timeline</span>
-              <span style={{ color: "#38bdf8", fontSize: "12px", fontWeight: 600 }}>View all</span>
+          {/* Timeline */}
+          <div className="flex-1 bg-[#121a2b] rounded-lg border border-white/5 p-4 flex flex-col shadow-inner">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-sm font-semibold text-white">Recent Operational Timeline</span>
+              <span className="text-xs font-bold text-[#ec7211] cursor-pointer flex items-center">View all <ChevronRight size={14} className="ml-0.5" /></span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="flex flex-col gap-2">
               {[
-                { label: "IAM Role Over-privileged", status: "Open", color: "#ef4444" },
-                { label: "S3 Bucket Public Access", status: "Resolved", color: "#10b981" },
-                { label: "Unencrypted EBS Volume", status: "Review", color: "#f59e0b" }
+                { label: "IAM Role Over-privileged", status: "Open", color: "bg-red-500" },
+                { label: "S3 Bucket Public Access", status: "Resolved", color: "bg-green-500" },
+                { label: "Unencrypted EBS Volume", status: "Review", color: "bg-orange-500" }
               ].map((item, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px", background: "rgba(15, 23, 42, 0.5)", borderRadius: "6px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: item.color }}></div>
-                    <span style={{ color: "#e2e8f0", fontSize: "13px", fontWeight: 500 }}>{item.label}</span>
+                <div key={i} className="flex items-center justify-between p-3 bg-[#05070d]/50 rounded-md">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
+                    <span className="text-sm font-medium text-gray-200">{item.label}</span>
                   </div>
-                  <span style={{ color: "#94a3b8", fontSize: "12px" }}>{item.status}</span>
+                  <span className="text-xs font-medium text-gray-500">{item.status}</span>
                 </div>
               ))}
             </div>

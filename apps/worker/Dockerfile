@@ -11,6 +11,7 @@ RUN pnpm --filter @cloudshield/contracts build \
   && pnpm --filter @cloudshield/utils build \
   && pnpm --filter @cloudshield/logger build \
   && pnpm --filter @cloudshield/config build \
+  && pnpm --filter @cloudshield/security-monitoring build \
   && pnpm --filter @cloudshield/database build
 
 CMD ["pnpm", "--filter", "@cloudshield/worker", "dev"]

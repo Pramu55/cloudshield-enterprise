@@ -11,6 +11,9 @@ import {
   LandingFooter
 } from "../components/landing";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function LandingPage() {
   return (
     <main className="premium-page">

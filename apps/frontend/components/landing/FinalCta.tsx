@@ -3,27 +3,36 @@ import { ArrowRight, ShieldCheck } from "lucide-react";
 
 export function FinalCta() {
   return (
-    <section className="premium-container" style={{ padding: "120px 24px" }}>
-      <div style={{ position: "relative", padding: "60px 40px", textAlign: "center", borderRadius: "24px", overflow: "hidden", background: "linear-gradient(135deg, #0f172a, #1e293b)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 40px 100px -20px rgba(0,0,0,0.8)" }}>
+    <section className="max-w-7xl mx-auto px-6 py-24 pb-32">
+      <div className="relative p-12 md:p-20 text-center rounded-3xl overflow-hidden bg-gradient-to-br from-[#121a2b] to-[#05070d] border border-white/5 shadow-2xl">
         
         {/* Glow Effects */}
-        <div style={{ position: "absolute", top: "-50%", left: "50%", transform: "translateX(-50%)", width: "600px", height: "600px", background: "radial-gradient(circle, rgba(14, 165, 233, 0.15), transparent 70%)", pointerEvents: "none" }}></div>
-        <div style={{ position: "absolute", bottom: "-50%", left: "20%", width: "400px", height: "400px", background: "radial-gradient(circle, rgba(236, 114, 17, 0.1), transparent 70%)", pointerEvents: "none" }}></div>
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-[#ec7211]/10 blur-[100px] pointer-events-none rounded-full"></div>
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-[#3b82f6]/10 blur-[100px] pointer-events-none rounded-full"></div>
 
-        <div style={{ position: "relative", zIndex: 10 }}>
-          <div style={{ display: "inline-flex", padding: "12px", borderRadius: "16px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", marginBottom: "24px" }}>
-            <ShieldCheck size={32} color="#38bdf8" />
+        <div className="relative z-10">
+          <div className="inline-flex p-4 rounded-2xl bg-white/5 border border-white/10 mb-8 shadow-inner">
+            <ShieldCheck size={36} className="text-[#ec7211]" />
           </div>
-          <h2 style={{ fontSize: "clamp(32px, 4vw, 48px)", fontWeight: 800, color: "#f8fafc", margin: "0 0 16px" }}>Take control of your cloud posture.</h2>
-          <p style={{ color: "#94a3b8", fontSize: "18px", maxWidth: "600px", margin: "0 auto 40px", lineHeight: 1.6 }}>
+          <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-6">
+            Take control of your cloud posture.
+          </h2>
+          <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
             Deploy the definitive cloud security workspace and unify your inventory, findings, and compliance evidence today.
           </p>
-          <div style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap" }}>
-            <Link href="/register" className="premium-btn-primary" style={{ padding: "0 32px", height: "48px", fontSize: "15px" }}>
-              Create workspace
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link 
+              href="/register" 
+              className="flex items-center justify-center w-full sm:w-auto px-8 py-3.5 text-sm font-bold text-white transition-all bg-[#ec7211] rounded-lg hover:bg-[#d8660f] shadow-[0_0_20px_rgba(236,114,17,0.3)] hover:shadow-[0_0_30px_rgba(236,114,17,0.5)]"
+            >
+              Create Workspace
             </Link>
-            <Link href="/login" className="premium-btn-secondary" style={{ padding: "0 32px", height: "48px", fontSize: "15px" }}>
-              Open console <ArrowRight size={18} />
+            <Link 
+              href="/login" 
+              className="flex items-center justify-center w-full sm:w-auto px-8 py-3.5 text-sm font-semibold text-white transition-all bg-[#121a2b] border border-white/10 rounded-lg hover:bg-[#1a243a] hover:border-white/20"
+            >
+              Open Console <ArrowRight size={16} className="ml-2" />
             </Link>
           </div>
         </div>
