@@ -29,11 +29,16 @@ services:
       dockerfile: apps/backend/Dockerfile.public-demo
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: "${PUBLIC_DEMO_NODE_ENV:-development}"
       PORT: 4000
       DATABASE_URL: "postgresql://${POSTGRES_USER:-cloudshield}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-cloudshield}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET to a strong local-only or production secret outside Git}"
+      CSRF_HMAC_KEY: "${CSRF_HMAC_KEY:?Set CSRF_HMAC_KEY to a strong local-only or production secret outside Git}"
+      AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-false}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:3100}"
       AWS_CONNECTOR_MODE: disabled
       AWS_INVENTORY_SCANNER_MODE: disabled
       AWS_CHANGE_EXECUTION_MODE: disabled
@@ -84,7 +89,7 @@ services:
       dockerfile: apps/worker/Dockerfile.public-demo
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: "${PUBLIC_DEMO_NODE_ENV:-development}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       DATABASE_URL: "postgresql://${POSTGRES_USER:-cloudshield}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-cloudshield}"

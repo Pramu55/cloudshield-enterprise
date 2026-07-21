@@ -25,6 +25,30 @@ demo or deployment, and avoiding accidental destructive operations.
 
 ## Runtime Modes
 
+### Local public-demo runtime validation
+
+Use this mode only for isolated localhost runtime validation such as Gate 2C.
+It is deliberately not a production-readiness claim, because localhost HTTP
+requires insecure cookies:
+
+```dotenv
+PUBLIC_DEMO_NODE_ENV=development
+FRONTEND_URL=http://localhost:3100
+PUBLIC_FRONTEND_ORIGIN=http://localhost:3100
+PUBLIC_API_BASE_URL=http://localhost:4100
+AUTH_COOKIE_SECURE=false
+TRUST_PROXY=false
+AWS_CONNECTOR_MODE=disabled
+AWS_INVENTORY_SCANNER_MODE=disabled
+AWS_CHANGE_EXECUTION_MODE=disabled
+```
+
+`JWT_SECRET`, `CSRF_HMAC_KEY`, and `POSTGRES_PASSWORD` must still be supplied
+from outside Git as strong local-only values. Do not reuse local fallback
+secrets, production secrets, or committed placeholders. The frontend host URL is
+`http://localhost:3100`, the backend host URL is `http://localhost:4100`, and
+the Compose-internal backend URL is `http://backend:4000`.
+
 ## Public Demo Secret, Cookie, CORS, and CSRF Requirements
 
 Public demo runtime verification must not begin until production configuration
