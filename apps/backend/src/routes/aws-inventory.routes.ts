@@ -19,7 +19,7 @@ export async function registerAwsInventoryRoutes(
 ): Promise<void> {
   app.post(
     "/api/v1/inventory/scans",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.INVENTORY_SCAN_REQUEST);
@@ -96,7 +96,7 @@ export async function registerAwsInventoryRoutes(
 
   app.post(
     "/api/v1/aws/accounts/:accountId/inventory/plan",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.INVENTORY_READ);
@@ -171,7 +171,7 @@ export async function registerAwsInventoryRoutes(
 
   app.post(
     "/api/v1/aws/accounts/:accountId/inventory/start",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.INVENTORY_SCAN_REQUEST);

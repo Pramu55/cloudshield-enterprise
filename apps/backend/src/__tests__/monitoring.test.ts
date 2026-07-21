@@ -386,7 +386,7 @@ test("Security Monitoring API Endpoints", async (t) => {
       const res = await app.inject({
         method: "POST",
         url: "/api/v1/security-monitoring/evaluate",
-        headers: { cookie: sessionCookie },
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
         payload: { trigger: "MANUAL" }
       });
       assert.strictEqual(res.statusCode, 200);
@@ -424,7 +424,7 @@ test("Security Monitoring API Endpoints", async (t) => {
       const res = await app.inject({
         method: "POST",
         url: "/api/v1/security-monitoring/evaluate",
-        headers: { cookie: sessionCookie },
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
         payload: {}
       });
       assert.strictEqual(res.statusCode, 200);
@@ -445,7 +445,7 @@ test("Security Monitoring API Endpoints", async (t) => {
       const res = await app.inject({
         method: "POST",
         url: "/api/v1/security-monitoring/evaluate",
-        headers: { cookie: sessionCookie },
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
         payload: { trigger: "QUEUE_FAILURE_TEST" }
       });
       assert.strictEqual(res.statusCode, 503);
@@ -465,7 +465,7 @@ test("Security Monitoring API Endpoints", async (t) => {
       const res = await app.inject({
         method: "POST",
         url: "/api/v1/security-monitoring/evaluate",
-        headers: { cookie: sessionCookie },
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
         payload: { trigger: "MANUAL" }
       });
       assert.strictEqual(res.statusCode, 200);
@@ -480,7 +480,7 @@ test("Security Monitoring API Endpoints", async (t) => {
       const res = await app.inject({
         method: "POST",
         url: "/api/v1/security-monitoring/evaluate",
-        headers: { cookie: sessionCookie },
+        headers: { cookie: sessionCookie, "x-csrf-token": csrfToken },
         payload: { trigger: "MANUAL", extraField: "should_fail" }
       });
       assert.strictEqual(res.statusCode, 400);

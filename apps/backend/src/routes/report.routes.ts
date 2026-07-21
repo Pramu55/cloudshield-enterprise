@@ -40,14 +40,14 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     return getReportsSummary(auth.organizationId);
   });
 
-  app.post("/api/v1/reports/preview", { preHandler: requireAuth }, async (request) => {
+  app.post("/api/v1/reports/preview", { preHandler: requireAuth, onRequest: app.csrfProtection }, async (request) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.REPORTS_READ);
     const body = ReportPreviewRequestSchema.parse(request.body);
     return buildReportPreview(auth.organizationId, body);
   });
 
-  app.post("/api/v1/reports/generate", { preHandler: requireAuth }, async (request) => {
+  app.post("/api/v1/reports/generate", { preHandler: requireAuth, onRequest: app.csrfProtection }, async (request) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.REPORTS_GENERATE);
     const body = ReportGenerateRequestSchema.parse(request.body);

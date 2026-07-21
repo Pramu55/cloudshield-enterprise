@@ -179,7 +179,7 @@ export async function registerAwsAccountRoutes(
 
   app.patch(
     "/api/v1/aws/accounts/:accountId",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
@@ -258,7 +258,7 @@ export async function registerAwsAccountRoutes(
 
   app.patch(
     "/api/v1/aws/accounts/:accountId/archive",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);
@@ -301,7 +301,7 @@ export async function registerAwsAccountRoutes(
 
   app.post(
     "/api/v1/aws/accounts/:accountId/validate",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);

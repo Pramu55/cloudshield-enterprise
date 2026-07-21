@@ -132,10 +132,16 @@ test("governed AWS HTTP execution enqueues canonical correlation IDs", async (t)
   await t.test("correlationId does not change authorization", async () => {
     const plan = await createApprovedPlan(auth.organizationId, auth.userId);
     const before = queueCalls.length;
+    const csrfCookie = auth.cookie.match(/_csrf=([^;]+)/)?.[1];
+    assert.ok(csrfCookie);
     const response = await app.inject({
       method: "POST",
       url: `/api/v1/governance/remediation-plans/${plan.id}/execute`,
-      headers: { "x-correlation-id": VALID_CORRELATION_ID },
+      headers: {
+        "x-correlation-id": VALID_CORRELATION_ID,
+        "x-csrf-token": auth.csrfToken,
+        cookie: `_csrf=${csrfCookie}`
+      },
       payload: {
         confirmationToken: "APPLY_GOVERNANCE_TAGS",
         idempotencyKey: `idem-${randomUUID()}`

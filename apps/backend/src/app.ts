@@ -3,6 +3,7 @@ import helmet from "@fastify/helmet";
 import fastifyCookie from "@fastify/cookie";
 import fastifyCsrfProtection from "@fastify/csrf-protection";
 import rateLimit from "@fastify/rate-limit";
+import { loadRuntimeEnv, resolveFrontendOrigin } from "@cloudshield/config";
 import { normalizeOrGenerateCorrelationId } from "@cloudshield/utils";
 import Fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import { registerEnvPlugin } from "./plugins/env.js";
@@ -28,8 +29,10 @@ import { registerSearchRoutes } from "./routes/search.routes.js";
 import { registerDashboardRoutes } from "./routes/dashboard.routes.js";
 import { registerMonitoringRoutes } from "./routes/monitoring.routes.js";
 export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
+  const env = loadRuntimeEnv();
   const app = Fastify({
     ...opts,
+    trustProxy: opts.trustProxy ?? env.TRUST_PROXY,
     genReqId: (request) => normalizeOrGenerateCorrelationId(request.headers["x-correlation-id"])
   });
 
@@ -40,13 +43,16 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
 
   await app.register(helmet);
 
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3100";
+  const frontendUrl = resolveFrontendOrigin(env) || "http://localhost:3100";
   const allowedOriginPattern = /^https:\/\/cloudshield-enterprise-frontend.*\.vercel\.app$/;
   
   await app.register(cors, {
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
-      if (origin === frontendUrl || origin === "http://localhost:3100" || allowedOriginPattern.test(origin)) {
+      const allowed = env.NODE_ENV === "production"
+        ? origin === frontendUrl
+        : origin === frontendUrl || origin === "http://localhost:3100" || allowedOriginPattern.test(origin);
+      if (allowed) {
         return cb(null, true);
       }
       return cb(null, false);
@@ -59,7 +65,10 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
     if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
     const origin = request.headers.origin;
     if (origin) {
-      if (origin === frontendUrl || origin === "http://localhost:3100" || allowedOriginPattern.test(origin)) {
+      const allowed = env.NODE_ENV === "production"
+        ? origin === frontendUrl
+        : origin === frontendUrl || origin === "http://localhost:3100" || allowedOriginPattern.test(origin);
+      if (allowed) {
         return;
       }
       return reply.status(403).send({
@@ -71,7 +80,7 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   });
 
   await app.register(fastifyCookie, {
-    secret: process.env.JWT_SECRET || "cloudshield-local-demo-jwt-secret-change-me",
+    secret: env.JWT_SECRET,
     hook: "onRequest"
   });
 
@@ -79,14 +88,14 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
     sessionPlugin: "@fastify/cookie",
     csrfOpts: {
       userInfo: true,
-      hmacKey: process.env.CSRF_HMAC_KEY || "cloudshield-local-demo-csrf-hmac-key-change-me"
+      hmacKey: env.CSRF_HMAC_KEY
     },
     cookieOpts: {
       signed: false,
       httpOnly: true,
       path: "/",
-      sameSite: String(process.env.AUTH_COOKIE_SECURE).trim().toLowerCase() === "true" ? "none" : "lax",
-      secure: String(process.env.AUTH_COOKIE_SECURE).trim().toLowerCase() === "true"
+      sameSite: env.AUTH_COOKIE_SECURE ? "none" : "lax",
+      secure: env.AUTH_COOKIE_SECURE
     },
     getUserInfo: (req) => req.cookies.cloudshield_session || "guest"
   });

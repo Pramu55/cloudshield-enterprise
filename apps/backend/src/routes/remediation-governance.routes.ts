@@ -88,7 +88,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/findings/:findingId/remediation-plans",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_MANAGE);
@@ -111,7 +111,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/remediation/plans/:planId/request-approval",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
@@ -122,7 +122,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/remediation/plans/:planId/approve",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
@@ -140,7 +140,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/remediation/plans/:planId/reject",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
@@ -158,7 +158,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/remediation/plans/:planId/mark-manually-completed",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
@@ -176,7 +176,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/simulate",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
@@ -194,7 +194,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/request-approval",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
@@ -212,7 +212,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/capture-resource-state",
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, app.csrfProtection] },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.OPERATIONS_PREPARE);
@@ -244,7 +244,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/approve",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
@@ -262,7 +262,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/reject",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
@@ -280,7 +280,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/execute",
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, app.csrfProtection] },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);
