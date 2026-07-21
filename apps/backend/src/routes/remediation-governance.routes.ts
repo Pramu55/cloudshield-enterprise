@@ -212,7 +212,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/capture-resource-state",
-    { preHandler: requireAuth, onRequest: app.csrfProtection },
+    { preHandler: [requireAuth, app.csrfProtection] },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.OPERATIONS_PREPARE);
@@ -280,7 +280,7 @@ export async function registerRemediationGovernanceRoutes(
 
   app.post(
     "/api/v1/governance/remediation-plans/:planId/execute",
-    { preHandler: requireAuth, onRequest: app.csrfProtection },
+    { preHandler: [requireAuth, app.csrfProtection] },
     async (request, reply) =>
       {
         const auth = getAuthContext(request);

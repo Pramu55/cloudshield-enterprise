@@ -396,7 +396,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     return projectMonitoringRun(item);
   });
 
-  app.post("/api/v1/security-monitoring/evaluate", { preHandler: requireAuth, onRequest: app.csrfProtection }, async (request: FastifyRequest, reply) => {
+  app.post("/api/v1/security-monitoring/evaluate", { preHandler: [requireAuth, app.csrfProtection] }, async (request: FastifyRequest, reply) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.MONITORING_EVALUATE);
     const payload = EvaluateMonitoringRequestSchema.parse(request.body || {});

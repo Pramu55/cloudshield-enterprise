@@ -182,7 +182,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.patch(
     "/api/v1/auth/profile",
-    { preHandler: requireAuth, onRequest: app.csrfProtection },
+    { preHandler: [requireAuth, app.csrfProtection] },
     async (request, reply) => {
       const auth = getAuthContext(request);
       const body = UpdateProfileRequestSchema.parse(request.body);
