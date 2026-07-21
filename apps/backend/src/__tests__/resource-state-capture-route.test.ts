@@ -37,10 +37,17 @@ test("resource-state capture route is authenticated, permission-gated, strict, a
   });
 
   const url = `/api/v1/governance/remediation-plans/${randomUUID()}/capture-resource-state`;
-  const unauthenticated = await app.inject({ method: "POST", url, payload: {} });
+  const session = await registerSession(app);
+  const csrfCookie = session.cookie.match(/_csrf=([^;]+)/)?.[1];
+  assert.ok(csrfCookie);
+  const unauthenticated = await app.inject({
+    method: "POST",
+    url,
+    headers: { cookie: `_csrf=${csrfCookie}`, "x-csrf-token": session.csrfToken },
+    payload: {}
+  });
   assert.equal(unauthenticated.statusCode, 401);
 
-  const session = await registerSession(app);
   const disabled = await app.inject({
     method: "POST",
     url,

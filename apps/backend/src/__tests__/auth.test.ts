@@ -523,9 +523,15 @@ test("Authentication Endpoints", async (t) => {
   });
 
   await t.test("PATCH /api/v1/auth/profile returns 401 if unauthenticated", async () => {
+    const csrfCookie = sessionCookie.match(/_csrf=([^;]+)/)?.[1];
+    assert.ok(csrfCookie);
     const res = await app.inject({
       method: "PATCH",
       url: "/api/v1/auth/profile",
+      headers: {
+        "x-csrf-token": csrfToken,
+        cookie: `_csrf=${csrfCookie}`
+      },
       payload: {
         name: "Unauthenticated Update"
       }
