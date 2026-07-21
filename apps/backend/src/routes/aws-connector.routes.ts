@@ -185,7 +185,7 @@ export async function registerAwsConnectorRoutes(
 
   app.post(
     "/api/v1/aws/accounts/:accountId/validate-readonly-connection",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       requirePermission(auth.role, PERMISSIONS.ACCOUNTS_MANAGE);

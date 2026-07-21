@@ -134,7 +134,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
     };
   });
 
-  app.post("/api/v1/saved-views", { preHandler: requireAuth }, async (request, reply) => {
+  app.post("/api/v1/saved-views", { preHandler: requireAuth, onRequest: app.csrfProtection }, async (request, reply) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.SETTINGS_UPDATE);
     const body = savedViewBodySchema.parse(request.body);
@@ -199,7 +199,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
     };
   });
 
-  app.patch("/api/v1/notifications/:id/read", { preHandler: requireAuth }, async (request, reply) => {
+  app.patch("/api/v1/notifications/:id/read", { preHandler: requireAuth, onRequest: app.csrfProtection }, async (request, reply) => {
     const auth = getAuthContext(request);
     const { id } = idParamsSchema.parse(request.params);
     const existing = await prisma.notification.findFirst({
@@ -241,7 +241,7 @@ export async function registerPlatformCoreRoutes(app: FastifyInstance): Promise<
     };
   });
 
-  app.patch("/api/v1/platform/settings", { preHandler: requireAuth }, async (request, reply) => {
+  app.patch("/api/v1/platform/settings", { preHandler: requireAuth, onRequest: app.csrfProtection }, async (request, reply) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.SETTINGS_UPDATE);
     const body = settingsBodySchema.parse(request.body);

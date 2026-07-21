@@ -402,6 +402,32 @@ test("Authentication Endpoints", async (t) => {
   });
 
   await t.test("PATCH /api/v1/auth/profile updates name and creates audit event", async () => {
+    const missingCsrf = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/auth/profile",
+      headers: { cookie: sessionCookie },
+      payload: {
+        name: "Missing Csrf User"
+      }
+    });
+    assert.notStrictEqual(missingCsrf.statusCode, 200);
+    assert.equal(missingCsrf.body.includes("cloudshield-local-demo-jwt-secret-change-me"), false);
+    assert.equal(missingCsrf.body.includes("cloudshield-local-demo-csrf-hmac-key-change-me"), false);
+    assert.equal(missingCsrf.body.toLowerCase().includes("stack"), false);
+
+    const invalidCsrf = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/auth/profile",
+      headers: {
+        "x-csrf-token": "invalid-csrf-token",
+        cookie: sessionCookie
+      },
+      payload: {
+        name: "Invalid Csrf User"
+      }
+    });
+    assert.notStrictEqual(invalidCsrf.statusCode, 200);
+
     const res = await app.inject({
       method: "PATCH",
       url: "/api/v1/auth/profile",
@@ -434,6 +460,30 @@ test("Authentication Endpoints", async (t) => {
     assert.ok(audit);
     assert.strictEqual(audit.targetType, "user");
     assert.strictEqual(audit.targetId, registeredUserId);
+  });
+
+  await t.test("newly CSRF-protected authenticated mutations reject browser requests before DB work", async () => {
+    const targets: Array<{ method: "POST" | "PATCH"; url: string; payload: Record<string, unknown> }> = [
+      { method: "POST", url: "/api/v1/reports/generate", payload: { reportType: "EXECUTIVE_SUMMARY" } },
+      { method: "POST", url: "/api/v1/compliance/evaluate", payload: {} },
+      { method: "POST", url: "/api/v1/automation/assessment/start", payload: {} },
+      { method: "PATCH", url: "/api/v1/platform/settings", payload: { sampleDataVisible: false } },
+      { method: "POST", url: "/api/v1/security-monitoring/evaluate", payload: {} },
+      { method: "POST", url: "/api/v1/inventory/scans", payload: { dryRun: true } }
+    ];
+
+    for (const target of targets) {
+      const res = await app.inject({
+        method: target.method,
+        url: target.url,
+        headers: { cookie: sessionCookie },
+        payload: target.payload
+      });
+      assert.notStrictEqual(res.statusCode, 200, `${target.method} ${target.url} must reject missing CSRF`);
+      assert.equal(res.body.includes("cloudshield-local-demo-jwt-secret-change-me"), false);
+      assert.equal(res.body.includes("cloudshield-local-demo-csrf-hmac-key-change-me"), false);
+      assert.equal(res.body.toLowerCase().includes("stack"), false);
+    }
   });
 
   await t.test("PATCH /api/v1/auth/profile rejects empty name", async () => {

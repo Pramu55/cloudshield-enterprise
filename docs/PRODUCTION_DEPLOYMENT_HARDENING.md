@@ -25,6 +25,34 @@ demo or deployment, and avoiding accidental destructive operations.
 
 ## Runtime Modes
 
+## Public Demo Secret, Cookie, CORS, and CSRF Requirements
+
+Public demo runtime verification must not begin until production configuration
+fails closed for unsafe browser-auth defaults.
+
+Required production values:
+
+```dotenv
+NODE_ENV=production
+JWT_SECRET=<long random secret, never the local demo fallback>
+CSRF_HMAC_KEY=<long random secret, never the local demo fallback>
+AUTH_COOKIE_SECURE=true
+FRONTEND_URL=https://cloudshield.yourdomain.com
+TRUST_PROXY=true
+AWS_CONNECTOR_MODE=disabled
+AWS_INVENTORY_SCANNER_MODE=disabled
+AWS_CHANGE_EXECUTION_MODE=disabled
+```
+
+`FRONTEND_URL` or `PUBLIC_FRONTEND_ORIGIN` must be one exact HTTPS origin.
+Production CORS must not rely on localhost defaults, wildcard origins, or broad
+preview-origin patterns. Cookie-authenticated mutation routes use the Fastify
+CSRF protection hook; missing or invalid CSRF proof must be rejected before
+tenant-scoped database work, queue enqueueing, or any AWS-readiness logic.
+
+This slice hardens public-demo safety only. It does not make CloudShield
+production-ready, does not enable AWS calls, and does not authorize deployment.
+
 ### Local locked mode after proof
 
 Use this mode after STS and read-only inventory proof is complete:

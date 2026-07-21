@@ -15,18 +15,18 @@ import {
 import { prisma } from "@cloudshield/database";
 import { getAuthContext, requireAuth } from "../plugins/auth.js";
 import { resolveCurrentUserCapabilities } from "@cloudshield/security";
+import type { RuntimeEnv } from "@cloudshield/config";
 
 const DUMMY_PASSWORD_HASH = "$2b$12$2Sp35sNA7RT0pIqHOAqQOecgoVVdRw1YAdHbbmepaeTX9o6LLEFH6";
 
-function getCookieOptions() {
-  const secureCookie = String(process.env.AUTH_COOKIE_SECURE).trim().toLowerCase() === "true";
+function getCookieOptions(config: RuntimeEnv) {
   return {
     path: "/",
     httpOnly: true,
-    secure: secureCookie,
-    domain: process.env.AUTH_COOKIE_DOMAIN || undefined,
-    sameSite: secureCookie ? ("none" as const) : ("lax" as const),
-    maxAge: parseInt(process.env.AUTH_SESSION_TTL_HOURS || "24", 10) * 3600
+    secure: config.AUTH_COOKIE_SECURE,
+    domain: config.AUTH_COOKIE_DOMAIN || undefined,
+    sameSite: config.AUTH_COOKIE_SECURE ? ("none" as const) : ("lax" as const),
+    maxAge: config.AUTH_SESSION_TTL_HOURS * 3600
   };
 }
 
@@ -105,7 +105,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const sessionId = newRawToken();
     const tokenHash = hashToken(sessionId);
 
-    const expiresInHours = parseInt(process.env.AUTH_SESSION_TTL_HOURS || "24", 10);
+    const expiresInHours = app.config.AUTH_SESSION_TTL_HOURS;
     const expiresAt = new Date(Date.now() + expiresInHours * 3600 * 1000);
 
     const result = await prisma.$transaction(async (tx) => {
@@ -139,7 +139,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       return session;
     });
 
-    reply.setCookie("cloudshield_session", sessionId, getCookieOptions());
+    reply.setCookie("cloudshield_session", sessionId, getCookieOptions(app.config));
 
     const authUser = {
       id: user.id,
@@ -182,7 +182,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.patch(
     "/api/v1/auth/profile",
-    { preHandler: requireAuth },
+    { preHandler: requireAuth, onRequest: app.csrfProtection },
     async (request, reply) => {
       const auth = getAuthContext(request);
       const body = UpdateProfileRequestSchema.parse(request.body);
@@ -355,7 +355,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
       const sessionId = newRawToken();
       const tokenHash = hashToken(sessionId);
-      const expiresInHours = parseInt(process.env.AUTH_SESSION_TTL_HOURS || "24", 10);
+      const expiresInHours = app.config.AUTH_SESSION_TTL_HOURS;
       const expiresAt = new Date(Date.now() + expiresInHours * 3600 * 1000);
 
       const session = await tx.authSession.create({
@@ -383,7 +383,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       return { org, user, sessionId, role: invitation ? invitation.role : "OWNER" };
     });
 
-    reply.setCookie("cloudshield_session", result.sessionId, getCookieOptions());
+    reply.setCookie("cloudshield_session", result.sessionId, getCookieOptions(app.config));
 
     return RegisterResponseSchema.parse({
       success: true,
@@ -428,7 +428,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
     reply.clearCookie("cloudshield_session", {
       path: "/",
-      domain: process.env.AUTH_COOKIE_DOMAIN || undefined
+      domain: app.config.AUTH_COOKIE_DOMAIN || undefined
     });
 
     return { status: "ok" };
@@ -457,7 +457,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
     reply.clearCookie("cloudshield_session", {
       path: "/",
-      domain: process.env.AUTH_COOKIE_DOMAIN || undefined
+      domain: app.config.AUTH_COOKIE_DOMAIN || undefined
     });
 
     return { status: "ok" };

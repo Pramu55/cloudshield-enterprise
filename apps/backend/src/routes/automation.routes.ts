@@ -21,7 +21,7 @@ const AssessmentParamsSchema = z.object({
 });
 
 export async function registerAutomationRoutes(app: FastifyInstance): Promise<void> {
-  app.post("/api/v1/automation/assessment/start", { preHandler: requireAuth }, async (request) => {
+  app.post("/api/v1/automation/assessment/start", { preHandler: requireAuth, onRequest: app.csrfProtection }, async (request) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.RECOMMENDATIONS_MANAGE);
     const mode = resolveAssessmentMode(app.config);

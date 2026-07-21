@@ -56,7 +56,7 @@ export async function registerComplianceEvidenceRoutes(
     }
   );
 
-  app.post("/api/v1/compliance/evaluate", { preHandler: requireAuth }, async (request) => {
+  app.post("/api/v1/compliance/evaluate", { preHandler: requireAuth, onRequest: app.csrfProtection }, async (request) => {
     const auth = getAuthContext(request);
     requirePermission(auth.role, PERMISSIONS.REPORTS_GENERATE);
     return evaluateComplianceEvidence(auth.organizationId);
